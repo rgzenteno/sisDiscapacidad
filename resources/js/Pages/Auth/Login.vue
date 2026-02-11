@@ -1,5 +1,5 @@
 <script setup>
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
 

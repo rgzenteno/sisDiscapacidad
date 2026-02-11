@@ -4,7 +4,7 @@ import { watch, ref, computed, onMounted, onUnmounted } from 'vue';
 import { useForm } from "@inertiajs/vue3";
 
 import GuestLayout from "@/Layouts/GuestLayout.vue";
-import InputLabel from "@/Components/InputLabel.vue";
+import InputLabel from "@/components/InputLabel.vue";
 import Input from "./Input.vue";
 import Dropdown from "./Dropdown.vue";
 import Button from './Button.vue';

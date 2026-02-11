@@ -1,7 +1,7 @@
 <script setup>
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import {
     computed,
     ref
@@ -12,7 +12,7 @@ import {
     useForm,
     usePage
 } from '@inertiajs/vue3';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 import Reporte from './reporte.vue';
 
 const page = usePage();

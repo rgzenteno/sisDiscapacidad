@@ -1,7 +1,7 @@
 <script setup>
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import {
     computed,
     ref,
@@ -14,11 +14,11 @@ import {
     usePage
 } from '@inertiajs/vue3';
 import { router } from '@inertiajs/vue3';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 import Reporte from './reporte.vue';
-import Dropdown from '@/Components/Dropdown.vue';
-import Botones from '@/Components/Botones.vue';
-import Paginacion from '@/Components/Paginacion.vue';
+import Dropdown from '@/components/Dropdown.vue';
+import Botones from '@/components/Botones.vue';
+import Paginacion from '@/components/Paginacion.vue';
 
 const page = usePage();
 const resultados = computed(() => page.props.resultados);

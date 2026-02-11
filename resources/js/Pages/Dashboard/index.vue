@@ -4,7 +4,7 @@ import { usePage, Head } from '@inertiajs/vue3';
 import Chart from 'chart.js/auto';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Footer from '@/Components/Footer.vue';
+import Footer from '@/components/Footer.vue';
 
 // Page Data
 const page = usePage();

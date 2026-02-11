@@ -2,11 +2,11 @@
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
 
-import Busqueda from '@/Components/Busqueda.vue';
-import Paginacion from '@/Components/Paginacion.vue';
-import Footer from '@/Components/Footer.vue';
+import Busqueda from '@/components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Footer from '@/components/Footer.vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
+import PrimaryButton from '@/components/PrimaryButton.vue';
 import {
     computed,
     ref
@@ -17,8 +17,8 @@ import {
     useForm,
     usePage
 } from '@inertiajs/vue3';
-import Seccion from '@/Components/Seccion.vue';
-import DateField from '@/Components/DateField.vue';
+import Seccion from '@/components/Seccion.vue';
+import DateField from '@/components/DateField.vue';
 
 const page = usePage();
 const tutores = ref(page.props.tutores);

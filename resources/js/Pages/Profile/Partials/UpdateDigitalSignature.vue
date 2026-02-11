@@ -109,7 +109,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
-import Button from '@/Components/Button.vue';
+import Button from '@/components/Button.vue';
 
 const props = defineProps({
     user: {

@@ -1,7 +1,7 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
 import { ref, watch } from 'vue';
-import InputLabel from '@/Components/InputLabel.vue';
+import InputLabel from '@/components/InputLabel.vue';
 import { useFileUpload } from '../composables/useFileUpload';
 import { useExcelValidation } from '../composables/useExcelValidation';
 import FileDropzone from './sub-components/FileDropzone.vue';

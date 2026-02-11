@@ -1,14 +1,14 @@
 <script setup>
-import Paginacion from '@/Components/Paginacion.vue';
+import Paginacion from '@/components/Paginacion.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import pagoIndex from '../Reporte/pagoIndex.vue';
-import Footer from '@/Components/Footer.vue';
-import Rutas from '@/Components/Rutas.vue';
-import ModalPago from '@/Components/ModalPago.vue';
-import ModalConfirmacion from '@/Components/ModalConfirmacion.vue';
-import ModalComprobante from '@/Components/ModalComprobante.vue';
+import Footer from '@/components/Footer.vue';
+import Rutas from '@/components/Rutas.vue';
+import ModalPago from '@/components/ModalPago.vue';
+import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import ModalComprobante from '@/components/ModalComprobante.vue';
 
 import {
     computed,

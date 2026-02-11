@@ -1,16 +1,16 @@
 <script setup>
-import Paginacion from '@/Components/Paginacion.vue';
+import Paginacion from '@/components/Paginacion.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Footer from '@/Components/Footer.vue';
+import Footer from '@/components/Footer.vue';
 import { computed, ref } from 'vue';
 import { Link, router, usePage, useForm } from '@inertiajs/vue3';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 import { Head } from '@inertiajs/vue3';
 import PagoIndex from '../Reporte/pagoIndex.vue';
-import ModalConfirmacion from '@/Components/ModalConfirmacion.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import DataTable from '@/Components/DataTable.vue';
+import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import DataTable from '@/components/DataTable.vue';
 import { can } from '@/lib/can';
 // ✅ IMPORTAR EL COMPOSABLE
 import { useComprobantePDF } from '@/composables/useComprobantePDF';

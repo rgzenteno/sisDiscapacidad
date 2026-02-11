@@ -1,9 +1,9 @@
 <script setup>
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Seccion from '@/Components/Seccion.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import Input from '@/Components/Input.vue';
+import Seccion from '@/components/Seccion.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import Input from '@/components/Input.vue';
 import {
     computed,
     ref,
@@ -15,8 +15,8 @@ import {
     usePage
 } from '@inertiajs/vue3';
 import { router } from '@inertiajs/vue3';
-import Footer from '@/Components/Footer.vue';
-import Rutas from '@/Components/Rutas.vue';
+import Footer from '@/components/Footer.vue';
+import Rutas from '@/components/Rutas.vue';
 
 const page = usePage();
 const pagosDisponibles = computed(() => page.props.pagosDisponibles);

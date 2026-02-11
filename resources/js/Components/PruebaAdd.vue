@@ -1,8 +1,8 @@
 <script setup>
-import InputLabel from "@/Components/InputLabel.vue";
+import InputLabel from "@/components/InputLabel.vue";
 import DateField from "./DateField.vue";
 import flatpickr from "flatpickr";
-import Rutas from "@/Components/Rutas.vue";
+import Rutas from "@/components/Rutas.vue";
 import { onMounted, ref } from "vue";
 import { useForm } from "@inertiajs/inertia-vue3";
 import axios from "axios";

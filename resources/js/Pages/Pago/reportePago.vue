@@ -1,9 +1,9 @@
 <script setup>
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import {
     computed,
     nextTick,
@@ -19,7 +19,7 @@ import {
     usePage
 } from '@inertiajs/vue3';
 import PagoReporte from '../Reporte/pagoReporte.vue';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 
 const page = usePage();
 const gestiones = computed(() => page.props.gestiones);

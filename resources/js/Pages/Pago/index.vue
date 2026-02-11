@@ -1,9 +1,9 @@
 <script setup>
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Footer from '@/Components/Footer.vue';
+import Footer from '@/components/Footer.vue';
 import {
     Link,
     useForm,
@@ -13,9 +13,9 @@ import {
     computed,
     ref
 } from 'vue';
-import Seccion from '@/Components/Seccion.vue';
+import Seccion from '@/components/Seccion.vue';
 import { Head } from '@inertiajs/vue3';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 const page = usePage();
 const persona = computed(() => page.props.persona);
 const filters = computed(() => page.props.filters || {});

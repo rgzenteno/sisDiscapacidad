@@ -6,22 +6,22 @@ import { computed, ref } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 
 // Componentes
-import ModalImportaciones from '@/Components/ModalImportaciones.vue';
-import ModalEstadoBene from '@/Components/ModalEstadoBene.vue';
-import ModalEstados from '@/Components/ModalEstados.vue';
-import ModalCarnet from '@/Components/ModalCarnet.vue';
-import ModalTutor from '@/Components/ModalTutor.vue';
-import Paginacion from '@/Components/Paginacion.vue';
-import DataTable from '@/Components/DataTable.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import ModalImportaciones from '@/components/ModalImportaciones.vue';
+import ModalEstadoBene from '@/components/ModalEstadoBene.vue';
+import ModalEstados from '@/components/ModalEstados.vue';
+import ModalCarnet from '@/components/ModalCarnet.vue';
+import ModalTutor from '@/components/ModalTutor.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import DataTable from '@/components/DataTable.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
-import Footer from '@/Components/Footer.vue';
-import Button from '@/Components/Button.vue';
+import Footer from '@/components/Footer.vue';
+import Button from '@/components/Button.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Icon from '@/Components/Icon.vue';
-import Form from '@/Components/Form/Form.vue';
+import Rutas from '@/components/Rutas.vue';
+import Icon from '@/components/Icon.vue';
+import Form from '@/components/Form/Form.vue';
 
 // Utilidades
 import { can } from '@/lib/can';

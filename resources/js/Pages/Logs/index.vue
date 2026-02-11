@@ -1,11 +1,11 @@
 <script setup>
-import Busqueda from '@/Components/Busqueda.vue';
-import Footer from '@/Components/Footer.vue';
+import Busqueda from '@/components/Busqueda.vue';
+import Footer from '@/components/Footer.vue';
 import Header from '@/components/Header.vue';
-import ModalLogs from '@/Components/ModalLogs.vue';
-import Paginacion from '@/Components/Paginacion.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Seccion from '@/Components/Seccion.vue';
+import ModalLogs from '@/components/ModalLogs.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Rutas from '@/components/Rutas.vue';
+import Seccion from '@/components/Seccion.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import { Head } from '@inertiajs/vue3';
 import { ref } from 'vue'

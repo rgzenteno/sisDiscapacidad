@@ -1,7 +1,7 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
 import { computed } from 'vue';
-import Button from '@/Components/Button.vue';
+import Button from '@/components/Button.vue';
 // ============ FIN IMPORTS ============ //
 
 // ============ INICIO PROPS ============ //

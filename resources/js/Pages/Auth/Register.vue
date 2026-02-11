@@ -1,13 +1,13 @@
 <script setup>
 import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import SecondaryButton from '@/Components/SecondaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
-import Seccion from '@/Components/Seccion.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Dropdown from '@/Components/Dropdown.vue';
+import InputError from '@/components/InputError.vue';
+import InputLabel from '@/components/InputLabel.vue';
+import PrimaryButton from '@/components/PrimaryButton.vue';
+import SecondaryButton from '@/components/SecondaryButton.vue';
+import TextInput from '@/components/TextInput.vue';
+import Seccion from '@/components/Seccion.vue';
+import Rutas from '@/components/Rutas.vue';
+import Dropdown from '@/components/Dropdown.vue';
 import { initFlowbite } from 'flowbite'
 import {
     Head,

@@ -1,8 +1,8 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
 import { computed } from 'vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import Input from '@/Components/Input.vue';
+import InputLabel from '@/components/InputLabel.vue';
+import Input from '@/components/Input.vue';
 // ============ FIN IMPORTS ============ //
 
 // ============ INICIO PROPS ============ //

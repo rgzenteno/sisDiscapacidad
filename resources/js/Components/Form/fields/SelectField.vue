@@ -1,8 +1,8 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
 import { computed } from 'vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import Dropdown from '@/Components/Dropdown.vue';
+import InputLabel from '@/components/InputLabel.vue';
+import Dropdown from '@/components/Dropdown.vue';
 import { can } from '@/lib/can';
 // ============ FIN IMPORTS ============ //
 

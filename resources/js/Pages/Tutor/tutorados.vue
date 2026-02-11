@@ -8,12 +8,12 @@ import {
     usePage
 } from '@inertiajs/vue3';
 import { Head } from '@inertiajs/vue3';
-import Paginacion from '@/Components/Paginacion.vue';
+import Paginacion from '@/components/Paginacion.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Footer from '@/Components/Footer.vue';
-import DataTable from '@/Components/DataTable.vue';
+import Rutas from '@/components/Rutas.vue';
+import Footer from '@/components/Footer.vue';
+import DataTable from '@/components/DataTable.vue';
 
 
 const page = usePage();

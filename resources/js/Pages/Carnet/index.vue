@@ -1,7 +1,7 @@
 <script setup>
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 import { Head, router } from '@inertiajs/vue3';
 import {
     onMounted,
@@ -17,11 +17,11 @@ import {
 import {
     useForm
 } from '@inertiajs/vue3';
-import Seccion from '@/Components/Seccion.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import Input from '@/Components/Input.vue';
-import Footer from '@/Components/Footer.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Seccion from '@/components/Seccion.vue';
+import PrimaryButton from '@/components/PrimaryButton.vue';
+import Input from '@/components/Input.vue';
+import Footer from '@/components/Footer.vue';
+import Mensajes from '@/components/Mensajes.vue';
 
 const page = usePage();
 const persona = ref(page.props.persona);

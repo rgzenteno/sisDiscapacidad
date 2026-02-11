@@ -1,10 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Link, useForm } from '@inertiajs/vue3';
-import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
-import DropdownLink from '@/Components/DropdownLink.vue';
+import ResponsiveNavLink from '@/components/ResponsiveNavLink.vue';
+import DropdownLink from '@/components/DropdownLink.vue';
 import { useSidebar } from '../composables/useSidebar'
 // Utilidades
 import { can } from '@/lib/can';

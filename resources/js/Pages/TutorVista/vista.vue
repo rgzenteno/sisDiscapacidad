@@ -11,20 +11,20 @@ import {
     Link,
     usePage
 } from '@inertiajs/vue3';
-import Seccion from '@/Components/Seccion.vue';
+import Seccion from '@/components/Seccion.vue';
 const {
     isOpen
 } = useSidebar()
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Footer from '@/Components/Footer.vue';
-import ModalRequisitos from '@/Components/ModalRequisitos.vue';
-import ModalEstado from '@/Components/ModalEstado.vue';
+import Rutas from '@/components/Rutas.vue';
+import Footer from '@/components/Footer.vue';
+import ModalRequisitos from '@/components/ModalRequisitos.vue';
+import ModalEstado from '@/components/ModalEstado.vue';
 
-import Mensajes from '@/Components/Mensajes.vue';
+import Mensajes from '@/components/Mensajes.vue';
 
 const page = usePage();
 const personas = computed(() => page.props.personas);

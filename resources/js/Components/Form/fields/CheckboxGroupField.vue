@@ -1,7 +1,7 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
 import { watch } from 'vue';
-import InputLabel from '@/Components/InputLabel.vue';
+import InputLabel from '@/components/InputLabel.vue';
 // ============ FIN IMPORTS ============ //
 
 // ============ INICIO PROPS ============ //

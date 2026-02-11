@@ -1,14 +1,14 @@
 <script setup>
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Footer from '@/Components/Footer.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import Rutas from '@/Components/Rutas.vue';
+import Footer from '@/components/Footer.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import Rutas from '@/components/Rutas.vue';
 import { computed, onMounted, ref } from 'vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
-import Dropdown from '@/Components/Dropdown.vue';
+import Dropdown from '@/components/Dropdown.vue';
 import { router } from '@inertiajs/vue3';
-import ModalHabilitar from '@/Components/ModalHabilitar.vue';
+import ModalHabilitar from '@/components/ModalHabilitar.vue';
 import { onUnmounted } from 'vue'; // Agregar este import
 
 // Obtener las props de la página

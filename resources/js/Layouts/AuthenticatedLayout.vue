@@ -1,6 +1,6 @@
 <!-- AuthenticatedLayout.vue -->
 <script setup>
-import FlashMessage from '@/Components/FlashMessage.vue'
+import FlashMessage from '@/components/FlashMessage.vue'
 // ... tus otros imports
 </script>
 

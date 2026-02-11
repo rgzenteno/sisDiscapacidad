@@ -9,17 +9,17 @@ import { router } from '@inertiajs/vue3';
 // Componentes
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Form from '@/Components/Form/Form.vue';
-import Busqueda from '@/Components/Busqueda.vue';
-import Paginacion from '@/Components/Paginacion.vue';
-import Footer from '@/Components/Footer.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import Rutas from '@/Components/Rutas.vue';
-import DataTable from '@/Components/DataTable.vue';
+import Form from '@/components/Form/Form.vue';
+import Busqueda from '@/components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Footer from '@/components/Footer.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import Rutas from '@/components/Rutas.vue';
+import DataTable from '@/components/DataTable.vue';
 
 // Utilidades
 import { can } from '@/lib/can';
-import Icon from '@/Components/Icon.vue';
+import Icon from '@/components/Icon.vue';
 
 // ============================================================================
 // PROPS Y COMPUTED - DATOS DE LA PÁGINA

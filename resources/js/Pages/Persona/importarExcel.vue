@@ -1,10 +1,10 @@
 <script setup>
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Seccion from '@/Components/Seccion.vue';
-import Footer from '@/Components/Footer.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Rutas from '@/components/Rutas.vue';
+import Seccion from '@/components/Seccion.vue';
+import Footer from '@/components/Footer.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 

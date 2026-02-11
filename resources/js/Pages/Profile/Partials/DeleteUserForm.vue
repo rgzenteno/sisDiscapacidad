@@ -1,6 +1,6 @@
 <script setup>
-import DangerButton from '@/Components/DangerButton.vue';
-import Modal from '@/Components/Modal.vue';
+import DangerButton from '@/components/DangerButton.vue';
+import Modal from '@/components/Modal.vue';
 import { ref } from 'vue';
 
 const modalDelete = ref(false);

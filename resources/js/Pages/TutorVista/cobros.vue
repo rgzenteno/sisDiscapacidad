@@ -1,10 +1,10 @@
 <script setup>
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Footer from '@/Components/Footer.vue';
+import Rutas from '@/components/Rutas.vue';
+import Footer from '@/components/Footer.vue';
 import {
     computed,
     onMounted,
@@ -15,7 +15,7 @@ import {
     Link,
     usePage
 } from '@inertiajs/vue3';
-import Seccion from '@/Components/Seccion.vue';
+import Seccion from '@/components/Seccion.vue';
 
 import { useSidebar } from '@/composables/useSidebar';
 

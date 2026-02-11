@@ -8,21 +8,21 @@ import { router } from '@inertiajs/vue3';
 
 // Componentes
 import Sidebar from '@/components/Sidebar.vue';
-import Footer from '@/Components/Footer.vue';
+import Footer from '@/components/Footer.vue';
 import Header from '@/components/Header.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import ModalGestion from '@/Components/ModalGestion.vue';
-import Form from '@/Components/Form/Form.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Dropdown from '@/Components/Dropdown.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import ModalGestion from '@/components/ModalGestion.vue';
+import Form from '@/components/Form/Form.vue';
+import Rutas from '@/components/Rutas.vue';
+import Dropdown from '@/components/Dropdown.vue';
 import Reporte from './reporte.vue';
-import Button from '@/Components/Button.vue';
-import ModalResultadosMes from '@/Components/ModalResultadosMes.vue';
+import Button from '@/components/Button.vue';
+import ModalResultadosMes from '@/components/ModalResultadosMes.vue';
 import { watch } from 'vue';
 
 // Utilidades
 import { can } from '@/lib/can';
-import Icon from '@/Components/Icon.vue';
+import Icon from '@/components/Icon.vue';
 
 // ============================================================================
 // PROPS Y COMPUTED - DATOS DE LA PÁGINA

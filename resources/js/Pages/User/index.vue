@@ -1,15 +1,15 @@
 <script setup>
 import { can } from '@/lib/can';
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
-import Seccion from '@/Components/Seccion.vue';
-import Footer from '@/Components/Footer.vue';
+import Seccion from '@/components/Seccion.vue';
+import Footer from '@/components/Footer.vue';
 import Header from '@/components/Header.vue';
-import Mensajes from '@/Components/Mensajes.vue';
-import Form from '@/Components/Form/Form.vue';
-import ModalUser from '@/Components/ModalUser.vue';
-import ResetPasswordModal from '@/Components/ResetPasswordModal.vue';
+import Mensajes from '@/components/Mensajes.vue';
+import Form from '@/components/Form/Form.vue';
+import ModalUser from '@/components/ModalUser.vue';
+import ResetPasswordModal from '@/components/ResetPasswordModal.vue';
 
 import {
     Head,
@@ -20,11 +20,11 @@ import {
     computed,
     ref
 } from 'vue';
-import Rutas from '@/Components/Rutas.vue';
-import Botones from '@/Components/Botones.vue';
+import Rutas from '@/components/Rutas.vue';
+import Botones from '@/components/Botones.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import Button from '@/Components/Button.vue';
-import Icon from '@/Components/Icon.vue';
+import Button from '@/components/Button.vue';
+import Icon from '@/components/Icon.vue';
 
 const page = usePage();
 const usuarios = computed(() => page.props.usuarios);

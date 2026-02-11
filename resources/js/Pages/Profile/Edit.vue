@@ -8,8 +8,8 @@ import Header from '@/components/Header.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import Seccion from '@/Components/Seccion.vue';
-import Rutas from '@/Components/Rutas.vue';
+import Seccion from '@/components/Seccion.vue';
+import Rutas from '@/components/Rutas.vue';
 
 const page = usePage()
 const pagosDisponibles = computed(() => page.props.pagosDisponibles);

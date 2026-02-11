@@ -315,18 +315,18 @@ import { Head, usePage, router } from '@inertiajs/vue3';
 import { onMounted, onUnmounted } from 'vue';
 import { computed, ref } from "vue";
 import { can } from '@/lib/can';
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
-import Mensajes from '@/Components/Mensajes.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
+import Mensajes from '@/components/Mensajes.vue';
 import Sidebar from '@/components/Sidebar.vue';
-import Footer from '@/Components/Footer.vue';
+import Footer from '@/components/Footer.vue';
 import Header from '@/components/Header.vue';
-import Rutas from '@/Components/Rutas.vue';
-import Form from '@/Components/Form/Form.vue';
+import Rutas from '@/components/Rutas.vue';
+import Form from '@/components/Form/Form.vue';
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
-import DataTable from '@/Components/DataTable.vue';
-import Button from '@/Components/Button.vue';
-import Icon from '@/Components/Icon.vue';
+import DataTable from '@/components/DataTable.vue';
+import Button from '@/components/Button.vue';
+import Icon from '@/components/Icon.vue';
 
 const props = defineProps({
     roles: Object,

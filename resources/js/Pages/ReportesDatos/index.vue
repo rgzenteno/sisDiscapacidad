@@ -1,11 +1,11 @@
 <script setup>
-import Paginacion from '@/Components/Paginacion.vue';
-import Busqueda from '@/Components/Busqueda.vue';
+import Paginacion from '@/components/Paginacion.vue';
+import Busqueda from '@/components/Busqueda.vue';
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
-import DateField from '@/Components/DateField.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import Seccion from '@/Components/Seccion.vue';
+import DateField from '@/components/DateField.vue';
+import PrimaryButton from '@/components/PrimaryButton.vue';
+import Seccion from '@/components/Seccion.vue';
 import {
     computed,
     onMounted,
@@ -20,7 +20,7 @@ import {
 } from '@inertiajs/vue3';
 import { Inertia } from '@inertiajs/inertia';
 import PagoReporte from '../Reporte/pagoReporte.vue';
-import Rutas from '@/Components/Rutas.vue';
+import Rutas from '@/components/Rutas.vue';
 
 // Referencias y estados
 const page = usePage();
