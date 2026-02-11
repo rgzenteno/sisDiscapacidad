@@ -39,8 +39,8 @@ class GestionController extends Controller
 
         session(['selected_year' => $año]); // Guardar en sesión
         $selectedYear = session('selected_year'); // Obtener de sesión
-        $añoActualSistema = Carbon::now()->year;
-        //$añoActualSistema = 2025;
+        //$añoActualSistema = Carbon::now()->year;
+        $añoActualSistema = 2025;
 
         $gestionActual = Gestion::where('gestion', $añoActualSistema)->first();
 
@@ -215,7 +215,7 @@ class GestionController extends Controller
 
         // ================== MES DISPONIBLE ==================
         //$mesActual = Carbon::now()->month;
-        $mesActual = 1;
+        $mesActual = 12;
         $mesDisponible = 0;
 
         // Buscar la gestión del año actual del sistema (no la seleccionada)
