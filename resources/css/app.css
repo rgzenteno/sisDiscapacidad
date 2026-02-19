@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+    .placeholder-no-uppercase::placeholder {
+        text-transform: none;
+    }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+.iconoLog {
+    width: 300px;
+    height: 70px;
+    object-fit: contain;
+}
+
+/* Fondo con efecto de ondas */
+.ripple-background {
+    position: absolute;
+    border-radius: 50%;
+    animation: ripple 2s infinite;
+    z-index: 0;
+}
+
+/* Efecto de ondas */
+@keyframes ripple {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(3);
+        opacity: 0;
+    }
+}
+
+::-webkit-scrollbar {
+    width: 5px;
+    /* Tamaño del scrollbar */
+    height: 5px;
+    position: relative;
+}
+
+::-webkit-scrollbar-track {
+    background-color: #000000;
+    /* Color de la pista del scrollbar */
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #aeaeae;
+    /* Color del pulgar del scrollbar */
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #555;
+    /* Color del pulgar cuando pasa el mouse */
+}
+
+.dashboard-card {
+    @apply bg-white rounded-xl shadow-sm p-6 border border-gray-100;
+}
+
+.card-title {
+    @apply text-gray-800 font-semibold text-lg mb-4;
+}
+
+.progress-bar {
+    @apply w-full bg-gray-200 rounded-full h-2;
+}
+
+.progress-value {
+    @apply h-2 rounded-full transition-all duration-300;
+}
+
+.activity-item {
+    @apply flex items-center space-x-4 p-4 rounded-lg hover:bg-gray-50 transition-colors;
+}
+
+.icon-container {
+    @apply p-2 rounded-full;
+}
