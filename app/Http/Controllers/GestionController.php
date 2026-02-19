@@ -214,7 +214,7 @@ class GestionController extends Controller
             $gestion = $query->get();
         }
 
-        // ================== MES DISPONIBLE ==================
+        // ================== MES DISPONIBLE CONF==================
         //$mesActual = Carbon::now()->month;
         $mesActual = 12;
         $mesDisponible = 0;
