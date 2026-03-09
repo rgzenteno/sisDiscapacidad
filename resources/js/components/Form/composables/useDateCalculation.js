@@ -9,7 +9,7 @@ import { watch } from 'vue';
 export function useDateCalculation(form) {
 
     // ============ INICIO WATCHERS ============ //
-    // Watch para calcular fecha de vencimiento (+5 años desde emisión)
+    // Watch para calcular fecha de vencimiento (+6 años desde emisión)
     watch(() => form.fecha_emision, (nuevaFecha) => {
         if (nuevaFecha) {
             // Parsear la fecha en formato YYYY-MM-DD sin conversión de zona horaria
@@ -20,7 +20,7 @@ export function useDateCalculation(form) {
             const fechaVencimiento = new Date(fechaEmision);
 
             // Sumar 5 años
-            fechaVencimiento.setFullYear(fechaVencimiento.getFullYear() + 5);
+            fechaVencimiento.setFullYear(fechaVencimiento.getFullYear() + 6);
 
             // Formatear fecha como YYYY-MM-DD
             const yearVenc = fechaVencimiento.getFullYear();

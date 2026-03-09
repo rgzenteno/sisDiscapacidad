@@ -56,8 +56,8 @@ const createReporte = async (item) => {
         await generarComprobante(
             datosRecibo.value,
             item,
-            page.props.auth.user,
-            page.props.auth.user.digital_signature
+            item.pago.user,                 // ← usuario que registró el pago
+            item.pago.user.digital_signature
         );
     } catch (error) {
         console.error('Error generando comprobante:', error);
@@ -449,8 +449,9 @@ const submit = (idHabilitado, tipo) => {
                                     </a>
                                 </li>
                                 <div v-else>
-                                    <!-- ✅ BOTÓN PARA GENERAR PDF -->
-                                    <a v-if="can('comprobante-pago')" @click.prevent="createReporte(item)"
+                                    <!-- ✅ Si el pago lo hizo el usuario logueado → mostrar botón PDF -->
+                                    <a v-if="can('comprobante-pago') && item.pago.id === page.props.auth.user.id"
+                                        @click.prevent="createReporte(item)"
                                         class="cursor-pointer block rounded px-1 py-1 text-sm text-gray-700 hover:bg-gray-100">
                                         <svg class="w-6 h-6 text-gray-800" aria-hidden="true"
                                             xmlns="http://www.w3.org/2000/svg" width="24" height="24"
@@ -460,6 +461,23 @@ const submit = (idHabilitado, tipo) => {
                                                 clip-rule="evenodd" />
                                         </svg>
                                     </a>
+
+                                    <!-- ✅ Si lo pagó OTRO usuario → mostrar sello PAGADO -->
+                                    <div v-else-if="item.pago.id !== page.props.auth.user.id"
+                                        class="relative flex items-center justify-center w-14 h-14">
+                                        <!-- Círculo exterior -->
+                                        <div
+                                            class="absolute inset-0 rounded-full border-4 border-green-600 border-dashed opacity-80">
+                                        </div>
+                                        <!-- Círculo interior -->
+                                        <div class="absolute inset-1 rounded-full border-2 border-green-500 opacity-60">
+                                        </div>
+                                        <!-- Texto PAGADO -->
+                                        <span
+                                            class="relative z-10 text-green-700 font-black text-[9px] tracking-widest uppercase rotate-[-15deg] drop-shadow-sm">
+                                            PAGADO
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </ul>

@@ -50,7 +50,7 @@ const tutorFields = [
         name: 'ci_tutor',
         label: 'C.I.',
         type: 'number',
-        required: false,
+        required: true,
         placeholder: 'la cédula de identidad',
         readonly: false,
         range: 10,
@@ -110,18 +110,16 @@ const tutorFields = [
         range: 40,
     },
     {
-        typeInput: 'text',
+        typeInput: 'direccion',
         name: 'direccion',
         label: 'Dirección',
-        type: 'text',
         required: false,
         placeholder: 'la dirección',
         readonly: false,
         nameStyle: false,
-        range: 49,
+        range: 200,
     }
 ];
-
 // ============================================================================
 // CONFIGURACIÓN DE TABLA
 // ============================================================================

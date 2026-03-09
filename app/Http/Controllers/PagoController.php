@@ -13,8 +13,8 @@ use App\Models\User;
 use App\Services\LogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -100,6 +100,7 @@ class PagoController extends Controller
     {
         // Obtener el id_habilitado del request
         $id_habilitado = $request->id_habilitado;
+        $user = Auth::user();
         $tipo = $request->tipo;
 
         // Buscar el monto asociado al habilitado
@@ -157,7 +158,8 @@ class PagoController extends Controller
         $data['pago'] = '1';
         $data['tipo_pago'] = $tipo;
         $data['monto'] = $habilitado->monto;
-        $data['numero_boleta'] = $numeroBoleta; // ✅ AGREGAR EL NÚMERO DE BOLETA
+        $data['numero_boleta'] = $numeroBoleta;
+        $data['id'] = $user->id;
 
         // Capitalizar nombre y apellido de la persona
         $nombrePersona = ucwords(strtolower("{$habilitado->nombre_persona} {$habilitado->apellido_persona}"));
@@ -198,33 +200,33 @@ class PagoController extends Controller
 
     // Agregar este método en tu controlador (antes o después del método store)
     private function generarNumeroBoleta($idHabilitado)
-{
-    // Obtener la gestión del habilitado
-    $habilitado = Habilitado::query()
-        ->join('gestion', 'habilitado.id_gestion', '=', 'gestion.id_gestion')
-        ->where('habilitado.id_habilitado', $idHabilitado)
-        ->select('gestion.id_gestion')
-        ->first();
+    {
+        // Obtener la gestión del habilitado
+        $habilitado = Habilitado::query()
+            ->join('gestion', 'habilitado.id_gestion', '=', 'gestion.id_gestion')
+            ->where('habilitado.id_habilitado', $idHabilitado)
+            ->select('gestion.id_gestion')
+            ->first();
 
-    if (!$habilitado) {
-        return null;
+        if (!$habilitado) {
+            return null;
+        }
+
+        $idGestion = $habilitado->id_gestion;
+
+        // Obtener el último número de boleta de esa gestión
+        $ultimoNumero = Pago::query()
+            ->join('habilitado', 'pago.id_habilitado', '=', 'habilitado.id_habilitado')
+            ->where('habilitado.id_gestion', $idGestion)
+            ->whereNotNull('pago.numero_boleta')
+            ->selectRaw('MAX(CAST(pago.numero_boleta AS UNSIGNED)) as ultimo')
+            ->value('ultimo') ?? 0;
+
+        // Generar el nuevo número con 6 dígitos
+        $nuevoNumero = $ultimoNumero + 1;
+
+        return str_pad($nuevoNumero, 6, '0', STR_PAD_LEFT);
     }
-
-    $idGestion = $habilitado->id_gestion;
-
-    // Obtener el último número de boleta de esa gestión
-    $ultimoNumero = Pago::query()
-        ->join('habilitado', 'pago.id_habilitado', '=', 'habilitado.id_habilitado')
-        ->where('habilitado.id_gestion', $idGestion)
-        ->whereNotNull('pago.numero_boleta')
-        ->selectRaw('MAX(CAST(pago.numero_boleta AS UNSIGNED)) as ultimo')
-        ->value('ultimo') ?? 0;
-
-    // Generar el nuevo número con 6 dígitos
-    $nuevoNumero = $ultimoNumero + 1;
-
-    return str_pad($nuevoNumero, 6, '0', STR_PAD_LEFT);
-}
 
     /**
      * Display the specified resource.

@@ -226,7 +226,7 @@ class HabilitadoController extends Controller
      */
     public function show(string $id = null)
     {
-session()->forget('habilitado_year');
+        session()->forget('habilitado_year');
         // Si no viene ID, intentar obtenerlo de la sesión
         if (!$id) {
             $id = session('selected_person_id');
@@ -383,10 +383,10 @@ session()->forget('habilitado_year');
         //dd($persona->toArray()); // ← Agrega esto para ver qué trae
 
         $habilitados = $persona->habilitados()
-            ->with(['gestion', 'mes', 'pago'])
-            ->activo() // Scope Personalizado
+            ->with(['gestion', 'mes', 'pago.user'])
+            ->activo()
             ->desdeFechaRegistro($persona->fecha_registro)
-            ->ordenadoPorGestionYMes() // Scope personalizado
+            ->ordenadoPorGestionYMes()
             ->paginate(10);
 
 
