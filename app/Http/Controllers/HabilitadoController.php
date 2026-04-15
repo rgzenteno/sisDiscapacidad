@@ -437,7 +437,7 @@ class HabilitadoController extends Controller
             ->flip();
         // ─────────────────────────────────────────────────────────────────────
 
-        $fechaImplementacion = Carbon::parse('2026-04-14')->startOfDay();
+        $fechaImplementacion = Carbon::parse('2026-04-15')->startOfDay();
 
         $coleccion = $coleccion->map(function ($item) use ($estadosHistoricos, $boletasDescargadas, $fechaImplementacion) {
             $primerDiaMes = Carbon::create($item->gestion->gestion, $item->mes, 1)->startOfMonth();
