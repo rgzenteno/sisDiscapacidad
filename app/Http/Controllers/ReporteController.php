@@ -17,7 +17,7 @@ class ReporteController extends Controller
     {
         $gestiones = Gestion::pluck('gestion');
 
-        return Inertia::render('ReportesDatos/index', [
+        return Inertia::render('Reportes/index', [
             'resultados' => [],
             'gestiones' => $gestiones
         ]);

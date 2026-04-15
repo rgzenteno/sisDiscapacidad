@@ -25,8 +25,6 @@ const gestiones = computed(() => page.props.gestiones);
 const filters = computed(() => page.props.filters);
 const tiene_meses = computed(() => page.props.tiene_meses);
 
-//console.log('datos:', datosPersona.value);
-
 const observationsMap = ref({});
 const openModalHabilitar = ref(false);
 const selectedItem = ref(null);
@@ -648,18 +646,22 @@ const handleCambioEstado = (data) => {
                 <!-- Grid de Cards optimizado para 1-12 items -->
                 <div v-if="existe_gestion && tiene_meses && datosHabilitado.length > 0">
                     <div class="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                        <div v-for="item in datosHabilitado" :key="item.id_habilitado" @click="openModal(item)"
-                            class="group cursor-pointer h-[130px] bg-white rounded-2xl border-2 border-gray-200 hover:border-gray-400
-            hover:shadow-lg transition-all duration-700 overflow-hidden transform hover:-translate-y-1 relative p-4 z-0">
-
+                        <div v-for="item in datosHabilitado" :key="item.id_habilitado" @click="openModal(item)" class="group cursor-pointer h-[130px] rounded-2xl border-2 border-gray-200 hover:border-transparent
+                                hover:shadow-lg transition-all duration-500 overflow-hidden transform hover:-translate-y-1 relative p-4 z-0"
+                            :class="{
+                                'bg-white hover:bg-emerald-500': item.estado_mes === 'activo',
+                                'bg-white hover:bg-amber-500': item.estado_mes === 'baja_temporal',
+                                'bg-white hover:bg-red-500': item.estado_mes === 'baja_definitiva',
+                                'bg-white hover:bg-gray-400': !item.estado_mes
+                            }">
                             <!-- Círculo animado de fondo -->
-                            <div class="circle absolute h-[5em] w-[5em] -top-[2.5em] -right-[2.5em] rounded-full group-hover:scale-[900%] duration-700 z-[-1] pointer-events-none"
-                                :class="{
-                                    'bg-emerald-500': item.habilitado === true,
-                                    'bg-amber-500': item.habilitado !== true && item.estado_mes === 'baja_temporal',
-                                    'bg-red-500': item.habilitado !== true && item.estado_mes === 'baja_definitiva',
-                                    'bg-gray-400': item.habilitado !== true && item.estado_mes === 'activo'
-                                }">
+                            <div class="absolute h-[5em] w-[5em] -top-[2.5em] -right-[2.5em] rounded-full
+                opacity-100 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none" :class="{
+                    'bg-emerald-500': item.estado_mes === 'activo',
+                    'bg-amber-500': item.estado_mes === 'baja_temporal',
+                    'bg-red-500': item.estado_mes === 'baja_definitiva',
+                    'bg-gray-400': !item.estado_mes
+                }">
                             </div>
                             <!-- Título (Mes) -->
                             <h1
@@ -719,8 +721,8 @@ const handleCambioEstado = (data) => {
                     <!-- Icono dinámico según el estado -->
                     <div class="bg-white rounded-full p-6 ">
                         <!-- Sin gestión - Icono de calendario con X -->
-                         <Icon v-if="!existe_gestion" :icon-button="true" name="calendarMontSolid" class-name="text-gray-400 dark:text-gray-500"
-                            :size="64" :height="64" />
+                        <Icon v-if="!existe_gestion" :icon-button="true" name="calendarMontSolid"
+                            class-name="text-gray-400 dark:text-gray-500" :size="64" :height="64" />
 
                         <!-- Sin meses - Icono de reloj/calendario vacío -->
                         <svg v-else-if="!tiene_meses" class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor"

@@ -93,7 +93,7 @@ const tutorFields = [{
     name: 'ci_tutor',
     label: 'C.I.',
     type: 'number',
-    required: false,
+    required: true,
     placeholder: 'la cédula de identidad',
     readonly: false,
     range: 10,
@@ -529,7 +529,7 @@ const hideTooltip = () => {
 // Definición de columnas para la tabla de general
 const tableColumns = [
     { label: 'Nº', field: 'numero', headerClass: 'text-center px-2', cellClass: 'whitespace-nowrap' },
-    { label: 'Documento de Identidad', field: 'ci_persona', headerClass: 'px-2 whitespace-nowrap', cellClass: 'whitespace-nowrap' },
+    { label: 'C.I.', field: 'ci_persona', headerClass: 'px-2 whitespace-nowrap', cellClass: 'whitespace-nowrap' },
     { label: 'Apellidos + Nombres', field: 'nombre_completo', headerClass: 'px-1 whitespace-nowrap', cellClass: 'whitespace-nowrap' },
     { label: 'Tutor(a)', field: 'tutor', headerClass: 'px-1', cellClass: '' },
     { label: 'Documento de Respaldo', field: 'documento_respaldo', headerClass: 'px-1', cellClass: '' },
@@ -585,6 +585,10 @@ const handleImportar = (archivo, limpiarArchivo) => {
     });
 };
 
+const clearTutorSession = () => {
+    axios.delete(route('persona.clearTutorSession'));
+};
+
 const handleDescargarPlantilla = (nombrePlantilla) => {
     const link = document.createElement('a');
     link.href = configPlanillaGeneral.urlPlantilla;
@@ -608,8 +612,8 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
             <Transition name="fade">
                 <Form v-if="formEdit" :fields="personaFieldsEdit" :distritos="distrito" :idFor="selectedId"
                     :existing-data="selectedItem || {}" :edit-mode="true" submit-route="general.editRegistro"
-                    @add="handleEdit" @openFormOption="openOption" @sinDatos="sinDatos" @cancel="closeForm"
-                    @close="closeForm">
+                    @add="handleEdit" @openFormOption="openOption" @sinDatos="sinDatos" @cancel="() => { clearTutorSession(); closeForm(); }"
+                    @close="() => { clearTutorSession(); closeForm(); }">
                     <template #icon>
                         <svg class="w-5 h-5 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24"
                             height="24" fill="currentColor" viewBox="0 0 24 24">
@@ -781,7 +785,7 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
                     </td>
 
                     <!-- Columna: Documento de Identidad -->
-                    <td class="px-3 py-1.5 whitespace-nowrap">
+                    <td class="px-2 py-1.5 whitespace-nowrap">
                         <div class="font-medium text-gray-900 dark:text-gray-100">
                             {{ item.ci_persona }}
                             <span v-if="item.complemento !== null">-{{ item.complemento }}</span>
@@ -814,7 +818,7 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
                     </td>
 
                     <!-- Columna: Documento de Respaldo -->
-                    <td class="px-1 py-1.5">
+                    <td class="px-0 py-1.5">
                         <div class="text-gray-700 dark:text-gray-300 truncate max-w-xs"
                             :title="item.documento_respaldo">
                             <span v-if="item.documento_respaldo">{{ item.documento_respaldo }}</span>

@@ -1,12 +1,13 @@
 <script setup>
 import { ref, onUnmounted, onMounted, computed } from 'vue'
+import { useForm } from '@inertiajs/vue3';
 import { can } from '@/lib/can';
-import Dropdown from './Dropdown.vue';
+import { useReportePagadosPDF } from '@/composables/useReportePagadosPDF';
 
 const props = defineProps({
     data: {
         type: Object,
-        default: () => ({}) // Cambiado de array a objeto
+        default: () => ({})
     },
     planilla_cargada: {
         type: Boolean,
@@ -15,14 +16,17 @@ const props = defineProps({
     fecha_carga_planilla: {
         type: String,
         default: null
+    },
+    nombreUsuario: {
+        type: String,
+        default: ''
     }
 });
 
-//console.log('props.data en ModalGestion.vue:', props.data);
+//console.log(props.data);
 
 const emit = defineEmits(['close', 'cargar-planilla', 'recargar-planilla']);
-const currentDateTime = ref('')
-const dropdownOpen = ref(false);
+const currentDateTime = ref('');
 
 // Función para formatear fecha y hora
 const getFormattedDateTime = () => {
@@ -34,6 +38,9 @@ const getFormattedDateTime = () => {
     const minutes = date.getMinutes().toString().padStart(2, '0')
     return `${day} de ${month} de ${year}, ${hours}:${minutes}`
 }
+
+import { useReporteArqueoCajaPDF } from '@/composables/useReporteArqueoCajaPDF';
+const { generarReporte: generarArqueoCaja } = useReporteArqueoCajaPDF(() => props.data, () => props.nombreUsuario);
 
 // Actualizar la fecha y hora
 const updateDateTime = () => {
@@ -48,6 +55,30 @@ const getCurrentMonthYear = () => {
         year: date.getFullYear()
     }
 }
+
+const { generarReporte: generarReportePagados } = useReportePagadosPDF();
+
+const LogReporte = useForm({
+    gestion: '',
+    mes: '',
+    total_pagados: '',
+    total_no_pagados: '',
+    monto_asignado: '',
+    tipo: '',
+});
+
+const handleGenerarReporte = () => {
+    LogReporte.gestion = props.data.gestion;
+    LogReporte.mes = getFromDate(props.data.mes);
+    LogReporte.total_pagados = props.data.cantidad_total_pagos;
+    LogReporte.total_no_pagados = props.data.cantidad_no_pagados;
+    LogReporte.monto_asignado = props.data.presupuesto;
+    LogReporte.tipo = 'arqueo_caja';
+    LogReporte.get(route('pago.reporteLog'));
+
+    const personas = Array.isArray(props.data.personas_pagadas) ? props.data.personas_pagadas : [];
+    generarReportePagados(personas, props.data.gestion, props.data.mes, 'Pagados', props.data.monto);
+};
 
 // Comparación corregida
 const verifyDate = () => {
@@ -169,7 +200,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
     <div
         class="fixed inset-0 bg-slate-900/75 flex items-start justify-center z-50 px-4 py-0 overflow-y-auto backdrop-blur-sm">
         <div
-            class="relative w-full max-w-4xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl transform transition-all duration-300 my-8">
+            class="relative w-full max-w-4xl bg-white dark:bg-gray-800 rounded-3xl shadow-2xl transform transition-all duration-300 my-8">
             <!-- Modal Header -->
             <div
                 class="grid grid-cols-[1fr_auto] gap-6 px-6 py-3 border-b border-gray-100 bg-gray-50 dark:bg-gray-700/50 rounded-t-3xl">
@@ -190,9 +221,27 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 
                         <!-- Título y subtítulo -->
                         <div class="rounded-lg">
-                            <p class="mt-0 text-2xl font-bold"
-                                :class="verifyDate() ? 'text-blue-700 dark:text-white' : 'text-gray-500 dark:text-white'">
-                                {{ getFromDate(props.data.mes) }}</p>
+                            <div class="flex items-center gap-2">
+                                <p class="mt-0 text-2xl font-bold"
+                                    :class="verifyDate() ? 'text-blue-700 dark:text-white' : 'text-gray-500 dark:text-white'">
+                                    {{ getFromDate(props.data.mes) }}
+                                </p>
+                                <div :class="{
+                                    'px-2 py-0.5 rounded-2xl text-xs font-medium shadow-sm text-center relative overflow-hidden': true,
+                                    'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-600': props.data.cantidad_habilitadas === props.data.cantidad_total_pagos,
+                                    'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-600': verifyDate(props.data.gestion, props.data.mes) && props.data.cantidad_habilitadas !== props.data.cantidad_total_pagos,
+                                    'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-600': !verifyDate(props.data.gestion, props.data.mes) && props.data.cantidad_habilitadas !== props.data.cantidad_total_pagos
+                                }">
+                                    <span class="relative z-10">
+                                        {{
+                                            props.data.cantidad_habilitadas === props.data.cantidad_total_pagos ?
+                                                'Completo' :
+                                                verifyDate(props.data.gestion, props.data.mes) ? 'En Proceso' :
+                                        'Pagos Pendientes'
+                                        }}
+                                    </span>
+                                </div>
+                            </div>
                             <p class="text-xs text-gray-600 dark:text-blue-300">{{ getMonthDateRange(props.data.mes) }}
                             </p>
                         </div>
@@ -202,8 +251,8 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                 <!-- Acciones -->
                 <div class="flex items-start gap-3 flex-shrink-0">
                     <button type="button" @click="$emit('close')"
-                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
-                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg"
+                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-red-100 text-gray-600 hover:text-red-400 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
+                        <svg class="w-5 h-5 " xmlns="http://www.w3.org/2000/svg"
                             fill="none" viewBox="0 0 24 24">
                             <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M6 6l12 12M6 18L18 6" />
@@ -253,7 +302,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                             </svg>
                         </div>
                         <p class="text-2xl font-bold text-slate-800 dark:text-white mb-3">Bs. {{
-                            formatCurrency(props.data.total_pagado)}}</p>
+                            formatCurrency(props.data.total_pagado) }}</p>
                         <div class="space-y-2">
                             <div class="flex justify-between">
                                 <span class="text-xs text-gray-600 dark:text-gray-400">Presupuesto:</span>
@@ -264,7 +313,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                                 <span class="text-xs text-gray-600 dark:text-gray-400">Presupuesto restante</span>
                                 <span class="text-xs font-medium text-emerald-600 dark:text-emerald-400">Bs. {{
                                     formatCurrency((props.data.presupuesto || 0) - (props.data.total_pagado || 0))
-                                    }}</span>
+                                }}</span>
                             </div>
                         </div>
                     </div>
@@ -331,7 +380,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                                 d="M8 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1h2a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2Zm6 1h-4v2H9a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2h-1V4Zm-6 8a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H9a1 1 0 0 1-1-1Zm1 3a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2H9Z"
                                 clip-rule="evenodd" />
                         </svg>
-                        Detalle de Pagos
+                        Detalles del Mes
                     </h3>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -352,9 +401,9 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                                         {{ formatCurrency(props.data.monto) }}</span>
                                 </div>
                                 <div class="flex justify-between">
-                                    <span class="text-xs text-gray-600 dark:text-gray-400">Presupuesto mensual</span>
-                                    <span class="text-sm font-semibold text-indigo-700 dark:text-indigo-400">Bs. {{
-                                        formatCurrency(props.data.presupuesto) }}</span>
+                                    <span class="text-xs text-gray-600 dark:text-gray-400">Ult. numero boleta</span>
+                                    <span class="text-sm font-semibold text-indigo-700 dark:text-indigo-400"> {{
+                                        props.data.ultimo_numero_boleta }}</span>
                                 </div>
                                 <div class="flex justify-between">
                                     <span class="text-xs text-gray-600 dark:text-gray-400">Presupuesto anual</span>
@@ -511,13 +560,13 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                                     <span class="text-gray-600 dark:text-gray-400">Sin tutor asignado</span>
                                     <span class="font-medium text-gray-700 dark:text-gray-300">{{
                                         props.data.personas_sin_tutor
-                                        }}</span>
+                                    }}</span>
                                 </div>
                                 <div class="flex justify-between text-xs">
                                     <span class="text-gray-600 dark:text-gray-400">Sin Carnet de Discapacidad</span>
                                     <span class="font-medium text-gray-700 dark:text-gray-300">{{
                                         props.data.sin_carnet_discapacidad
-                                        }}</span>
+                                    }}</span>
                                 </div>
                                 <div class="flex justify-between text-xs">
                                     <span class="text-gray-600 dark:text-gray-400">Carnet de Discapacidad Vencido</span>
@@ -593,101 +642,16 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                     </div>
                     <div class="flex space-x-3 items-center">
                         <!-- Dropdown de Reportes -->
-                        <div v-if="can('reporte-mes')" class="relative">
-                            <button @click="dropdownOpen = !dropdownOpen" type="button"
-                                class="inline-flex items-center justify-between gap-3 px-5 py-2 text-sm font-medium rounded-lg transition-all focus:ring-2 focus:outline-none bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600 focus:ring-blue-400 dark:focus:ring-blue-500 cursor-pointer">
-                                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path fill-rule="evenodd"
-                                        d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm-6 9a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h.5a2.5 2.5 0 0 0 0-5H5Zm1.5 3H6v-1h.5a.5.5 0 0 1 0 1Zm4.5-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.376A2.626 2.626 0 0 0 15 15.375v-1.75A2.626 2.626 0 0 0 12.375 11H11Zm1 5v-3h.375a.626.626 0 0 1 .625.626v1.748a.625.625 0 0 1-.626.626H12Zm5-5a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h1a1 1 0 1 0 0-2h-1v-1h1a1 1 0 1 0 0-2h-2Z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <span class="truncate">Generar Reporte</span>
-                                <svg class="w-2.5 h-2.5 flex-shrink-0 transition-transform"
-                                    :class="{ 'rotate-180': dropdownOpen }" xmlns="http://www.w3.org/2000/svg"
-                                    fill="none" viewBox="0 0 10 6">
-                                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-                                        stroke-width="2" d="m1 1 4 4 4-4" />
-                                </svg>
-                            </button>
-
-                            <!-- Overlay -->
-                            <div v-show="dropdownOpen" @click="dropdownOpen = false" class="fixed inset-0 z-40"></div>
-
-                            <!-- Dropdown Menu (hacia arriba) -->
-                            <Transition enter-active-class="transition ease-out duration-100"
-                                enter-from-class="transform opacity-0 scale-95"
-                                enter-to-class="transform opacity-100 scale-100"
-                                leave-active-class="transition ease-in duration-75"
-                                leave-from-class="transform opacity-100 scale-100"
-                                leave-to-class="transform opacity-0 scale-95">
-                                <div v-show="dropdownOpen" class="absolute bottom-full right-0 mb-2 w-60 z-50">
-                                    <div
-                                        class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-xl">
-                                        <div class="max-h-64 overflow-y-auto">
-                                            <ul class="py-1">
-                                                <li>
-                                                    <button type="button"
-                                                        @click="generarReporte('pagados'); dropdownOpen = false"
-                                                        class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                                        <svg class="w-5 h-5 text-red-600"
-                                                            xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path fill-rule="evenodd"
-                                                                d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm-6 9a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h.5a2.5 2.5 0 0 0 0-5H5Zm1.5 3H6v-1h.5a.5.5 0 0 1 0 1Zm4.5-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.376A2.626 2.626 0 0 0 15 15.375v-1.75A2.626 2.626 0 0 0 12.375 11H11Zm1 5v-3h.375a.626.626 0 0 1 .625.626v1.748a.625.625 0 0 1-.626.626H12Zm5-5a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h1a1 1 0 1 0 0-2h-1v-1h1a1 1 0 1 0 0-2h-2Z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                        <span>Reporte Pagados</span>
-                                                    </button>
-                                                </li>
-                                                <li>
-                                                    <button type="button"
-                                                        @click="generarReporte('no-pagados'); dropdownOpen = false"
-                                                        class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                                        <svg class="w-5 h-5 text-red-600"
-                                                            xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path fill-rule="evenodd"
-                                                                d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm-6 9a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h.5a2.5 2.5 0 0 0 0-5H5Zm1.5 3H6v-1h.5a.5.5 0 0 1 0 1Zm4.5-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.376A2.626 2.626 0 0 0 15 15.375v-1.75A2.626 2.626 0 0 0 12.375 11H11Zm1 5v-3h.375a.626.626 0 0 1 .625.626v1.748a.625.625 0 0 1-.626.626H12Zm5-5a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h1a1 1 0 1 0 0-2h-1v-1h1a1 1 0 1 0 0-2h-2Z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                        <span>Reporte No Pagados</span>
-                                                    </button>
-                                                </li>
-                                                <li>
-                                                    <button type="button"
-                                                        @click="generarReporte('fallecidos'); dropdownOpen = false"
-                                                        class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                                        <svg class="w-5 h-5 text-red-600"
-                                                            xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path fill-rule="evenodd"
-                                                                d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm-6 9a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h.5a2.5 2.5 0 0 0 0-5H5Zm1.5 3H6v-1h.5a.5.5 0 0 1 0 1Zm4.5-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.376A2.626 2.626 0 0 0 15 15.375v-1.75A2.626 2.626 0 0 0 12.375 11H11Zm1 5v-3h.375a.626.626 0 0 1 .625.626v1.748a.625.625 0 0 1-.626.626H12Zm5-5a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h1a1 1 0 1 0 0-2h-1v-1h1a1 1 0 1 0 0-2h-2Z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                        <span>Reporte Fallecidos</span>
-                                                    </button>
-                                                </li>
-                                                <li>
-                                                    <button type="button"
-                                                        @click="generarReporte('funcionarios'); dropdownOpen = false"
-                                                        class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                                        <svg class="w-5 h-5 text-red-600"
-                                                            xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path fill-rule="evenodd"
-                                                                d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm-6 9a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h.5a2.5 2.5 0 0 0 0-5H5Zm1.5 3H6v-1h.5a.5.5 0 0 1 0 1Zm4.5-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.376A2.626 2.626 0 0 0 15 15.375v-1.75A2.626 2.626 0 0 0 12.375 11H11Zm1 5v-3h.375a.626.626 0 0 1 .625.626v1.748a.625.625 0 0 1-.626.626H12Zm5-5a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h1a1 1 0 1 0 0-2h-1v-1h1a1 1 0 1 0 0-2h-2Z"
-                                                                clip-rule="evenodd" />
-                                                        </svg>
-                                                        <span>Reporte Funcionarios</span>
-                                                    </button>
-                                                </li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            </Transition>
-                        </div>
+                        <button v-if="can('reporte-mes')" @click="handleGenerarReporte()" type="button"
+                            class="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium rounded-lg transition-all bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-600 focus:ring-2 focus:outline-none focus:ring-blue-400">
+                            <svg class="w-4 h-4 text-red-600" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
+                                width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd"
+                                    d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm-6 9a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h.5a2.5 2.5 0 0 0 0-5H5Zm1.5 3H6v-1h.5a.5.5 0 0 1 0 1Zm4.5-3a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.376A2.626 2.626 0 0 0 15 15.375v-1.75A2.626 2.626 0 0 0 12.375 11H11Zm1 5v-3h.375a.626.626 0 0 1 .625.626v1.748a.625.625 0 0 1-.626.626H12Zm5-5a1 1 0 0 0-1 1v5a1 1 0 1 0 2 0v-1h1a1 1 0 1 0 0-2h-1v-1h1a1 1 0 1 0 0-2h-2Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            Generar Reporte
+                        </button>
 
                         <!-- Botón Aceptar -->
                         <button @click="$emit('close')"

@@ -6,30 +6,6 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory; // Agrega este "use"
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * @property int $id_carnet
- * @property string $doc
- * @property string $discapacidad
- * @property string $fecha_emision
- * @property string $fecha_vencimiento
- * @property int $id_persona
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
- * @property-read \App\Models\Persona $persona
- * @method static \Database\Factories\CarnetFactory factory($count = null, $state = [])
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereDiscapacidad($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereDoc($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereFechaEmision($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereFechaVencimiento($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereIdCarnet($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereIdPersona($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|Carnet whereUpdatedAt($value)
- * @mixin \Eloquent
- */
 class Carnet extends Model
 {
     use HasFactory;

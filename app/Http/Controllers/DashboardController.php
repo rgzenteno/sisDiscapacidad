@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 
 use App\Jobs\EnviarMensajesWhatsApp;
+use App\Models\Carnet;
 use App\Models\Gestion;
 use App\Models\Habilitado;
 use App\Models\Pago;
@@ -79,16 +80,16 @@ class DashboardController extends Controller
             )->first();
 
         $discapacidadPorDistrito = DB::table('persona as p')
-    ->join('carnet as c', 'p.id_persona', '=', 'c.id_persona')
-    ->select(
-        'p.distrito',
-        DB::raw('COUNT(CASE WHEN c.discapacidad = "FISICA-MOTORA" THEN 1 END) as fisica'),
-        DB::raw('COUNT(CASE WHEN c.discapacidad = "AUDITIVA" THEN 1 END) as auditiva'),
-        DB::raw('COUNT(CASE WHEN c.discapacidad = "INTELECTUAL" THEN 1 END) as intelectual'),
-        DB::raw('COUNT(CASE WHEN c.discapacidad = "MENTAL-PSIQUICA" THEN 1 END) as mental_psiquica')
-    )
-    ->groupBy('p.distrito')
-    ->get();
+            ->join('carnet as c', 'p.id_persona', '=', 'c.id_persona')
+            ->select(
+                'p.distrito',
+                DB::raw('COUNT(CASE WHEN c.discapacidad = "FISICA-MOTORA" THEN 1 END) as fisica'),
+                DB::raw('COUNT(CASE WHEN c.discapacidad = "AUDITIVA" THEN 1 END) as auditiva'),
+                DB::raw('COUNT(CASE WHEN c.discapacidad = "INTELECTUAL" THEN 1 END) as intelectual'),
+                DB::raw('COUNT(CASE WHEN c.discapacidad = "MENTAL-PSIQUICA" THEN 1 END) as mental_psiquica')
+            )
+            ->groupBy('p.distrito')
+            ->get();
 
         $personasSinCarnet = DB::table('persona')
             ->whereNotExists(function ($query) {
@@ -98,28 +99,57 @@ class DashboardController extends Controller
             })
             ->count();
 
-        $gestiones = DB::table('gestion as g')
-            ->leftJoin('habilitado as h', 'g.id_gestion', '=', 'h.id_gestion')
-            ->leftJoin('pago as pa', 'h.id_habilitado', '=', 'pa.id_habilitado')
-            ->select(
+        $totalBeneficiarios = Persona::whereNot('tipo_registro', 'registrado')->count();
+
+        $totalBajaTemp = Persona::whereHas('historialEstados', function ($query) {
+            $query->where('estado', 'baja_temporal');
+        })->count();
+
+
+        $totalBajaDef = Persona::whereHas('historialEstados', function ($query) {
+            $query->where('estado', 'baja_definitiva');
+        })->count();
+
+        $carnetVencido = Carnet::where('fecha_vencimiento', '<', today())->count();
+
+        $registros = DB::table('gestion as g')
+            ->leftJoin('mes as m', 'm.id_gestion', '=', 'g.id_gestion')
+            ->leftJoin('habilitado as h', 'h.id_mes', '=', 'm.id_mes')
+            ->leftJoin('pago as p', 'p.id_habilitado', '=', 'h.id_habilitado')
+            ->select([
                 'g.gestion AS GESTION',
-                DB::raw('COUNT(DISTINCT h.id_persona) AS CANTIDAD_PERSONAS'),
-                DB::raw('COALESCE(SUM(pa.monto), 0) AS TOTAL_PAGADO'),
-                DB::raw('CASE
-            WHEN COUNT(DISTINCT h.id_persona) = COUNT(DISTINCT pa.id_habilitado) THEN 1
-            WHEN DATE_FORMAT(g.gestion, "%Y-%m") = DATE_FORMAT("' . $fechaHoy . '", "%Y-%m") THEN 2
-            ELSE 3
-        END AS ESTADO')
+                'm.mes AS MES',
+                'm.monto AS MONTO',
+                DB::raw('COUNT(DISTINCT h.id_habilitado) AS CANTIDAD_HABILITADOS'),
+                DB::raw('COUNT(p.id_pago) AS CANTIDAD_PAGOS'),
+                DB::raw('COUNT(p.id_pago) * m.monto AS TOTAL'),
+            ])
+            ->groupBy(
+                'g.id_gestion',
+                'g.gestion',
+                'm.id_mes',
+                'm.mes',
+                'm.monto'
             )
-            ->groupBy('g.id_gestion', 'g.gestion')
-            ->orderBy('g.gestion', 'DESC')
+            ->orderBy('g.id_gestion', 'ASC')
+            ->orderBy('m.id_mes', 'ASC')
             ->get();
+
+        $anioActual = Carbon::now('America/La_Paz')->year; // 2026
+
+        $gestionActual = DB::table('gestion')
+            ->where('gestion', $anioActual)
+            ->value('gestion');
 
 
         return Inertia::render('Dashboard/index', [
             'totalMes' => $totalMes,
             'gestion' => Gestion::all(),
+            'totalBeneficiarios' => $totalBeneficiarios,
             'totalPersonas' => Persona::count(),
+            'totalBajaTemp' => $totalBajaTemp,
+            'totalBajaDef' => $totalBajaDef,
+            'carnetVencido' => $carnetVencido,
             'totalPago' => Pago::sum('monto'),
             'totalTutores' => Tutor::count(),
             'totalHabilitado' => Habilitado::distinct('id_persona')->count(),
@@ -127,7 +157,8 @@ class DashboardController extends Controller
             'conteoDiscapacidad' => $conteoDiscapacidad,
             'distribucionRegional' => $distribucionRegional,
             'personasSinCarnet' => $personasSinCarnet,
-            'gestiones' => $gestiones,
+            'registros' => $registros,
+            'gestionActual' => (int) $gestionActual,
             'discapacidadPorDistrito' => $discapacidadPorDistrito,
 
 

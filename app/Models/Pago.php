@@ -22,6 +22,7 @@ class Pago extends Model
         'numero_boleta',
         'tipo_pago',
         'id_habilitado',
+        'id',
     ];
 
     public function setCreatedAtAttribute($value)
@@ -45,10 +46,14 @@ class Pago extends Model
     // Tipo de dato de la clave primaria
     protected $keyType = 'int';
 
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'id', 'id');
+    }
+
     // Relaciones
     public function habilitado()
     {
         return $this->belongsTo(Habilitado::class, 'id_habilitado', 'id_habilitado');
     }
-
 }

@@ -33,7 +33,7 @@ class Persona extends Model
     ];
 
     protected $casts = [
-        'fecha_registro' => 'date'
+        'fecha_registro' => 'date:Y-m-d',
     ];
 
     // ============ RELACIONES ============ //
@@ -58,12 +58,20 @@ class Persona extends Model
         return $this->hasMany(HistorialEstados::class, 'id_persona', 'id_persona');
     }
 
-    // 👇 NUEVA RELACIÓN: Para obtener solo el último estado
+    public function habilitado()
+    {
+        return $this->belongsTo(Habilitado::class, 'id_habilitado', 'id_habilitado');
+    }
+
+    // NUEVA RELACIÓN: Para obtener solo el último estado
     public function ultimoEstado()
     {
         return $this->hasOne(HistorialEstados::class, 'id_persona', 'id_persona')
-            ->orderBy('fecha_registro', 'desc')
-            ->orderBy('id', 'desc');
+            ->whereIn('id', function ($query) {
+                $query->selectRaw('MAX(id)')
+                    ->from('historial_estados')
+                    ->groupBy('id_persona');
+            });
     }
 
     // ============ ACCESSORS ============ //

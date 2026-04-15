@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Carnet;
 use App\Models\Gestion;
 use App\Models\Habilitado;
+use App\Models\Mes;
 use App\Models\Pago;
 use App\Models\Persona;
 use App\Models\Tutor;
@@ -13,8 +14,8 @@ use App\Models\User;
 use App\Services\LogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -98,29 +99,163 @@ class PagoController extends Controller
      */
     public function store(Request $request)
     {
-        // Obtener el id_habilitado del request
         $id_habilitado = $request->id_habilitado;
+        $user = Auth::user();
         $tipo = $request->tipo;
 
-        // Buscar el monto asociado al habilitado
-        $habilitado = Habilitado::query()
-            ->join('gestion', 'habilitado.id_gestion', 'gestion.id_gestion')
-            ->join('mes', 'gestion.id_gestion', 'mes.id_gestion')
-            ->join('persona', 'habilitado.id_persona', 'persona.id_persona')
-            ->join('tutor', 'persona.id_tutor', 'tutor.id_tutor')
-            ->where('habilitado.id_habilitado', '=', $id_habilitado)
-            ->select(
-                'persona.nombre_persona',
-                'persona.apellido_persona',
-                'tutor.id_tutor',
-                'mes.monto',
-                'mes.mes',
-                'gestion.gestion',
-                'habilitado.id_habilitado'
-            )
+        DB::transaction(function () use ($request, $id_habilitado, $user, $tipo) {
+
+            $habilitado = Habilitado::query()
+                ->join('gestion', 'habilitado.id_gestion', 'gestion.id_gestion')
+                ->join('mes', 'habilitado.id_mes', 'mes.id_mes')
+                ->join('persona', 'habilitado.id_persona', 'persona.id_persona')
+                ->join('tutor', 'persona.id_tutor', 'tutor.id_tutor')
+                ->where('habilitado.id_habilitado', '=', $id_habilitado)
+                ->select(
+                    'persona.nombre_persona',
+                    'persona.apellido_persona',
+                    'persona.ci_persona',
+                    'tutor.id_tutor',
+                    'mes.monto',
+                    'mes.mes',
+                    'gestion.gestion',
+                    'habilitado.id_habilitado',
+                    'habilitado.id_mes',
+                    'habilitado.id_gestion'
+                )
+                ->lockForUpdate()
+                ->first();
+
+            if (!$habilitado) {
+                return response()->json(['error' => 'Habilitado no encontrado'], 404);
+            }
+
+            $meses = [
+                1 => 'Enero',
+                2 => 'Febrero',
+                3 => 'Marzo',
+                4 => 'Abril',
+                5 => 'Mayo',
+                6 => 'Junio',
+                7 => 'Julio',
+                8 => 'Agosto',
+                9 => 'Septiembre',
+                10 => 'Octubre',
+                11 => 'Noviembre',
+                12 => 'Diciembre'
+            ];
+
+            $nombreMes = ucwords(strtolower($meses[$habilitado->mes]));
+
+            $numeroBoleta = $this->generarNumeroBoleta(
+                $id_habilitado,
+                $habilitado->id_mes,
+                $habilitado->id_gestion
+            );
+
+            $data = $request->all();
+            $data['fecha_pago']    = now();
+            $data['pago']          = '1';
+            $data['tipo_pago']     = $tipo;
+            $data['monto']         = $habilitado->monto;
+            $data['numero_boleta'] = $numeroBoleta;
+            $data['id']            = $user->id;
+
+            $nombrePersona = ucwords(strtolower(
+                "{$habilitado->nombre_persona} {$habilitado->apellido_persona}"
+            ));
+
+            $pagoCreado = Pago::create($data);
+
+            $periodo = "{$nombreMes} - {$habilitado->gestion}";
+
+            $descripcion = "Pago de {$periodo} realizado a {$nombrePersona}.";
+
+            // ─── Log compacto para alto volumen ──────────────────────────────
+            $this->logService->logPayment(
+                $pagoCreado,
+                (object) [
+                    'id'             => $habilitado->id_habilitado,
+                    'nombre'         => $nombrePersona,
+                    'monto'          => $habilitado->monto,
+                    'periodo'        => $periodo,
+                    'tipo_bono'      => 'Efectivo',
+                    'numero_boleta'  => $numeroBoleta,
+                    'ci'             => $habilitado->ci_persona
+                ],
+                $descripcion
+            );
+        });
+    }
+
+    private function generarNumeroBoleta($idHabilitado, $idMes, $idGestion)
+    {
+        $abreviaciones = [
+            1 => 'ENE',
+            2 => 'FEB',
+            3 => 'MAR',
+            4 => 'ABR',
+            5 => 'MAY',
+            6 => 'JUN',
+            7 => 'JUL',
+            8 => 'AGO',
+            9 => 'SEP',
+            10 => 'OCT',
+            11 => 'NOV',
+            12 => 'DIC'
+        ];
+
+        $datos = DB::table('habilitado')
+            ->join('mes',     'habilitado.id_mes',     '=', 'mes.id_mes')
+            ->join('gestion', 'habilitado.id_gestion', '=', 'gestion.id_gestion')
+            ->where('habilitado.id_habilitado', $idHabilitado)
+            ->select('mes.mes as numero_mes', 'gestion.gestion as anio')
             ->first();
 
-        // Obtener el nombre del mes en español
+        if (!$datos) return null;
+
+        // 1. Bloquear fila del consecutivo
+        $fila = DB::table('boleta_consecutivo')
+            ->where('id_mes',     $idMes)
+            ->where('id_gestion', $idGestion)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$fila) {
+            throw new \Exception("No existe consecutivo para id_mes={$idMes} / id_gestion={$idGestion}.");
+        }
+
+        // 2. Calcular siguiente número
+        $nuevoCorrelativo = (int) $fila->ultimo_numero + 1;
+
+        // 3. Actualizar el contador
+        DB::table('boleta_consecutivo')
+            ->where('id_mes',     $idMes)
+            ->where('id_gestion', $idGestion)
+            ->update(['ultimo_numero' => $nuevoCorrelativo]);
+
+        // 4. Retornar número formateado
+        $correlativo = str_pad($nuevoCorrelativo, 6, '0', STR_PAD_LEFT);
+        return "{$abreviaciones[$datos->numero_mes]}-{$datos->anio}-{$correlativo}";
+    }
+
+    public function descargarBoleta(Request $request)
+    {
+        $idPago  = $request->input('id_pago');
+        $gestion = $request->input('gestion');
+        $mes     = $request->input('mes');
+
+        $pago = Pago::with('habilitado.persona')->findOrFail($idPago);
+
+        $yaDescargada = \Spatie\Activitylog\Models\Activity::inLog('boleta_descarga')
+            ->where('subject_type', Pago::class)
+            ->where('subject_id', $idPago)
+            ->exists();
+
+        if ($yaDescargada) {
+            return back()->with('error', 'La boleta ya fue descargada anteriormente.');
+        }
+
         $meses = [
             1 => 'Enero',
             2 => 'Febrero',
@@ -136,95 +271,19 @@ class PagoController extends Controller
             12 => 'Diciembre'
         ];
 
-        // Obtener el mes de la gestión como número
-        $mesNumero = Carbon::parse($habilitado->getAttributes()['gestion'])->month;
+        $nombreMes = $meses[(int) $mes] ?? 'Mes desconocido';
 
-        // Obtener el nombre del mes
-        $nombreMes = $meses[$mesNumero];
+        $persona = $pago->habilitado->persona;
+        $nombre = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
 
-        if (!$habilitado) {
-            return response()->json(['error' => 'Habilitado no encontrado'], 404);
-        }
-
-        $fechaHoy = Carbon::now('America/La_Paz')->format('Y-m-d');
-
-        // ✅ GENERAR EL NÚMERO DE BOLETA CORRELATIVO
-        $numeroBoleta = $this->generarNumeroBoleta($id_habilitado);
-
-        // Preparar los datos para crear el pago
-        $data = $request->all();
-        $data['fecha_pago'] = now();
-        $data['pago'] = '1';
-        $data['tipo_pago'] = $tipo;
-        $data['monto'] = $habilitado->monto;
-        $data['numero_boleta'] = $numeroBoleta; // ✅ AGREGAR EL NÚMERO DE BOLETA
-
-        // Capitalizar nombre y apellido de la persona
-        $nombrePersona = ucwords(strtolower("{$habilitado->nombre_persona} {$habilitado->apellido_persona}"));
-        // Capitalizar el nombre del mes
-        $nombreMes = ucwords(strtolower($nombreMes));
-
-        Pago::create($data);
-
-        $descripcion = sprintf(
-            'Se realizó el pago %s para el beneficiario %s. ',
-            'en efectivo',
-            $nombrePersona
-        );
-
-        // IMPORTANTE: Pasamos los datos extras en el formato correcto para la vista
-        $extraData = [
-            'detalles' => [
-                'mes' => $nombreMes,
-                'beneficiario' => $nombrePersona,
-                'tipo_pago' => ucfirst('En efectivo'),
-                'monto' => $habilitado->monto,
-                'numero_boleta' => $numeroBoleta // ✅ AGREGAR AL LOG
-            ]
-        ];
-
-        // Modificación - atributos necesarios al objeto antes de pasarlo
-        $habilitado->nombre = $nombrePersona;
-
-        // Registrar en el log con datos adicionales
-        $this->logService->log(
-            'pago realizado',
-            'Pago',
-            $descripcion,
-            $habilitado,
-            $extraData
+        $this->logService->logBoletaDescarga(
+            $pago,
+            $idPago,
+            $gestion,
+            $nombreMes,
+            $nombre
         );
     }
-
-    // Agregar este método en tu controlador (antes o después del método store)
-    private function generarNumeroBoleta($idHabilitado)
-{
-    // Obtener la gestión del habilitado
-    $habilitado = Habilitado::query()
-        ->join('gestion', 'habilitado.id_gestion', '=', 'gestion.id_gestion')
-        ->where('habilitado.id_habilitado', $idHabilitado)
-        ->select('gestion.id_gestion')
-        ->first();
-
-    if (!$habilitado) {
-        return null;
-    }
-
-    $idGestion = $habilitado->id_gestion;
-
-    // Obtener el último número de boleta de esa gestión
-    $ultimoNumero = Pago::query()
-        ->join('habilitado', 'pago.id_habilitado', '=', 'habilitado.id_habilitado')
-        ->where('habilitado.id_gestion', $idGestion)
-        ->whereNotNull('pago.numero_boleta')
-        ->selectRaw('MAX(CAST(pago.numero_boleta AS UNSIGNED)) as ultimo')
-        ->value('ultimo') ?? 0;
-
-    // Generar el nuevo número con 6 dígitos
-    $nuevoNumero = $ultimoNumero + 1;
-
-    return str_pad($nuevoNumero, 6, '0', STR_PAD_LEFT);
-}
 
     /**
      * Display the specified resource.
@@ -307,129 +366,39 @@ class PagoController extends Controller
 
     public function reporteLog(Request $request)
     {
+        $tipo    = $request->query('tipo');
+        $gestion = $request->query('gestion');
 
-        $gestion = session('gestion');
+        match ($tipo) {
+            'arqueo_general' => $this->logService->logReportPrint(
+                'Reporte',
+                'Reporte de Arqueo General',
+                [
+                    'gestión'     => $gestion                        ?? '—',
+                    'total meses' => $request->query('total_meses')  ?? '—',
+                ],
+                null,
+                "Se imprimió el reporte de arqueo general de la gestión {$gestion}.",
+                'PDF'
+            ),
 
-        $distrito = session('distrito');
+            'arqueo_caja' => $this->logService->logReportPrint(
+                'Reporte',
+                'Reporte de Arqueo de Caja Mensual',
+                [
+                    'gestión'          => $gestion                                ?? '—',
+                    'mes'              => $request->query('mes')                  ?? '—',
+                    'total pagados'    => $request->query('total_pagados')        ?? '—',
+                    'total no pagados' => $request->query('total_no_pagados')     ?? '—',
+                    'monto asignado'   => 'Bs. ' . $request->query('monto_asignado') ?? '—',
+                ],
+                null,
+                "Se imprimió el reporte de arqueo de caja del mes de {$request->query('mes')} de la gestión {$gestion}.",
+                'PDF'
+            ),
 
-        $empleado = null;
-
-        $this->logService->logReportPrint(
-            'Reporte',
-            'Reporte de Pago Mensual a Beneficiarios',
-            [
-                'Gestión' => $gestion,
-                'Distrito' => $distrito ?? 'sin distrito',
-            ],
-            $empleado,
-            $request->descripcion,
-            'PDF'
-        );
-        $request->session()->forget(['gestion', 'distrito']);
-    }
-
-    public function reportePago(Request $request)
-    {
-
-        $gestiones = Gestion::selectRaw('YEAR(gestion) as año')
-            ->distinct()
-            ->orderBy('año', 'desc')
-            ->pluck('año');
-
-        $gestion = $request->input('gestion');
-        $mes = $request->input('mes');
-        $distrito = $request->input('distrito');
-
-        // Corregido: sintaxis incorrecta en session()->put()
-        $request->session()->put([
-            'gestion' => $gestion,
-            'mes' => $mes, // Error corregido: era $mes = en lugar de 'mes' =>
-            'distrito' => $distrito
-        ]);
-
-        // Inicializar resultados como una colección vacía
-        $resultados = collect([]);
-        // Inicializar resultadoDatos como una colección vacía
-        $resultadoDatos = collect([]);
-
-        // Solo ejecutar la consulta si se proporciona al menos un filtro
-        if (!empty($gestion) || !empty($distrito)) {
-            $query = Habilitado::query()
-                ->join('pago', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
-                ->join('persona', 'habilitado.id_persona', '=', 'persona.id_persona')
-                ->join('tutor', 'persona.id_tutor', '=', 'tutor.id_tutor')
-                ->join('gestion', 'habilitado.id_gestion', '=', 'gestion.id_gestion')
-                ->select([
-                    'persona.id_persona',
-                    'persona.nombre_persona',
-                    'persona.apellido_persona',
-                    'persona.ci_persona',
-                    'persona.distrito',
-                    'tutor.nombre_tutor',
-                    'tutor.apellido_tutor',
-                    'tutor.telefono',
-                    'tutor.direccion',
-                    'gestion.gestion',
-                    'gestion.monto',
-                    'habilitado.id_habilitado',
-                    'habilitado.fecha_habilitado',
-                    'habilitado.observaciones_habilitado',
-                    'pago.fecha_pago'
-                ]);
-
-            // Aplicar filtros - Corregido: usar 'gestion' en lugar de 'anio'
-            if ($request->filled('gestion')) {
-                $query->whereYear('gestion.gestion', $gestion);
-            }
-
-            // Corregido: convertir nombre del mes a número
-            if ($request->filled('mes')) {
-                $mesNumero = $this->convertirMesANumero($mes);
-                if ($mesNumero) {
-                    $query->whereMonth('gestion.gestion', $mesNumero);
-                }
-            }
-
-            if (!empty($distrito)) {
-                $query->where('persona.distrito', $distrito);
-            }
-
-            // Obtener datos paginados con los filtros aplicados
-            $queryClone = clone $query;
-
-            $resultados = $query->orderBy('persona.id_persona', 'desc')
-                ->paginate(15)
-                ->appends($request->query());
-
-            $resultadoDatos = $queryClone->orderBy('persona.id_persona', 'desc')->get();
-        }
-
-        return Inertia::render('Pago/reportePago', [
-            'resultados' => $resultados,
-            'resultadoDatos' => $resultadoDatos,
-            'gestiones' => $gestiones
-        ]);
-    }
-
-    // Método auxiliar para convertir nombres de meses a números
-    private function convertirMesANumero($nombreMes)
-    {
-        $meses = [
-            'Enero' => 1,
-            'Febrero' => 2,
-            'Marzo' => 3,
-            'Abril' => 4,
-            'Mayo' => 5,
-            'Junio' => 6,
-            'Julio' => 7,
-            'Agosto' => 8,
-            'Septiembre' => 9,
-            'Octubre' => 10,
-            'Noviembre' => 11,
-            'Diciembre' => 12
-        ];
-
-        return $meses[$nombreMes] ?? null;
+            default => null
+        };
     }
 
     public function comp(Request $request)
@@ -477,6 +446,391 @@ class PagoController extends Controller
             'success' => false,
             'message' => 'No se encontró el archivo'
         ], 400);
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function bandejaPago(Request $request)
+    {
+        $user   = Auth::user();
+        $idUser = "{$user->id}";
+
+        $year       = $request->input('gestion_gestion');
+        $mes        = $request->input('mes');
+        $fechaDesde = $request->input('fecha_desde');
+        $fechaHasta = $request->input('fecha_hasta');
+
+        $resumenGeneral     = collect([]);
+        $totalesResumen     = ['total_beneficiarios' => 0, 'total_monto' => 0];
+        $mesesNumeros       = collect([]);
+        $misPagos           = collect([]);
+        $pagosTodos = collect([]);
+        $misPagosTodos      = collect([]);
+        $montoTotalMisPagos = 0;
+
+        $gestiones = Gestion::select('gestion as anio')
+            ->distinct()
+            ->orderBy('gestion', 'desc')
+            ->get();
+
+        if ($year) {
+            $gestion = Gestion::where('gestion', $year)->first();
+            if ($gestion) {
+                $mesesNumeros = Mes::where('id_gestion', $gestion->id_gestion)
+                    ->pluck('mes')->sort()->values();
+            }
+        }
+
+        // ── Búsqueda por Gestión + Mes ────────────────────────────────────────
+        if ($year && $mes) {
+            $gestion = Gestion::where('gestion', $year)->first();
+            if ($gestion) {
+                $usuarios = User::select(
+                    'users.id',
+                    'users.nombre',
+                    'users.apellido',
+                    'users.cargo',
+                    DB::raw('COUNT(pago.id_pago) as cantidad_pagos'),
+                    DB::raw('MAX(pago.monto) as monto'),
+                    DB::raw('SUM(pago.monto) as monto_total')
+                )
+                    ->join('pago', 'users.id', '=', 'pago.id')
+                    ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                    ->join('mes', function ($join) use ($gestion, $mes) {
+                        $join->on('mes.id_mes', '=', 'habilitado.id_mes')
+                            ->where('mes.mes', '=', $mes)
+                            ->where('mes.id_gestion', '=', $gestion->id_gestion);
+                    })
+                    ->groupBy('users.id', 'users.nombre', 'users.apellido', 'users.cargo')
+                    ->orderBy('cantidad_pagos', 'desc')
+                    ->get();
+
+                $resumenGeneral = $usuarios;
+                $totalesResumen = [
+                    'total_beneficiarios' => $usuarios->sum('cantidad_pagos'),
+                    'total_monto'         => $usuarios->sum('monto_total'),
+                ];
+
+                $pagosPorUsuario = DB::table('pago')
+                    ->select(
+                        'pago.id as user_id',
+                        'persona.nombre_persona',
+                        'persona.apellido_persona',
+                        'persona.ci_persona',
+                        'persona.distrito',
+                        'mes.mes',
+                        'gestion.gestion',
+                        'pago.monto',
+                        'pago.numero_boleta',
+                        'pago.fecha_pago'
+                    )
+                    ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                    ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                    ->join('mes', function ($join) use ($gestion, $mes) {
+                        $join->on('mes.id_mes', '=', 'habilitado.id_mes')
+                            ->where('mes.mes', '=', $mes)
+                            ->where('mes.id_gestion', '=', $gestion->id_gestion);
+                    })
+                    ->join('gestion', 'gestion.id_gestion', '=', 'mes.id_gestion')
+                    ->orderBy('pago.fecha_pago', 'asc')
+                    ->get()
+                    ->groupBy('user_id');
+
+                // Monto total (todos los registros, no solo la página)
+                $montoTotalMisPagos = DB::table('pago')
+                    ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                    ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                    ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                    ->where('pago.id',        $idUser)
+                    ->where('mes.mes',        $mes)
+                    ->where('mes.id_gestion', $gestion->id_gestion)
+                    ->sum('pago.monto');
+
+                // Mis Pagos paginado
+                $misPagos = DB::table('pago')
+                    ->select(
+                        'persona.nombre_persona',
+                        'persona.apellido_persona',
+                        'persona.ci_persona',
+                        'persona.distrito',
+                        'mes.mes',
+                        'gestion.gestion',
+                        'pago.monto',
+                        'pago.fecha_pago',
+                        'pago.numero_boleta'
+                    )
+                    ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                    ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                    ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                    ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                    ->where('pago.id',        $idUser)
+                    ->where('mes.mes',        $mes)
+                    ->where('mes.id_gestion', $gestion->id_gestion)
+                    ->orderBy('pago.fecha_pago', 'asc')
+                    ->paginate(50)->appends($request->query());
+
+                $misPagosTodos = DB::table('pago')
+                    ->select(
+                        'persona.nombre_persona',
+                        'persona.apellido_persona',
+                        'persona.ci_persona',
+                        'persona.distrito',
+                        'mes.mes',
+                        'gestion.gestion',
+                        'pago.monto',
+                        'pago.fecha_pago',
+                        'pago.numero_boleta'
+                    )
+                    ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                    ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                    ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                    ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                    ->where('pago.id',        $idUser)
+                    ->where('mes.mes',        $mes)
+                    ->where('mes.id_gestion', $gestion->id_gestion)
+                    ->orderBy('pago.fecha_pago', 'asc')
+                    ->get();
+
+                $pagosTodos = DB::table('pago')
+                    ->select(
+                        'persona.nombre_persona',
+                        'persona.apellido_persona',
+                        'persona.ci_persona',
+                        'persona.distrito',
+                        'mes.mes',
+                        'gestion.gestion',
+                        'pago.monto',
+                        'pago.numero_boleta',
+                        'pago.fecha_pago',
+                        DB::raw("CONCAT(users.nombre, ' ', users.apellido) as usuario_pagador")
+                    )
+                    ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                    ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                    ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                    ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                    ->join('users',      'users.id',                 '=', 'pago.id')
+                    ->where('mes.mes',        $mes)
+                    ->where('mes.id_gestion', $gestion->id_gestion)
+                    ->orderBy('pago.fecha_pago', 'desc')
+                    ->get();
+            }
+        }
+
+        // ── Búsqueda por Rango de Meses ───────────────────────────────────────
+        elseif ($fechaDesde && $fechaHasta) {
+
+            $desdeYM = date('Ym', strtotime($fechaDesde)); // ej: "202512"
+            $hastaYM = date('Ym', strtotime($fechaHasta)); // ej: "202601"
+
+            $usuarios = User::select(
+                'users.id',
+                'users.nombre',
+                'users.apellido',
+                'users.cargo',
+                DB::raw('COUNT(pago.id_pago) as cantidad_pagos'),
+                DB::raw('MAX(pago.monto) as monto'),
+                DB::raw('SUM(pago.monto) as monto_total')
+            )
+                ->join('pago',       'users.id',                 '=', 'pago.id')
+                ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                ->whereRaw(
+                    "CONCAT(gestion.gestion, LPAD(mes.mes, 2, '0')) BETWEEN ? AND ?",
+                    [$desdeYM, $hastaYM]
+                )
+                ->groupBy('users.id', 'users.nombre', 'users.apellido', 'users.cargo')
+                ->orderBy('cantidad_pagos', 'desc')
+                ->get();
+
+            $resumenGeneral = $usuarios;
+            $totalesResumen = [
+                'total_beneficiarios' => $usuarios->sum('cantidad_pagos'),
+                'total_monto'         => $usuarios->sum('monto_total'),
+            ];
+
+            $pagosPorUsuario = DB::table('pago')
+                ->select(
+                    'pago.id as user_id',
+                    'persona.nombre_persona',
+                    'persona.apellido_persona',
+                    'persona.ci_persona',
+                    'persona.distrito',
+                    'mes.mes',
+                    'gestion.gestion',
+                    'pago.monto',
+                    'pago.numero_boleta',
+                    'pago.fecha_pago'
+                )
+                ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                ->whereRaw(
+                    "CONCAT(gestion.gestion, LPAD(mes.mes, 2, '0')) BETWEEN ? AND ?",
+                    [$desdeYM, $hastaYM]
+                )
+                ->orderBy('pago.fecha_pago', 'asc')
+                ->get()
+                ->groupBy('user_id');
+
+            // Monto total (todos los registros, no solo la página)
+            $montoTotalMisPagos = DB::table('pago')
+                ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                ->where('pago.id', $idUser)
+                ->whereRaw(
+                    "CONCAT(gestion.gestion, LPAD(mes.mes, 2, '0')) BETWEEN ? AND ?",
+                    [$desdeYM, $hastaYM]
+                )
+                ->sum('pago.monto');
+
+            // Mis Pagos paginado
+            $misPagos = DB::table('pago')
+                ->select(
+                    'persona.nombre_persona',
+                    'persona.apellido_persona',
+                    'persona.ci_persona',
+                    'persona.distrito',
+                    'mes.mes',
+                    'gestion.gestion',
+                    'pago.monto',
+                    'pago.numero_boleta',
+                    'pago.fecha_pago'
+                )
+                ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                ->where('pago.id', $idUser)
+                ->whereRaw(
+                    "CONCAT(gestion.gestion, LPAD(mes.mes, 2, '0')) BETWEEN ? AND ?",
+                    [$desdeYM, $hastaYM]
+                )
+                ->orderBy('pago.fecha_pago', 'asc')
+                ->paginate(50)->appends($request->query());
+
+            $misPagosTodos = DB::table('pago')
+                ->select(
+                    'persona.nombre_persona',
+                    'persona.apellido_persona',
+                    'persona.ci_persona',
+                    'persona.distrito',
+                    'mes.mes',
+                    'gestion.gestion',
+                    'pago.monto',
+                    'pago.numero_boleta',
+                    'pago.fecha_pago'
+                )
+                ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                ->where('pago.id', $idUser)
+                ->whereRaw(
+                    "CONCAT(gestion.gestion, LPAD(mes.mes, 2, '0')) BETWEEN ? AND ?",
+                    [$desdeYM, $hastaYM]
+                )
+                ->orderBy('pago.fecha_pago', 'asc')
+                ->get();
+            $pagosTodos = DB::table('pago')
+                ->select(
+                    'persona.nombre_persona',
+                    'persona.apellido_persona',
+                    'persona.ci_persona',
+                    'persona.distrito',
+                    'mes.mes',
+                    'gestion.gestion',
+                    'pago.monto',
+                    'pago.numero_boleta',
+                    'pago.fecha_pago',
+                    DB::raw("CONCAT(users.nombre, ' ', users.apellido) as usuario_pagador")
+                )
+                ->join('habilitado', 'habilitado.id_habilitado', '=', 'pago.id_habilitado')
+                ->join('persona',    'persona.id_persona',       '=', 'habilitado.id_persona')
+                ->join('mes',        'mes.id_mes',               '=', 'habilitado.id_mes')
+                ->join('gestion',    'gestion.id_gestion',       '=', 'mes.id_gestion')
+                ->join('users',      'users.id',                 '=', 'pago.id')
+                ->whereRaw(
+                    "CONCAT(gestion.gestion, LPAD(mes.mes, 2, '0')) BETWEEN ? AND ?",
+                    [$desdeYM, $hastaYM]
+                )
+                ->orderBy('pago.fecha_pago', 'desc')
+                ->get();
+        }
+
+        $usuarioTienePagos = DB::table('pago')->where('id', $idUser)->exists();
+
+        return Inertia::render('BandejaPagos/index', [
+            'resumenGeneral'     => $resumenGeneral,
+            'totalesResumen'     => $totalesResumen,
+            'gestiones'          => $gestiones,
+            'mesesNumeros'       => $mesesNumeros,
+            'pagosTodos' => $pagosTodos,
+            'usuarioTienePagos'  => $usuarioTienePagos,
+            'misPagos'           => $misPagos,
+            'misPagosTodos'      => $misPagosTodos ?? collect([]),
+            'montoTotalMisPagos' => $montoTotalMisPagos,
+            'cantidadMisPagos' => $misPagosTodos->count(),
+            'pagosPorUsuario'    => $pagosPorUsuario ?? collect([]),  // ← NUEVO
+            'filters'            => [
+                'gestion'     => $year,
+                'mes'         => $mes,
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+            ],
+        ]);
+    }
+
+    public function bandejaReporteLog(Request $request)
+    {
+        $tipo       = $request->query('tipo');
+        $gestion    = $request->query('gestion');
+        $mes        = $request->query('mes');
+        $fechaDesde = $request->query('fecha_desde');
+        $fechaHasta = $request->query('fecha_hasta');
+
+        match ($tipo) {
+            'resumen' => $this->logService->logReportPrint(
+                'BandejaPago',
+                'Reporte Resumen General de Pagos',
+                array_filter([
+                    'gestión'             => $gestion     ?: null,
+                    'mes'                 => $mes          ?: null,
+                    'fecha desde'         => $fechaDesde   ?: null,
+                    'fecha hasta'         => $fechaHasta   ?: null,
+                    'total beneficiarios' => $request->query('total_beneficiarios') ?? '—',
+                    'monto total'         => 'Bs. ' . ($request->query('total_monto') ?? '—'),
+                ]),
+                null,
+                $fechaDesde
+                    ? "Se imprimió el reporte resumen de pagos del {$fechaDesde} al {$fechaHasta}."
+                    : "Se imprimió el reporte resumen de pagos de {$mes}/{$gestion}.",
+                'PDF'
+            ),
+
+            'individual' => $this->logService->logReportPrint(
+                'BandejaPago',
+                'Reporte Individual de Pagos',
+                array_filter([
+                    'gestión'     => $gestion    ?: null,
+                    'mes'         => $mes         ?: null,
+                    'fecha desde' => $fechaDesde  ?: null,
+                    'fecha hasta' => $fechaHasta  ?: null,
+                    'usuario'     => $request->query('usuario')     ?? '—',
+                    'total pagos' => $request->query('total_pagos') ?? '—',
+                ]),
+                null,
+                $fechaDesde
+                    ? "Se imprimió el reporte individual de pagos del {$fechaDesde} al {$fechaHasta}."
+                    : "Se imprimió el reporte individual de pagos de {$mes}/{$gestion}.",
+                'PDF'
+            ),
+
+            default => null
+        };
     }
 
     /**

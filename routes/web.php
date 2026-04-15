@@ -127,9 +127,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('permission:pago')
             ->name('persona.showHabilitado');
 
-        Route::delete('persona/estado/{id}', [PersonaController::class, 'destroyEstado'])
+        Route::put('estado/{id}', [PersonaController::class, 'updateEstado'])
+            ->middleware('permission:superusuario')
+            ->name('persona.estado.update');
+
+        Route::delete('estado/{id}', [PersonaController::class, 'destroyEstado'])
             ->middleware('permission:eliminar-estado')
             ->name('persona.estado.eliminar');
+
+        Route::delete('clear-tutor-session', [PersonaController::class, 'clearTutorSession'])
+            ->name('persona.clearTutorSession');
 
         /*
         Route::get('importar', [PersonaController::class, 'mostrarFormulario'])
@@ -219,7 +226,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Pago
     Route::prefix('pago')->group(function () {
         Route::get('reporteLog', [PagoController::class, 'reporteLog'])
-            ->middleware('permission:reporteGestion-gestion')
+            /* ->middleware('permission:reporteGestion-gestion') */
             ->name('pago.reporteLog');
         Route::post('store', [PagoController::class, 'store'])
             ->middleware('permission:registrar-pago')
@@ -228,18 +235,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('permission:registrar-pago')
             ->name('pago.comp');
 
-        /*  Route::get('index', [PagoController::class, 'index'])
-            ->middleware('permission:pago')
-            ->name('pago.index');
+        Route::get('bandeja', [PagoController::class, 'bandejaPago'])
+            /* ->middleware('permission:pago') */
+            ->name('bandeja.index');
+        Route::get('bandejaReporteLog', [PagoController::class, 'bandejaReporteLog'])
+            ->name('bandeja.reporteLog');
+        Route::post('descargar-boleta', [PagoController::class, 'descargarBoleta'])
+            /* ->middleware('permission:comprobante-pago') */
+            ->name('pago.descargarBoleta');
+        /*
         Route::get('show/{id}', [PagoController::class, 'show'])
             ->middleware('permission:ver-pagos')
             ->name('pago.show');
         Route::get('reporte', [PagoController::class, 'reporte'])
             ->middleware('permission:reporte-pagos')
             ->name('pago.reporte');
-        Route::get('reportePago', [PagoController::class, 'reportePago'])
-            ->middleware('permission:reporte-pagos')
-            ->name('pago.reportePago');
         Route::get('transferencia', [PagoController::class, 'transferencia'])
             ->middleware('permission:gestionar-transferencias')
             ->name('pago.transferencia'); */
@@ -248,8 +258,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reporte
     Route::prefix('reporte')->group(function () {
         Route::get('index', [ReporteController::class, 'index'])
-            ->middleware('permission:ver-reportes')
-            ->name('reporte.index');
+            /* ->middleware('permission:ver-reportes') */
+            ->name('reportes.index');
     });
 
     Route::get('/reporte/buscar', [ReporteController::class, 'buscar'])

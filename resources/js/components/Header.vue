@@ -186,7 +186,7 @@ onUnmounted(() => {
 
                             <!-- Nombre del usuario -->
                             <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-200 capitalize">
-                                {{ $page.props.auth?.user.nombre }}
+                                {{ $page.props.auth?.user.nombre.toLowerCase() }}
                             </h3>
 
                             <!-- Flecha hacia abajo -->
@@ -228,7 +228,7 @@ onUnmounted(() => {
                                         <div class="flex-1 min-w-0">
                                             <h3
                                                 class="text-lg font-semibold text-gray-900 dark:text-white capitalize truncate">
-                                                {{ $page.props.auth?.user.nombre }} {{ $page.props.auth?.user.apellido
+                                                {{ $page.props.auth?.user.nombre.toLowerCase() }} {{ $page.props.auth?.user.apellido.toLowerCase()
                                                 }}
                                             </h3>
                                             <p class="text-sm text-gray-500 dark:text-gray-400 truncate">

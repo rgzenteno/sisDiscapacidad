@@ -28,11 +28,12 @@
             <button
                 type="button"
                 @click="emit('close')"
-                class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition"
-            >
-                <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M6 18L18 6" />
-                </svg>
+                class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-red-100 text-gray-600 hover:text-red-400 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
+                        <svg class="w-5 h-5 " xmlns="http://www.w3.org/2000/svg"
+                            fill="none" viewBox="0 0 24 24">
+                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 6l12 12M6 18L18 6" />
+                        </svg>
             </button>
         </div>
     </div>

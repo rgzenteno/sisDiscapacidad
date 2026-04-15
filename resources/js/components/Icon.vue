@@ -132,7 +132,25 @@ const iconPaths = {
     clipboardList: () => h('path', {
         'fill-rule': 'evenodd',
         d: 'M8 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1h2a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2Zm6 1h-4v2H9a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2h-1V4Zm-3 8a1 1 0 0 1 1-1h3a1 1 0 1 1 0 2h-3a1 1 0 0 1-1-1Zm-2-1a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H9Zm2 5a1 1 0 0 1 1-1h3a1 1 0 1 1 0 2h-3a1 1 0 0 1-1-1Zm-2-1a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H9Z',
-    'clip-rule': 'evenodd'
+        'clip-rule': 'evenodd'
     }),
+    search: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'm21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
+        'clip-rule': 'evenodd'
+    }),
+    cash: () => [
+        h('path', {
+            'fill-rule': 'evenodd',
+            d: 'M7 6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2v-4a3 3 0 0 0-3-3H7V6Z',
+            'clip-rule': 'evenodd'
+        }),
+        h('path', {
+            'fill-rule': 'evenodd',
+            d: 'M2 11a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7Zm7.5 1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z',
+            'clip-rule': 'evenodd'
+        }),
+        h('path', { d: 'M10.5 14.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z' }),
+    ],
 };
 </script>

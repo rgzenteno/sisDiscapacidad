@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Services\LogService;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Permission;
@@ -11,10 +12,11 @@ use Illuminate\Routing\Controller;
 
 class RoleController extends Controller
 {
+
     /**
      * Aplicar middleware de protección
      */
-    public function __construct()
+    public function __construct(protected LogService $logService)
     {
         $this->middleware('check.super.permissions')->only(['store', 'update']);
     }
@@ -113,6 +115,20 @@ class RoleController extends Controller
             "hierarchy_level" => $request->hierarchy_level ?? 0
         ]);
         $role->syncPermissions($validPermissionNames);
+
+        $nameRole = ucwords(strtolower("{$role->name}"));
+
+        $this->logService->logCreation(
+            'Rol',
+            $role,
+            "Se registró el rol {$nameRole} en el sistema.",
+            null,
+            [
+                'rol'             => $nameRole,
+                'nivel jerarquía' => $role->hierarchy_level,
+                'permisos'        => implode(', ', $validPermissionNames),
+            ]
+        );
     }
 
     /**
@@ -142,33 +158,75 @@ class RoleController extends Controller
             "permissions" => "required|array"
         ]);
 
-        // ✅ Extraer solo los nombres de los permisos
+        $role = Role::findOrFail($id);
+
+        if ($role->name === 'superUsuario' && !Auth::user()->hasRole('superUsuario')) {
+            return back()->withErrors(['error' => 'No tienes permiso para modificar el rol de superUsuario.']);
+        }
+
         $permissionNames = collect($request->permissions)->map(function ($permission) {
             return is_array($permission) ? $permission['name'] : $permission;
         })->toArray();
 
-        // 🔒 Validación adicional: verificar que los permisos existan y sean válidos
         $validPermissions = Permission::whereIn('name', $permissionNames);
 
-        // Si NO es superUsuario, excluir permisos super_only
         if (!Auth::user()->hasRole('superUsuario')) {
             $validPermissions->where('super_only', false);
         }
 
         $validPermissionNames = $validPermissions->pluck('name')->toArray();
 
-        $role = Role::findOrFail($id);
+        // Detectar cambios
+        $permisosAnteriores = $role->permissions->pluck('name')->sort()->values()->toArray();
+        $permisosNuevos     = collect($validPermissionNames)->sort()->values()->toArray();
 
-        // 🔒 Proteger el rol superUsuario de ser modificado por no-superUsuarios
-        if ($role->name === 'superUsuario' && !Auth::user()->hasRole('superUsuario')) {
-            return back()->withErrors(['error' => 'No tienes permiso para modificar el rol de superUsuario.']);
+        $nombreCambio     = $role->name !== $request->name;
+        $jerarquiaCambio  = (int) $role->hierarchy_level !== (int) $request->hierarchy_level;
+        $permisosCambio   = $permisosAnteriores !== $permisosNuevos;
+
+        if (!$nombreCambio && !$jerarquiaCambio && !$permisosCambio) {
+            return;
+        }
+
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
+
+        if ($nombreCambio) {
+            $camposModificados['nombre']     = $request->name;
+            $valoresAnteriores['nombre']     = $role->name;
+            $valoresNuevos['nombre']         = $request->name;
+        }
+
+        if ($jerarquiaCambio) {
+            $camposModificados['nivel jerarquía'] = $request->hierarchy_level;
+            $valoresAnteriores['nivel jerarquía'] = $role->hierarchy_level;
+            $valoresNuevos['nivel jerarquía']     = $request->hierarchy_level;
+        }
+
+        if ($permisosCambio) {
+            $camposModificados['permisos']     = implode(', ', $permisosNuevos);
+            $valoresAnteriores['permisos']     = implode(', ', $permisosAnteriores);
+            $valoresNuevos['permisos']         = implode(', ', $permisosNuevos);
         }
 
         $role->update([
-            "name" => $request->name,
-            "hierarchy_level" => $request->hierarchy_level ?? $role->hierarchy_level  // 👈 Agregar esto
+            "name"            => $request->name,
+            "hierarchy_level" => $request->hierarchy_level ?? $role->hierarchy_level,
         ]);
+
         $role->syncPermissions($validPermissionNames);
+
+        $this->logService->logUpdate(
+            'Rol',
+            $role,
+            [
+                'campos_modificados' => $camposModificados,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos'     => $valoresNuevos,
+            ],
+            "Se actualizó el rol {$role->name} en el sistema."
+        );
     }
 
     /**
@@ -187,6 +245,16 @@ class RoleController extends Controller
         if ($role->users()->count() > 0) {
             return back()->withErrors(['error' => 'No se puede eliminar un rol que está asignado a usuarios.']);
         }
+
+        $this->logService->logDeletion(
+            'Rol',
+            $role,
+            "Se eliminó el rol {$role->name} del sistema.",
+            [
+                'rol'             => $role->name,
+                'nivel jerarquía' => $role->hierarchy_level,
+            ]
+        );
 
         $role->delete();
     }

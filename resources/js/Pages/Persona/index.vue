@@ -2,7 +2,7 @@
 // ============================================================================
 // IMPORTS
 // ============================================================================
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 
 // Componentes
@@ -40,6 +40,9 @@ const persona = computed(() => page.props.persona);
 const distrito = computed(() => page.props.distrito);
 const discapacidad = computed(() => page.props.discapacidad);
 const selectedTutorName = computed(() => page.props.selectedTutorName);
+const mesesDisponibles = computed(() => page.props.mesesDisponibles ?? []);
+
+//console.log(persona.value);
 
 // Opciones para selects
 const distritosOptions = computed(() => {
@@ -79,6 +82,7 @@ const formEdit = ref(false);
 const formCreateTutor = ref(false);
 const formCreateCarnet = ref(false);
 const formCreateEstado = ref('');
+const formEditEstado = ref(false);
 const formCreateOption = ref(false);
 const formCreateOptionDis = ref(false);
 const asignateTutor = ref(false);
@@ -89,6 +93,7 @@ const asignateTutor = ref(false);
 const selectedItem = ref(null);
 const selectedId = ref(null);
 const selectedNombre = ref(null);
+const selectedApellido = ref(null);
 const beneficiarioEncontrado = ref(null);
 const fechaNacimiento = ref(null);
 const tipoEstado = ref('');
@@ -117,10 +122,11 @@ const tutorFields = [
         name: 'ci_tutor',
         label: 'C.I.',
         type: 'number',
-        required: false,
+        required: true,
         placeholder: 'la cédula de identidad',
         readonly: false,
         range: 10,
+        nameStyle: true,
         autofocus: true
     },
     {
@@ -177,15 +183,14 @@ const tutorFields = [
         range: 40,
     },
     {
-        typeInput: 'text',
+        typeInput: 'direccion',
         name: 'direccion',
         label: 'Dirección',
-        type: 'text',
         required: false,
         placeholder: 'la dirección',
         readonly: false,
         nameStyle: false,
-        range: 49,
+        range: 200,
     }
 ];
 
@@ -252,6 +257,15 @@ const personaFields = [
         placeholder: 'la fecha de nacimiento',
         required: true
     },
+    /* {
+        typeInput: 'month_year',
+        name: 'fecha_registro',
+        label: 'Fecha de Registro',
+        required: false,
+        placeholder: 'Ingrese la fecha de registro',
+        hidden: !can('superusuario'),
+        mesesDisponibles: mesesDisponibles.value,
+    }, */
     {
         typeInput: 'text',
         name: 'observacion_persona',
@@ -274,12 +288,37 @@ const personaFields = [
     }
 ];
 
-const personaFieldsEdit = [...personaFields];
+const personaFieldsEdit = computed(() => {
+    const historial = selectedItem.value?.historial_completo || [];
+    const tieneMultiplesEstados = historial.length >= 2;
+
+    // Primer estado (el más antiguo) para usarlo como límite superior
+    const primerEstado = tieneMultiplesEstados
+        ? [...historial].sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))[0]
+        : null;
+
+    return personaFields.map(field => {
+        if (field.name === 'fecha_registro') {
+            return {
+                ...field,
+                hidden: !can('superusuario'),
+                mesesDisponibles: field.mesesDisponibles,
+                // Si tiene 2+ estados, pasar el límite al picker
+                fechaLimite: primerEstado
+                    ? String(primerEstado.fecha_inicio).split('T')[0]
+                    : null,
+            };
+        }
+        return field;
+    });
+});
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - CARNETS
 // ============================================================================
-const carnetFields = [
+const indefinidoCarnet = ref(false);
+
+const carnetFields = computed(() => [
     {
         typeInput: 'id',
         name: 'id_persona',
@@ -307,13 +346,20 @@ const carnetFields = [
         add: true
     },
     {
+        typeInput: 'indefinido_check',
+        name: 'indefinido',
+        label: '',
+        onIndefinidoChange: (val) => { indefinidoCarnet.value = !!val; } // ← callback
+    },
+    {
         typeInput: 'text',
         name: 'fecha_emision',
         label: 'Fecha de Emisión',
         type: 'date',
-        required: true,
+        required: !indefinidoCarnet.value,
         placeholder: 'la fecha de emisión',
-        readonly: false
+        readonly: false,
+        hidden: indefinidoCarnet.value
     },
     {
         typeInput: 'text',
@@ -322,51 +368,65 @@ const carnetFields = [
         type: 'date',
         required: false,
         readonly: true,
-        placeholder: 'Se calculará automáticamente'
+        placeholder: 'Se calculará automáticamente',
+        hidden: indefinidoCarnet.value
     }
-];
+]);
 
-const carnetFieldsEdit = [...carnetFields];
+const carnetFieldsEdit = computed(() => [...carnetFields.value]);
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - ESTADOS
 // ============================================================================
-const estadoFields = [
-    {
-        name: 'id_persona',
-        label: '',
-        hidden: true
-    },
-    {
-        name: 'id_estado',
-        label: '',
-        hidden: true
-    },
-    {
-        typeInput: 'select',
-        name: 'estado',
-        label: 'Estado del Beneficiario',
-        type: 'text',
-        placeholder: 'el estado del beneficiario',
-        options: [
-            { text: 'Activo', value: 'activo' },
-            { text: 'Baja Temporal', value: 'baja_temporal' },
-            { text: 'Baja Definitiva', value: 'baja_definitiva' }
-        ],
-        required: true,
-        readonly: false,
-        add: false
-    },
-    {
-        typeInput: 'text',
-        name: 'fecha_inicio',
-        label: 'Fecha de Inicio',
-        type: 'date',
-        required: true,
-        placeholder: 'la fecha de inicio del estado',
-        readonly: false
-    }
-];
+// Reemplaza el array estadoFields por este computed
+const estadoFields = computed(() => {
+    const estadoActual = selectedEstadoData.value?.estado_actual?.estado;
+    const esEdicion = formEditEstado.value;
+
+    const todasLasOpciones = [
+        { text: 'Activo', value: 'activo' },
+        { text: 'Baja Temporal', value: 'baja_temporal' },
+        { text: 'Baja Definitiva', value: 'baja_definitiva' },
+        { text: 'Depurado', value: 'depurado' }
+    ];
+
+    return [
+        {
+            name: 'id_persona',
+            label: '',
+            hidden: true
+        },
+        {
+            name: 'id_estado',
+            label: '',
+            hidden: true
+        },
+        {
+            typeInput: 'select',
+            name: 'estado',
+            label: 'Estado del Beneficiario',
+            type: 'text',
+            placeholder: 'el estado del beneficiario',
+            options: esEdicion
+                ? todasLasOpciones  // ← en edición muestra todas las opciones incluido el actual
+                : todasLasOpciones.filter(op => op.value !== estadoActual),
+            required: true,
+            readonly: false,
+            add: false
+        },
+        {
+            typeInput: 'month_year',
+            name: 'fecha_inicio',
+            label: 'Mes y Gestión',
+            required: true,
+            placeholder: 'Seleccionar mes y gestión',
+            readonly: false,
+            editMode: esEdicion,
+            mesesDisponibles: esEdicion ? mesesDisponibles.value : undefined, // ← agrega esto
+            mesActualEdicion: esEdicion ? selectedEstadoData.value?.fecha_inicio : undefined, // ← y esto
+        },
+    ];
+});
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - OPCIONES (DISTRITO Y DISCAPACIDAD)
@@ -407,7 +467,7 @@ const DiscapacidadFields = [
 const tableColumns = [
     { label: 'Nombre Completo', field: 'nombre_completo', headerClass: '', cellClass: 'whitespace-nowrap' },
     { label: 'Distrito', field: 'distrito', headerClass: '', cellClass: 'whitespace-nowrap' },
-    { label: 'Cedula de Identidad', field: 'ci_persona', headerClass: 'text-center whitespace-nowrap', cellClass: 'whitespace-nowrap' },
+    { label: 'C.I.', field: 'ci_persona', headerClass: 'text-center whitespace-nowrap', cellClass: 'whitespace-nowrap' },
     { label: 'Observación', field: 'observacion_persona', headerClass: 'text-center', cellClass: '' },
     { label: 'Estado', field: 'estado_actual', headerClass: 'text-center', cellClass: '' },
     { label: 'Carnet Dis.', field: 'carnet', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
@@ -432,6 +492,11 @@ const configPlanillaGeneral = {
     nombrePlantilla: 'plantillaBaseDeDatos.xlsx',
     urlPlantilla: '/plantilla/PlantillaImportacion.xlsx',
     textoBotonImportar: 'Importar Excel'
+};
+
+const handleChangeTutor = () => {
+    showModal.value = false;
+    openAsignateTutor(selectedItem.value.id_persona);
 };
 
 // ============================================================================
@@ -650,6 +715,24 @@ const handleCambioEstado = () => {
     mostrarMensaje('correcto', 'Registro exitoso', 'Los datos se registraron correctamente.');
     router.reload({ only: ['personas', 'persona'] });
     formCreateEstado.value = false;
+    formEditEstado.value = false; // ← faltaba esto
+};
+
+/**
+ * Maneja la edicion del estado del beneficiario
+ */
+const editarEstado = (registro) => {
+    selectedEstadoData.value = {
+        ...selectedItem.value,
+        estado_actual: { estado: registro.estado },
+        estado: registro.estado,
+        id_estado: registro.id,
+        fecha_inicio: registro.fecha_inicio,
+        observacion: registro.observacion,
+    };
+    selectedId.value = registro.id;
+    showModalEstado.value = false;
+    formEditEstado.value = true;
 };
 
 /**
@@ -728,9 +811,13 @@ const openEditPersona = (item, idPersona) => {
         apellido_persona: nombreSeparado.apellido,
         distrito: item.distrito,
         fecha_nacimiento: item.fecha_nacimiento,
+        fecha_registro: item.fecha_registro,
         observacion_persona: item.observacion_persona,
         documento_respaldo: item.documento_respaldo,
+        historial_completo: item.historial_completo || [],
     };
+
+    //console.log('historial_completo', item.historial_completo);
 
     selectedId.value = idPersona;
     formEdit.value = true;
@@ -752,11 +839,17 @@ const handleEdit = () => {
  * @param {string} nombrePersona - Nombre de la persona
  */
 const openEditCarnet = (item, idCarnet, nombrePersona) => {
-
+    indefinidoCarnet.value = item.carnet?.fecha_emision === null; // ← falta esto
     selectedId.value = idCarnet;
-    selectedItem.value = { ...item };
+    selectedItem.value = {
+        ...item,
+        carnet: {
+            ...item.carnet,
+            indefinido: item.carnet?.fecha_emision === null ? 1 : 0
+        }
+    };
     selectedNombre.value = nombrePersona;
-
+    selectedApellido.value = item.apellido_persona; // ← también falta esto
     showModalCarnet.value = false;
     showModalCarnetEdit.value = true;
 };
@@ -769,10 +862,16 @@ const handleEditCarnet = () => {
     showModalCarnetEdit.value = false;
 };
 
+const handleCancelCreate = () => {
+    axios.delete(route('persona.clearTutorSession'));
+    formCreate.value = false;
+};
+
 /**
  * Cancela la edición del carnet y vuelve al modal de visualización
  */
 const handleEditCancel = () => {
+    indefinidoCarnet.value = false; // ← agregar
     showModalCarnetEdit.value = false;
     showModalCarnet.value = true;
 };
@@ -805,9 +904,10 @@ const openModalEstado = (datos) => {
  * @param {string} nombrePersona - Nombre de la persona
  * @param {string} fecha - Fecha de nacimiento
  */
-const openCreateCarnet = (idPersona, nombrePersona, fecha) => {
+const openCreateCarnet = (idPersona, nombrePersona, fecha, apellidoPersona) => {
     selectedId.value = idPersona;
     selectedNombre.value = nombrePersona;
+    selectedApellido.value = apellidoPersona;
     fechaNacimiento.value = fecha;
     formCreateCarnet.value = true;
 };
@@ -884,6 +984,7 @@ const openFormEstado = (data) => {
  */
 const abrirEstado = () => {
     formCreateEstado.value = false;
+    formEditEstado.value = false;
     showModalEstado.value = true;
 };
 
@@ -983,6 +1084,10 @@ const handleImportar = (archivo, limpiarArchivo) => {
     });
 };
 
+const esCarnetIndefinido = (carnet) => {
+    return carnet?.fecha_emision === null;
+};
+
 /**
  * Descarga la plantilla de importación
  * @param {string} nombrePlantilla - Nombre del archivo a descargar
@@ -999,6 +1104,7 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
  * @param {string|number} ciPersona - CI de la persona encontrada
  */
 const encotrado = (ciPersona) => {
+    axios.delete(route('persona.clearTutorSession'));
     const personaExistente = usePage().props.flash.persona_existente;
     const tipoRegistro = personaExistente?.tipo_registro;
 
@@ -1112,9 +1218,7 @@ const encotrado = (ciPersona) => {
                 </div>
             </div>
 
-            <!-- ============================================================================ -->
-            <!-- TABLA DE DATOS -->
-            <!-- ============================================================================ -->
+
             <DataTable :data="persona.data" :columns="tableColumns" row-key="id_persona"
                 empty-message="No se encontraron datos. ¡Agregue beneficiarios para continuar!">
                 <!-- Slot personalizado para cada fila -->
@@ -1123,7 +1227,8 @@ const encotrado = (ciPersona) => {
                     <!-- Columna: Nombre Completo -->
                     <td class="px-3 py-1 whitespace-nowrap">
                         <div class="font-medium text-gray-900 dark:text-gray-100 uppercase">
-                            {{ item.nombre_completo }}
+                            <p v-if="item.nombre_persona">{{ item.apellido_persona }} {{ item.nombre_persona }}</p>
+                            <p v-else> {{ item.nombre_completo }}</p>
                         </div>
                     </td>
 
@@ -1171,17 +1276,30 @@ const encotrado = (ciPersona) => {
                                 <!-- Icono: Baja Definitiva -->
                                 <Icon v-if="item.estado_actual?.estado === 'baja_definitiva'" :icon-button="true"
                                     name="circleMinus" class-name="text-red-600 pt-1" :size="17" />
+                                <!-- Icono: Depurado -->
+                                <svg v-if="item.estado_actual?.estado === 'depurado'" class="w-4 h-4 text-gray-500"
+                                    aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                    fill="currentColor" viewBox="0 0 24 24">
+                                    <path fill-rule="evenodd"
+                                        d="M8.586 2.586A2 2 0 0 1 10 2h4a2 2 0 0 1 2 2v2h3a1 1 0 1 1 0 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a1 1 0 0 1 0-2h3V4a2 2 0 0 1 .586-1.414ZM10 6h4V4h-4v2Zm1 4a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0v-8Zm4 0a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0v-8Z"
+                                        clip-rule="evenodd" />
+                                </svg>
                                 <!-- Icono: Sin Estado -->
                                 <Icon v-if="!item.estado_actual?.estado" :icon-button="true" name="exclamationCircle"
                                     class-name="text-red-500 pt-1" :size="17" />
                             </p>
                             <span class="text-gray-400">|</span>
-                            <div class="font-medium whitespace-nowrap"
-                                :class="item.estado_actual?.estado === 'activo' ? 'text-green-600' : item.estado_actual?.estado === 'baja_definitiva' ? 'text-red-600' : 'text-orange-600'">
+                            <div class="font-medium whitespace-nowrap" :class="item.estado_actual?.estado === 'activo' ? 'text-green-600' :
+                                item.estado_actual?.estado === 'baja_definitiva' ? 'text-red-600' :
+                                    item.estado_actual?.estado === 'depurado' ? 'text-gray-600' :
+                                        'text-orange-600'
+                                ">
                                 {{
                                     item.estado_actual?.estado === 'activo' ? 'Activo' :
                                         item.estado_actual?.estado === 'baja_temporal' ? 'Baja Temporal' :
-                                            'Baja Definitiva'
+                                            item.estado_actual?.estado === 'baja_definitiva' ? 'Baja Definitiva' :
+                                                item.estado_actual?.estado === 'depurado' ? 'Depurado' :
+                                                    'Sin estado'
                                 }}
                             </div>
                         </div>
@@ -1190,14 +1308,19 @@ const encotrado = (ciPersona) => {
                     <!-- Columna: Carnet -->
                     <td class="px-3 py-1 whitespace-nowrap">
                         <div class="flex items-center">
-                            <div @click.prevent="item.carnet?.id_carnet ? getCarnetUrl(item) : (can('carnet') ? (!item.fecha_nacimiento ? openMissingDataModal() : openCreateCarnet(item.id_persona, `${item.nombre_persona} ${item.apellido_persona}`, `${item.fecha_nacimiento}`)) : null)"
+                            <div @click.prevent="item.carnet?.id_carnet ? getCarnetUrl(item) : (can('carnet') ? (!item.fecha_nacimiento ? openMissingDataModal() : openCreateCarnet(item.id_persona, item.nombre_persona, item.fecha_nacimiento, item.apellido_persona)) : null)"
                                 :class="[
                                     'flex items-center gap-1',
                                     item.carnet?.id_carnet ? 'cursor-pointer action-link' : (can('carnet') ? 'cursor-pointer action-link' : 'cursor-not-allowed'),
-                                    !item.carnet?.id_carnet ? 'text-red-600 hover:text-red-800' : item.carnet_vigente === false ? 'text-yellow-400 hover:text-yellow-700' : 'text-gray-600 hover:text-gray-800'
+                                    !item.carnet?.id_carnet ? 'text-red-600 hover:text-red-800'
+                                        : esCarnetIndefinido(item.carnet) ? 'text-blue-500 hover:text-blue-700'
+                                            : item.carnet_vigente === false ? 'text-yellow-400 hover:text-yellow-700'
+                                                : 'text-gray-600 hover:text-gray-800'
                                 ]">
-                                <Icon :icon-button="true" name="profileCard" :size="19"
-                                    :class-name="!item.carnet?.id_carnet ? 'text-red-500' : item.carnet_vigente === false ? 'text-yellow-500' : 'text-gray-600'" />
+                                <Icon :icon-button="true" name="profileCard" :size="19" :class-name="!item.carnet?.id_carnet ? 'text-red-500'
+                                    : esCarnetIndefinido(item.carnet) ? 'text-blue-500'
+                                        : item.carnet_vigente === false ? 'text-yellow-500'
+                                            : 'text-gray-600'" />
                                 <span>|</span>
                                 <div class="font-medium">
                                     <span v-if="item.carnet?.id_carnet">{{ item.carnet?.doc }}</span>
@@ -1220,8 +1343,10 @@ const encotrado = (ciPersona) => {
                                     :class-name="item.id_tutor ? 'text-gray-600 hover:text-gray-800' : 'text-red-500 hover:text-red-800'" />
                                 <span>|</span>
                                 <div class="font-medium capitalize">
-                                    <span v-if="item.tutor?.id_tutor">{{ item.tutor?.nombre_tutor }}</span>
-                                    <span class="capitalize" v-else>no asignado</span>
+                                    <span v-if="item.tutor?.id_tutor">
+                                        {{ item.tutor?.nombre_tutor?.toLowerCase() }}
+                                    </span>
+                                    <span v-else>no asignado</span>
                                 </div>
                             </div>
                         </div>
@@ -1234,7 +1359,8 @@ const encotrado = (ciPersona) => {
                             <div v-if="can('editar-beneficiario')">
                                 <Icon v-if="item.tipo_registro === 'pendiente' &&
                                     item.estado_actual?.estado !== 'baja_definitiva' &&
-                                    item.estado_actual?.estado !== 'baja_temporal'"
+                                    item.estado_actual?.estado !== 'baja_temporal' &&
+                                    item.estado_actual?.estado !== 'depurado'"
                                     @click.prevent="openEditPersona(item, item.id_persona)" name="userSettings"
                                     class-name="text-orange-600" :ripple="true" ripple-color="bg-orange-500"
                                     title="Registro pendiente" />
@@ -1310,7 +1436,7 @@ const encotrado = (ciPersona) => {
         <Transition name="fade">
             <Form v-if="formCreate" :fields="personaFields" :distritos="distrito" :nombreFor="String(selectedTutorName)"
                 submit-route="persona.store" @add="handleAddBene" @openFormOption="showModalWaringDistrito = true"
-                @sinDatos="sinDatos" @cancel="formCreate = false" @close="encotrado">
+                @sinDatos="sinDatos" @cancel="handleCancelCreate" @close="encotrado">
                 <template #icon>
                     <Icon :icon-button="true" name="userAdd" class-name="text-white" />
                 </template>
@@ -1388,8 +1514,9 @@ const encotrado = (ciPersona) => {
         <!-- Formulario: Crear Carnet -->
         <Transition name="fade">
             <Form v-if="formCreateCarnet" :fields="carnetFields" :discapacidad="discapacidad" :idFor="selectedId"
-                :nombreFor="selectedNombre" :fechaNacimiento="fechaNacimiento" clave-foranea="id_persona"
-                submit-route="carnet.store" @add="addCarnet" @openFormOption="showModalWaringDiscapacidad = true"
+                :nombreFor="selectedNombre" :apellidoFor="selectedApellido" :fechaNacimiento="fechaNacimiento"
+                clave-foranea="id_persona" submit-route="carnet.store" @add="addCarnet"
+                @openFormOption="showModalWaringDiscapacidad = true" @indefinidoChange="indefinidoCarnet = $event"
                 @sinDatos="sinDatos" @cancel="formCreateCarnet = false">
                 <template #icon>
                     <Icon :icon-button="true" name="profileCard" class-name="text-white" />
@@ -1407,8 +1534,9 @@ const encotrado = (ciPersona) => {
         <Transition name="fade">
             <Form v-if="showModalCarnetEdit" :fields="carnetFieldsEdit" boton-name="Guardar"
                 :discapacidad="discapacidad" :existing-data="selectedItem || {}" :nombreFor="selectedNombre"
-                :idFor="selectedId" :edit-mode="true" submit-route="carnet.update" @add="handleEditCarnet"
-                @openFormOption="showModalWaringDiscapacidad = true" @sinDatos="sinDatos" @cancel="handleEditCancel"
+                :apellidoFor="selectedApellido" :idFor="selectedId" :edit-mode="true" submit-route="carnet.update"
+                @add="handleEditCarnet" @openFormOption="showModalWaringDiscapacidad = true"
+                @indefinidoChange="indefinidoCarnet = $event" @sinDatos="sinDatos" @cancel="handleEditCancel"
                 @close="handleEditCancel">
                 <template #icon>
                     <Icon :icon-button="true" name="userEdit" class-name="text-white" />
@@ -1439,6 +1567,24 @@ const encotrado = (ciPersona) => {
                 </template>
                 <template #label2>
                     Registre un nuevo estado del beneficiario
+                </template>
+            </Form>
+        </Transition>
+
+        <!-- Formulario: Editar Estado -->
+        <Transition name="fade">
+            <Form v-if="formEditEstado" :fields="estadoFields" boton-name="Guardar" :data="selectedEstadoData"
+                :idFor="selectedId" :existing-data="selectedEstadoData || {}" :edit-mode="true"
+                submit-route="persona.estado.update" @add="handleCambioEstado" @fechaInvalida="fechaInvalida"
+                @sinDatos="sinDatos" @cancel="abrirEstado">
+                <template #icon>
+                    <Icon :icon-button="true" name="badgeCheck" class-name="text-white" />
+                </template>
+                <template #label1>
+                    Editar estado
+                </template>
+                <template #label2>
+                    Modifica el estado del beneficiario
                 </template>
             </Form>
         </Transition>
@@ -1583,13 +1729,15 @@ const encotrado = (ciPersona) => {
 
         <!-- Modal: Información del Tutor -->
         <Transition name="fade">
-            <ModalTutor v-if="showModal" :data="selectedItem" :tutor="tutor" @close="showModal = false" />
+            <ModalTutor v-if="showModal" :data="selectedItem" :tutor="tutor" @close="showModal = false"
+                @changeTutor="handleChangeTutor" />
         </Transition>
 
         <!-- Modal: Estados del Beneficiario -->
         <Transition name="fade">
             <ModalEstadoBene v-if="showModalEstado" :data="selectedItem" @add="handleCambioEstado"
-                @addEstado="openFormEstado" @close="showModalEstado = false" @delete="eliminarRegistro" />
+                @addEstado="openFormEstado" @editEstado="editarEstado" @close="showModalEstado = false"
+                @delete="eliminarRegistro" />
         </Transition>
 
         <!-- Modal: Confirmar Eliminacion de Estado -->

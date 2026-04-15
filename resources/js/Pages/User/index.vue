@@ -32,7 +32,7 @@ const filters = computed(() => page.props.filters || {});
 const roles = computed(() => page.props.roles || []);
 const notificacionTutor = computed(() => page.props.notificacionTutor);
 
-//console.log(roles.value);
+//console.log('usuarios: ', usuarios.value);
 
 // ✅ Mapear los roles para el dropdown
 const rolesOptions = computed(() => {
@@ -137,7 +137,7 @@ const usuarioFields = computed(() => [{
 }
 ]);
 
-// ✅ También para el formulario de edición
+
 const usuarioEditFields = computed(() => [{
     typeInput: 'text',
     name: 'nombre',
@@ -189,15 +189,11 @@ const usuarioEditFields = computed(() => [{
 ]);
 
 const usuariosAgrupadosPorRol = computed(() => {
-    if (!usuarios.value || !usuarios.value.data || !Array.isArray(usuarios.value.data)) {
-        return {};
-    }
+    if (!usuarios.value || !Array.isArray(usuarios.value)) return {};  // ← sin .data
 
-    return usuarios.value.data.reduce((grupos, usuario) => {
+    return usuarios.value.reduce((grupos, usuario) => {
         const rol = usuario.rol;
-        if (!grupos[rol]) {
-            grupos[rol] = [];
-        }
+        if (!grupos[rol]) grupos[rol] = [];
         grupos[rol].push(usuario);
         return grupos;
     }, {});
@@ -222,10 +218,10 @@ const cerrarMensaje = (id) => {
 
 const openEditUsuario = (item, idPersona) => {
     selectedId.value = idPersona;
-    // ✅ Convertir el valor booleano a número (1 o 0)
+
     selectedItem.value = {
         ...item,
-        habilitado: item.habilitado ? 1 : 0  // Convierte true a 1, false a 0
+        habilitado: item.habilitado ? 1 : 0
     };
     openFormEdit.value = true;
 }
@@ -369,10 +365,11 @@ const getColorForRole = (rol) => {
     return colorPalette[index];
 };
 
-const getFirstName = (fullName) => {
-    if (!fullName) return '';
-    return fullName.split(' ')[0];
-};
+const getFirstName = (value) => {
+    if (!value) return ''
+    const first = value.split(' ')[0].toLowerCase()
+    return first.charAt(0).toUpperCase() + first.slice(1)
+}
 
 const getBorderColor = (rol) => {
     return getColorForRole(rol).border;
@@ -500,7 +497,6 @@ const getHoverColor = (rol) => {
                             </h2>
 
                             <!-- Cards de usuarios con scroll horizontal -->
-                            <!-- Cards de usuarios con scroll horizontal -->
                             <div class="flex overflow-x-auto gap-4 pb-2">
                                 <!-- Card con borde según estado -->
                                 <div v-for="item in usuariosDelRol" :key="item.id"
@@ -592,13 +588,7 @@ const getHoverColor = (rol) => {
                         </div>
                     </div>
                 </main>
-
-                <div :class="usuarios.data.length <= 15 ? 'mt-0.5' : 'mt-0'">
-                    <Paginacion v-if="usuarios?.last_page > 1" :links="usuarios.links" :from="usuarios.from"
-                        :to="usuarios.to" :total="usuarios.total" />
-                    <Footer />
-                </div>
-
+                <Footer />
             </div>
         </div>
     </AuthenticatedLayout>

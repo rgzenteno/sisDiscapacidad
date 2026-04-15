@@ -22,7 +22,7 @@ const tutorData = computed(() => page.props.tutorData);
 const totalPersonas = computed(() => page.props.totalPersonas);
 
 const getUrl = (ruta, id) => {
-    const url = route(ruta, id); // ✅ UUID directo
+    const url = route(ruta, id);
     router.visit(url);
 };
 
@@ -88,13 +88,17 @@ const tableColumns = [
                 <template #row="{ item }">
                     <!-- Columna: Nombre Completo -->
                     <th scope="row"
-                        class="capitalize px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {{ item.nombre }} {{ item.apellido }}
+                        class="uppercase px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                        <p v-if="item.nombre">{{ item.nombre }} {{ item.apellido }}</p>
+                        <p v-else> {{ item.nombre_completo }}</p>
                     </th>
 
                     <!-- Columna: Distrito -->
-                    <td class="px-6 py-4">
-                        {{ item.distrito }}
+                    <td class="px-3 py-1 whitespace-nowrap">
+                        <div class="text-gray-700 dark:text-gray-300">
+                            <span v-if="item.distrito">{{ item.distrito }}</span>
+                            <span v-else class="block text-red-500 italic text-xs">Sin datos</span>
+                        </div>
                     </td>
 
                     <!-- Columna: Cedula de Identidad -->

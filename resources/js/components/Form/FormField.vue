@@ -14,7 +14,9 @@ import PresupuestoField from './fields/PresupuestoField.vue';
 import TimeField from './fields/TimeField.vue';
 import LabelField from './fields/LabelField.vue';
 import ReadOnlyField from './fields/ReadOnlyField.vue';
+import MonthYearField from './fields/MonthYearField.vue';
 import CodigoCarnetField from './fields/CodigoCarnetField.vue';
+import IndefinidoCheckField from './fields/IndefinidoCheckField.vue';
 // ============ FIN IMPORTS ============ //
 
 // ============ INICIO PROPS ============ //
@@ -48,10 +50,13 @@ const props = defineProps({
 // ============ INICIO EMITS ============ //
 const emit = defineEmits([
     'update:modelValue',
-    'openFormOption'
+    'openFormOption',
+    'update:validation'
 ]);
 // ============ FIN EMITS ============ //
-
+const handleValidationUpdate = (validation) => {
+    emit('update:validation', validation); // ✅ NUEVO
+};
 // ============ INICIO COMPUTED ============ //
 // Mapeo de tipos de input a componentes
 const fieldComponents = {
@@ -73,6 +78,8 @@ const fieldComponents = {
     id: ReadOnlyField,
     verificar: ReadOnlyField,
     codigo_carnet: CodigoCarnetField,
+    indefinido_check: IndefinidoCheckField,
+    month_year: MonthYearField,
 };
 
 // Componente a renderizar basado en el tipo de campo
@@ -92,12 +99,13 @@ const fieldComponent = computed(() => {
     return fieldComponents[typeInput] || TextField;
 });
 
+
 // Props a pasar al componente hijo
 const fieldProps = computed(() => ({
     field: props.field,
     modelValue: props.modelValue,
     error: props.error,
-    form: props.form,
+    form: props.form, // ✅ Ya está pasando el form, PERFECTO
     props: props.props,
     nombreFor: props.nombreFor
 }));
@@ -118,6 +126,6 @@ const handleOpenFormOption = () => {
     <div class="w-full">
         <!-- Renderizado Dinámico del Componente -->
         <component :is="fieldComponent" v-bind="fieldProps" @update:model-value="handleUpdate"
-            @open-form-option="handleOpenFormOption" />
+            @update:validation="handleValidationUpdate" @open-form-option="handleOpenFormOption" />
     </div>
 </template>

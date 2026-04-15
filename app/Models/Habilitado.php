@@ -49,7 +49,7 @@ class Habilitado extends Model
     // Relación con Pago
     public function pago()
     {
-        return $this->hasOne(Pago::class, 'id_habilitado');
+        return $this->hasOne(Pago::class, 'id_habilitado', 'id_habilitado');
     }
 
 
@@ -61,10 +61,10 @@ class Habilitado extends Model
     // ============ SCOPES ============//
 
     // En el modelo Habilitado
-public function scopeActivo($query)
-{
-    return $query->where('habilitado', 1); // o true
-}
+    public function scopeActivo($query)
+    {
+        return $query->where('habilitado', 1); // o true
+    }
 
     public function scopeDesdeFechaRegistro($query, $fecha)
     {

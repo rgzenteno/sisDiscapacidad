@@ -58,5 +58,9 @@ const emit = defineEmits(['update:modelValue']);
             :autofocus="field.autofocus || false"
             @update:model-value="emit('update:modelValue', $event)"
         />
+        <!-- Mensaje de error -->
+<p v-if="error" class="mt-1 text-xs text-red-600 dark:text-red-400">
+    {{ error }}
+</p>
     </div>
 </template>

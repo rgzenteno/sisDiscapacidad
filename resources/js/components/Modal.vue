@@ -1,7 +1,6 @@
 <template>
-    <div
-        class="fixed inset-0 bg-slate-900/75 flex items-center justify-center z-40 px-4 py-6 overflow-y-auto backdrop-blur-sm">
-        <div class="relative w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl transform transition-all duration-300 my-8"
+    <div class="fixed inset-0 bg-slate-900/75 flex items-center justify-center z-40 px-4 py-6 backdrop-blur-sm">
+        <div class="relative w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl transform transition-all duration-300 max-h-[90vh] flex flex-col overflow-hidden"
             :class="maxWidth">
 
             <!-- Header (Condicional) -->
@@ -11,7 +10,7 @@
                     <div class="grid grid-cols-[auto_1fr] gap-4 items-center mb-2">
                         <!-- Avatar / Ícono -->
                         <div
-                            class="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-md ring-1 ring-indigo-100 flex-shrink-0">
+                            class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" :class="fondoIcon">
                             <slot name="icon">
                                 <svg class="w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
                                     viewBox="0 0 24 24">
@@ -37,8 +36,8 @@
                 <!-- Botón Cerrar en Header -->
                 <div class="flex items-start gap-3 flex-shrink-0">
                     <button type="button" @click="emit('close')"
-                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
-                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg"
+                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-red-100 text-gray-600 hover:text-red-400 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
+                        <svg class="w-5 h-5 " xmlns="http://www.w3.org/2000/svg"
                             fill="none" viewBox="0 0 24 24">
                             <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M6 6l12 12M6 18L18 6" />
@@ -49,8 +48,8 @@
 
             <!-- Botón Cerrar sin Header -->
             <button v-if="!showHeader" type="button" @click="emit('close')"
-                class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition z-10">
-                <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none"
+                class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-red-100 text-gray-600 hover:text-red-400 dark:bg-gray-700 dark:hover:bg-gray-600 transition z-10">
+                <svg class="w-5 h-5  " xmlns="http://www.w3.org/2000/svg" fill="none"
                     viewBox="0 0 24 24">
                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M6 6l12 12M6 18L18 6" />
@@ -58,10 +57,11 @@
             </button>
 
             <!-- Body -->
-            <div class="px-6 py-4 pb-0">
+            <div class="px-6 py-4 pb-4 overflow-y-auto flex-1">
                 <slot></slot>
             </div>
 
+            <slot name="footer"></slot>
             <!-- Footer (Condicional) -->
             <div v-if="showFooter" class="border-t border-gray-200 dark:border-gray-700">
                 <div class="flex items-center justify-end space-x-3">
@@ -98,6 +98,9 @@
 </template>
 
 <script setup>
+import { onMounted, onUnmounted } from 'vue';
+import Button from './Button.vue';
+
 defineProps({
     showHeader: {
         type: Boolean,
@@ -126,8 +129,21 @@ defineProps({
     maxWidth: {
         type: String,
         default: 'max-w-2xl'
+    },
+    fondoIcon: {
+        type: String,
+        default: 'from-indigo-500 to-cyan-400 shadow-md ring-1 ring-indigo-100 bg-gradient-to-br'
     }
 });
 
 const emit = defineEmits(['close', 'submit', 'cancel', 'omitir']);
+
+const closeOnEscape = (e) => {
+    if (e.key === 'Escape') {
+        emit('close');
+    }
+};
+
+onMounted(() => document.addEventListener('keydown', closeOnEscape));
+onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 </script>

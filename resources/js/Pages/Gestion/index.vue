@@ -20,9 +20,14 @@ import Button from '@/components/Button.vue';
 import ModalResultadosMes from '@/components/ModalResultadosMes.vue';
 import { watch } from 'vue';
 
+import { useReporteArqueoGeneralPDF } from '@/composables/useReporteArqueoGeneralPDF';
+
+
 // Utilidades
 import { can } from '@/lib/can';
 import Icon from '@/components/Icon.vue';
+
+const { generarReporte } = useReporteArqueoGeneralPDF();
 
 // ============================================================================
 // PROPS Y COMPUTED - DATOS DE LA PÁGINA
@@ -32,6 +37,8 @@ const page = usePage();
 // Props principales
 const gestiones = computed(() => page.props.gestiones);
 const gestion = computed(() => page.props.gestion);
+const personasPagadasPorMes = computed(() => page.props.personasPagadasPorMes ?? {});
+//console.log(gestion.value);
 
 const filters = computed(() => page.props.filters);
 const años_registrados = computed(() => page.props.años_registrados);
@@ -54,13 +61,14 @@ const formCreateGestion = ref(false);
 const formEdit = ref(false);
 const formEditMes = ref(false);
 const showModal = ref(false);
-const reportes = ref(false);
+const importando = ref(false);
 
 // ============================================================================
 // REFS - DATOS TEMPORALES
 // ============================================================================
 const selectedItem = ref(null);
 const selectedId = ref(null);
+const selectedGestion = ref(null);
 const selectedMes = ref(null);
 const mensajes = ref([]);
 const mostrarModalResultadosMes = ref(false);
@@ -111,9 +119,9 @@ const getYearValue = (yearData) => {
 const selectedYear = computed(() => getYearValue(filters.value?.año));
 
 // ============================================================================
-// CONFIGURACIÓN DE CAMPOS - MES
+// CONFIGURACIÓN DE CAMPOS - MES (PARA EXCEL)
 // ============================================================================
-const mesFields = [{
+const mesFieldsExcel = [{
     name: 'mes',
     label: '',
     hidden: true
@@ -156,8 +164,52 @@ const mesFields = [{
     name: 'id_gestion',
     label: '',
     hidden: true
-}
-];
+}];
+
+// ============================================================================
+// CONFIGURACIÓN DE CAMPOS - MES (PARA PDF)
+// ============================================================================
+const mesFieldsPdf = [{
+    name: 'mes',
+    label: '',
+    hidden: true
+},
+{
+    typeInput: 'text',
+    name: 'monto',
+    label: 'Monto - Persona (Bs.)',
+    type: 'number',
+    required: true,
+    placeholder: 'el monto a pagar',
+    readonly: false
+},
+{
+    name: 'presupuesto',
+    label: '',
+    type: 'number',
+    required: false,
+    placeholder: 'el presupuesto total',
+    readonly: false
+},
+{
+    name: 'archivo_pdf',
+    label: `Archivo PDF aprobados ${getMonthNameFromNumber(mes_actual_disponible.value)}`,
+    typeInput: 'file_upload',
+    placeholder: 'Selecciona un archivo PDF',
+    acceptedTypes: '.pdf',
+    maxSize: 5,
+    required: true,
+    requiredColumns: []
+},
+{
+    name: 'id_gestion',
+    label: '',
+    hidden: true
+}];
+
+// ✅ USAR UNO U OTRO
+const mesFields = mesFieldsPdf; // Cambiar a mesFieldsExcel si quieres usar Excel
+// const mesFields = mesFieldsExcel; // ← Comentar esta línea si usas PDF
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - EDITGESTIÓN
@@ -375,16 +427,33 @@ const openFormEdit = () => {
  * Formulario para registrar logs de reportes
  */
 const Log = useForm({
-    descripcion: 'Impresión de reporte de pagos anuales'
+    gestion: '',
+    total_meses: '',
+    tipo: 'arqueo_general',
 });
 
 /**
  * Genera y descarga el informe de pagos anuales
  */
-const generearInforme = () => {
-    reportes.value = true;
+const generarInforme = () => {
+    Log.gestion = selectedYear.value;
+    Log.total_meses = gestion.value.length;
     Log.get(route('pago.reporteLog'));
-}
+
+    const nombreUsuario =
+        `${page.props.auth.user.nombre} ${page.props.auth.user.apellido}`;
+
+    const datosParaPDF = gestion.value.map(item => ({
+        ...item,
+        presupuesto_mes: item.monto,
+        total_pagado_contexto: item.total_pagado_contexto ?? 0,
+        cantidad_habilitadas: item.cantidad_habilitadas ?? 0,
+        cantidad_total_pagos: item.cantidad_total_pagos ?? 0,
+        cantidad_no_pagados: item.cantidad_no_pagados ?? 0,
+    }));
+
+    generarReporte(datosParaPDF, nombreUsuario, 'ArqueoGeneral');
+};
 
 // ============================================================================
 // FUNCIONES - CALLBACKS
@@ -419,7 +488,11 @@ const handleUpdate = () => {
  * @param {Object} datos - Datos la gestion
  */
 const openModalMes = (item) => {
-    selectedItem.value = { ...item };
+    const personas = personasPagadasPorMes.value[item.id_mes] ?? [];
+    selectedItem.value = {
+        ...item,
+        personas_pagadas: personas
+    };
     showModal.value = true;
 }
 
@@ -429,13 +502,15 @@ const openModalMes = (item) => {
  * @param {string} item - Nombre del mes
  * @param {number} mes - mes
  */
-const openEditMes = (idMes, monto, presupuesto) => {
+const openEditMes = (idMes, monto, presupuesto, mes, gestion) => {
     showModal.value = false;
     selectedItem.value = {
         monto: monto,
         presupuesto: presupuesto
     };
     selectedId.value = idMes;
+    selectedMes.value = mes;
+    selectedGestion.value = gestion;
     formEditMes.value = true;
 }
 
@@ -537,7 +612,8 @@ watch(
 
             <!-- Formulario: Crear mes -->
             <Transition name="fade">
-                <Form v-if="formCreateMes" :data="{ tipo: 'gestion', id: año_actual.id, mes: mes_actual_disponible }"
+                <Form v-if="formCreateMes"
+                    :data="{ tipo: 'gestion', id: año_actual.id, mes: mes_actual_disponible, año: año_actual.añoActualSistema }"
                     :fields="mesFields" :dataGestion="años_registrados" :presupuestosAnuales="presupuestosAnuales"
                     :personasValidas="total_personas_validas" submit-label="Registrar nuevo Mes"
                     submit-route="gestion.addMes" :importing="importando" importing-text="Importando archivo..."
@@ -565,7 +641,7 @@ watch(
                         <Icon :icon-button="true" name="calendarEdit" class-name="text-white" />
                     </template>
                     <template #label1>
-                        Editar Mes de {{ getMonthNameFromNumber(selectedMes) }} - {{ año_actual.añoActualSistema }}
+                        Editar Mes de {{ getMonthNameFromNumber(selectedMes) }} - {{ selectedGestion }}
                     </template>
                     <template #label2>
                         Modifique monto y presupuesto del mes
@@ -579,11 +655,12 @@ watch(
 
             <!-- Modal: Visualizar datos mes -->
             <Transition name="fade">
-                <ModalGestion v-if="showModal" :user="selectedId" :data="selectedItem" @close="closeForm" />
+                <ModalGestion v-if="showModal"
+                    :nombre-usuario="`${$page.props.auth.user.nombre} ${$page.props.auth.user.apellido}`"
+                    :user="selectedId" :data="selectedItem" @close="closeForm" />
             </Transition>
 
-            <Reporte v-if="reportes" :datos="gestion" :gestion="gestion.gestion" :download="true" tipoR="Gestión"
-                :tipo="false" style="display: none;" />
+
 
             <ModalResultadosMes v-model="mostrarModalResultadosMes" :datos="resultadosMes || {}"
                 @close="cerrarModalResultadosMes" />
@@ -633,8 +710,7 @@ watch(
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M19 9l-7 7-7-7" />
                                 </svg>
-                                <span
-                                    v-if="btnAgregar === false && can('agregar-gestion')"
+                                <span v-if="btnAgregar === false && can('agregar-gestion')"
                                     class="absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-400 z-20">
                                     <span
                                         class="absolute inset-0 w-2 h-2 bg-orange-500 rounded-full opacity-75 animate-ping"></span>
@@ -782,7 +858,8 @@ watch(
 
                         <!-- Icono -->
                         <span class="relative z-10">
-                            <Icon :icon-button="true" name="calendarPlus" fill="currentColor" :ripple="true" ripple-color="bg-orange-700"
+                            <Icon :icon-button="true" name="calendarPlus" fill="currentColor" :ripple="true"
+                                ripple-color="bg-orange-700"
                                 class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
                         </span>
                     </Button>
@@ -805,7 +882,7 @@ watch(
 
                     <!-- Botón: Generar PDF -->
                     <Button v-if="can('reporte-gestion') && existe_gestion && tiene_meses && gestion.length > 0"
-                        id="btn-reporte" @click.prevent="generearInforme()"
+                        id="btn-reporte" @click.prevent="generarInforme()"
                         @mouseenter="showTooltip('Generar PDF', 'btn-reporte')" @mouseleave="hideTooltip"
                         :style="'px-3 py-3 pb-2 rounded-full border-none'"
                         class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
@@ -869,7 +946,7 @@ watch(
                                             <!-- Edit Button -->
                                             <div v-if="can('editar-mes')" class="pb-0">
                                                 <Icon
-                                                    @click.stop.prevent="openEditMes(item.id_mes, item.monto, item.presupuesto)"
+                                                    @click.stop.prevent="openEditMes(item.id_mes, item.monto, item.presupuesto, item.mes, item.gestion)"
                                                     name="calendarEdit" class-name="text-gray-500" />
                                             </div>
                                         </div>

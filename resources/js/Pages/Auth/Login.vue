@@ -262,7 +262,7 @@ const showPassword = ref(false);
                                 Unidad Municipal de Atención a Personas con Discapacidad
                             </p>
                             <p class="text-[#7D838E]/70 text-xs">
-                                © 2025 UMADIS - Gobierno Autono Municipal de Sacaba
+                                © {{ new Date().getFullYear() }} UMADIS - Gobierno Autono Municipal de Sacaba
                             </p>
                         </div>
                     </form>

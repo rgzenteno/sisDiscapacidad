@@ -50,7 +50,7 @@ const tutorFields = [
         name: 'ci_tutor',
         label: 'C.I.',
         type: 'number',
-        required: false,
+        required: true,
         placeholder: 'la cédula de identidad',
         readonly: false,
         range: 10,
@@ -110,18 +110,16 @@ const tutorFields = [
         range: 40,
     },
     {
-        typeInput: 'text',
+        typeInput: 'direccion',
         name: 'direccion',
         label: 'Dirección',
-        type: 'text',
         required: false,
         placeholder: 'la dirección',
         readonly: false,
         nameStyle: false,
-        range: 49,
+        range: 200,
     }
 ];
-
 // ============================================================================
 // CONFIGURACIÓN DE TABLA
 // ============================================================================
@@ -300,7 +298,7 @@ const closeForm = () => {
                 <template #row="{ item }">
 
                     <!-- Columna: Nombre Completo -->
-                    <td class="capitalize px-3 py-1.5 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                    <td class="uppercase px-3 py-1.5 font-medium text-gray-900 whitespace-nowrap dark:text-white">
                         {{ item.nombre_tutor }} {{ item.apellido_tutor }}
                     </td>
 

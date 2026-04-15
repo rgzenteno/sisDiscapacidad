@@ -31,23 +31,23 @@ export const useComprobantePDF = () => {
     };
 
     const generateQRCode = async (data) => {
-    const nombreCompleto = capitalizar(
-        `${data.beneficiario.apellido} ${data.beneficiario.nombre}`,
-    );
+        const nombreCompleto = capitalizar(
+            `${data.beneficiario.apellido} ${data.beneficiario.nombre}`,
+        );
 
-    const uuid = data.beneficiario.uuid.toUpperCase();
-    const uuidParts = uuid.split("-");
-    const shortUuid = `${uuidParts[0]}-${uuidParts[1]}`; // A0FEE046-E15A
+        const uuid = data.beneficiario.uuid.toUpperCase();
+        const uuidParts = uuid.split("-");
+        const shortUuid = `${uuidParts[0]}-${uuidParts[1]}`; // A0FEE046-E15A
 
-    const datosQR = `GAMS - Sacaba
+        const datosQR = `GAMS - Sacaba
 Unidad Municipal de Atención a Personas con Discapacidad
 
 Comprobante de Pago
 Beneficiario: ${nombreCompleto}
-CI: ${data.beneficiario.ci}
+C.I.: ${data.beneficiario.ci}
 Distrito: ${data.beneficiario.distrito}
 Monto: Bs. ${data.monto},00
-Fecha: ${data.fechaPago}
+Fecha: ${data.fechaPagoCompleta}
 Estado: Pago Realizado
 Código: ${shortUuid}
 `;
@@ -65,11 +65,7 @@ Código: ${shortUuid}
     };
 
     const dibujarComprobante = async (
-        pdf,
-        datos,
-        qrCodeImage,
-        firmaDigital,
-        yOffset = 0,
+        pdf, datos, qrCodeImage, firmaDigital, fondoBase64, logoBase64, yOffset = 0,
     ) => {
         const colorGris = [245, 245, 245];
         const colorBorde = [200, 200, 200];
@@ -77,26 +73,11 @@ Código: ${shortUuid}
         const colorAzul = [19, 50, 106];
 
         // ========== IMAGEN DE FONDO ==========
-        try {
-            pdf.addImage(
-                "/images/fondoComprobante.png",
-                "PNG",
-                20,
-                9 + yOffset,
-                175,
-                85,
-            );
-        } catch (e) {
-            console.warn("Imagen de fondo no encontrada");
-        }
+        if (fondoBase64) pdf.addImage(fondoBase64, "PNG", 20, 9 + yOffset, 175, 85);
 
         // ========== HEADER ==========
         // Logo
-        try {
-            pdf.addImage("/images/sacaba.png", "PNG", 22, 11 + yOffset, 47, 20);
-        } catch (e) {
-            console.warn("Logo no encontrado");
-        }
+        if (logoBase64) pdf.addImage(logoBase64, "PNG", 22, 11 + yOffset, 47, 20);
 
         // COMPROBANTE DE PAGO (título principal centrado)
         pdf.setFontSize(19);
@@ -153,9 +134,9 @@ Código: ${shortUuid}
         pdf.text(datos.numeroBoleta, 52.5, infoY + 1.5);
 
         pdf.setFont("helvetica", "bold");
-        pdf.text("Fecha de Emisión:", 71, infoY + 1.5);
+        pdf.text("Fecha de Emisión:", 82, infoY + 1.5);
         pdf.setFont("helvetica", "normal");
-        pdf.text(datos.fechaPago, 100, infoY + 1.5);
+        pdf.text(datos.fechaPago, 111, infoY + 1.5);
 
         // Código Único (centrado y en dos líneas si es necesario)
         pdf.setFont("helvetica", "bold");
@@ -181,9 +162,9 @@ Código: ${shortUuid}
         pdf.text(datos.beneficiario.distrito, 52.5, infoY + 2);
 
         pdf.setFont("helvetica", "bold");
-        pdf.text("Medio de Pago:", 71, infoY + 2);
+        pdf.text("Medio de Pago:", 82, infoY + 2);
         pdf.setFont("helvetica", "normal");
-        pdf.text("Efectivo", 100, infoY + 2);
+        pdf.text("Efectivo", 111, infoY + 2);
 
         const usuario = capitalizar(datos.usuarioPagador);
         const maxWidth = 40; // Ancho máximo permitido
@@ -276,7 +257,7 @@ Código: ${shortUuid}
         pdf.setFont("helvetica", "normal");
         pdf.text(
             `${datos.tutor.apellido.toUpperCase()} ${datos.tutor.nombre.toUpperCase()}` ||
-                "La beneficiaria actúa por cuenta propia",
+            "La beneficiaria actúa por cuenta propia",
             92,
             tableY + 4,
         );
@@ -418,6 +399,20 @@ Código: ${shortUuid}
             // Obtener la firma del usuario (prioridad: parámetro, luego del objeto usuario)
             const firma = firmaDigital || usuarioPagador.digital_signature;
 
+            const cargarImagen = (src) =>
+                new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement("canvas");
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        canvas.getContext("2d").drawImage(img, 0, 0);
+                        resolve(canvas.toDataURL("image/png"));
+                    };
+                    img.onerror = () => resolve(null);
+                    img.src = src;
+                });
+
             const pdf = new jsPDF({
                 orientation: "portrait",
                 unit: "mm",
@@ -428,21 +423,31 @@ Código: ${shortUuid}
             const datos = {
                 numeroBoleta: item.pago.numero_boleta,
                 gestion: item.gestion.gestion,
-                mes: getMesNombre(item.mes.mes),
-                monto: item.mes.monto,
+                mes: getMesNombre(item.mes),
+                monto: item.monto,
                 montoTexto: "Doscientos cincuenta 00/100 Bolivianos",
-                fechaPago: new Date(item.pago.fecha_pago).toLocaleDateString(
-                    "es-BO",
-                    {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                    },
-                ),
-                fechaActual: new Date().toLocaleDateString("es-BO", {
+                fechaPago: new Date().toLocaleString("es-BO", {
                     day: "2-digit",
                     month: "2-digit",
                     year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }),
+                // Solo fecha — para mostrar en el comprobante
+                fechaPago: new Date().toLocaleDateString("es-BO", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                }),
+
+                // Fecha + hora en 24h — solo para el QR
+                fechaPagoCompleta: new Date().toLocaleString("es-BO", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
                 }),
                 usuarioPagador: `${usuarioPagador.nombre} ${usuarioPagador.apellido}`,
                 cargo: usuarioPagador.cargo,
@@ -463,10 +468,14 @@ Código: ${shortUuid}
             };
 
             // Generar QR
-            const qrCodeImage = await generateQRCode(datos);
+            const [fondoBase64, logoBase64, qrCodeImage] = await Promise.all([
+                cargarImagen("/images/fondoComprobante.png"),
+                cargarImagen("/images/sacaba.png"),
+                generateQRCode(datos),
+            ]);
 
             // Generar PRIMER comprobante
-            await dibujarComprobante(pdf, datos, qrCodeImage, firma, 0);
+            await dibujarComprobante(pdf, datos, qrCodeImage, firma, fondoBase64, logoBase64, 0);
 
             // LÍNEA DE CORTE
             pdf.setLineDash([2, 1.5]);
@@ -476,19 +485,14 @@ Código: ${shortUuid}
             pdf.setLineDash([]);
 
             // Generar SEGUNDO comprobante
-            await dibujarComprobante(pdf, datos, qrCodeImage, firma, 140);
+            await dibujarComprobante(pdf, datos, qrCodeImage, firma, fondoBase64, logoBase64, 140);
 
-            // ========== SOLO VISTA PREVIA ==========
-            const pdfBlob = pdf.output("blob");
-            const blobUrl = URL.createObjectURL(pdfBlob);
+            // ========== VISTA PREVIA + DESCARGA ==========
+            const nombreArchivo = `Comprobante_Pago_${capitalizar(datos.beneficiario.apellido)}_${capitalizar(datos.beneficiario.nombre)}_${datos.numeroBoleta}.pdf`;
 
-            // Abrir vista previa en nueva pestaña
-            window.open(blobUrl, "_blank");
+            // Descargar el PDF
+            pdf.save(nombreArchivo);
 
-            // Limpiar el Blob URL después de 10 segundos
-            setTimeout(() => {
-                URL.revokeObjectURL(blobUrl);
-            }, 10000);
         } catch (error) {
             console.error("Error al generar PDF:", error);
             alert("Error al generar el PDF: " + error.message);
