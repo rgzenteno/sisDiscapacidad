@@ -154,120 +154,150 @@ onMounted(() => {
 </script>
 
 <template>
-<AuthenticatedLayout>
-    <div class="print-container" style="font-family: Arial, sans-serif; width: 100%;">
-        <!-- Header Compacto -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 0px;">
-            <tr style="vertical-align: top;">
-                <!-- Cambiado a vertical-align: top -->
-                <!-- Logo izquierdo -->
-                <td style="width: 20%; text-align: center; vertical-align: top; padding: 2px 5px;">
-                    <!-- Reducido padding vertical -->
-                    <img src="/images/sacaba.png" alt="Logo Sacaba" style="width: 40mm; height: auto;"> <!-- Tamaño reducido -->
-                </td>
+    <AuthenticatedLayout>
+        <div class="print-container" style="font-family: Arial, sans-serif; width: 100%;">
+            <!-- Header Compacto -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 0px;">
+                <tbody>
+                    <tr style="vertical-align: top;">
+                        <!-- Cambiado a vertical-align: top -->
+                        <!-- Logo izquierdo -->
+                        <td style="width: 20%; text-align: center; vertical-align: top; padding: 2px 5px;">
+                            <!-- Reducido padding vertical -->
+                            <img src="/images/sacaba.png" alt="Logo Sacaba" style="width: 40mm; height: auto;">
+                            <!-- Tamaño reducido -->
+                        </td>
 
-                <!-- Título central -->
-                <td style="width: 60%; text-align: center; vertical-align: top; padding: 2px 5px;">
-                    <!-- Reducido padding vertical -->
-                    <div style="font-weight: bold; font-size: 25px; color: red; text-transform: uppercase; line-height: 1.2;">
-                        <!-- Tamaño reducido y ajuste de línea -->
-                        ARQUEO GENERAL DE TESORERÍA - GESTIÓN {{ datos[0].gestion }}
-                    </div>
-                </td>
+                        <!-- Título central -->
+                        <td style="width: 60%; text-align: center; vertical-align: top; padding: 2px 5px;">
+                            <!-- Reducido padding vertical -->
+                            <div
+                                style="font-weight: bold; font-size: 25px; color: red; text-transform: uppercase; line-height: 1.2;">
+                                <!-- Tamaño reducido y ajuste de línea -->
+                                ARQUEO GENERAL DE TESORERÍA - GESTIÓN {{ datos[0].gestion }}
+                            </div>
+                        </td>
 
-                <!-- Información usuario - Ajustado para alinear arriba -->
-                <td style="width: 20%; text-align: center; vertical-align: top; padding: 2px 5px;">
-                    <!-- Reducido padding vertical -->
-                    <div style="font-size: 10px; text-align: left; border-left: 1px solid #000; padding-left: 8px;">
-                        <div style="margin-bottom: 3px; display: flex; align-items: flex-start;">
-                            <!-- Alineación superior -->
-                            <span style="font-weight: bold; white-space: nowrap;">USUARIO: </span>
-                            <span style="text-transform: capitalize; margin-left: 3px;">
-                                {{ $page.props.auth.user.nombre.toLowerCase() }} {{ $page.props.auth.user.apellido.toLowerCase() }}
-                            </span>
-                        </div>
-                        <div style="display: flex; align-items: flex-start;">
-                            <!-- Alineación superior -->
-                            <span style="font-weight: bold; white-space: nowrap;">FECHA: </span>
-                            <span style="margin-left: 3px;">{{ getCurrentDate() }}</span>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        </table>
+                        <!-- Información usuario - Ajustado para alinear arriba -->
+                        <td style="width: 20%; text-align: center; vertical-align: top; padding: 2px 5px;">
+                            <!-- Reducido padding vertical -->
+                            <div
+                                style="font-size: 10px; text-align: left; border-left: 1px solid #000; padding-left: 8px;">
+                                <div style="margin-bottom: 3px; display: flex; align-items: flex-start;">
+                                    <!-- Alineación superior -->
+                                    <span style="font-weight: bold; white-space: nowrap;">USUARIO: </span>
+                                    <span style="text-transform: capitalize; margin-left: 3px;">
+                                        {{ $page.props.auth.user.nombre.toLowerCase() }} {{
+                                            $page.props.auth.user.apellido.toLowerCase() }}
+                                    </span>
+                                </div>
+                                <div style="display: flex; align-items: flex-start;">
+                                    <!-- Alineación superior -->
+                                    <span style="font-weight: bold; white-space: nowrap;">FECHA: </span>
+                                    <span style="margin-left: 3px;">{{ getCurrentDate() }}</span>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
 
-        <!-- Main Content Table -->
-        <table style="width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 0;">
-            <thead>
-                <tr style="background-color: #e6e6e6; font-weight: bold; text-transform: uppercase;">
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 2%;">N°</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 15%;">Detalle</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Solicitud de desembolsos de Recursos Humanos en Bs.</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Número de beneficiarios PCD.</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Monto total pagado a PCD. en Bs.</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Número de pagos a PCD beneficiadas</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 7%;">Cantidad de personas que no han cobrado el bono PCD.</th>
-                    <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Total de saldos no cancelados</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="(item, index) in props.datos" :key="item.id_gestion">
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">{{ index + 1 }}</td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: left; vertical-align: middle; text-transform: uppercase;">
-                        Solicitud Económica <span class="ms-2">{{ getMonthNameFromDate(item.mes) }} {{ item.gestion }}</span>
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
-                        {{ formatCurrency(item.presupuesto_mes) || 0 }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
-                        {{ item.cantidad_habilitadas }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
-                        {{ formatCurrency(item.total_pagado_contexto) }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
-                        {{ item.cantidad_total_pagos }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
-                        {{ item.cantidad_no_pagados }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
-                        {{ formatCurrency((item.presupuesto_mes || 0) - (item.total_pagado_contexto || 0)) }}
-                    </td>
-                </tr>
-            </tbody>
-            <tfoot>
-                <tr style="background-color: #f2f2f2; font-weight: bold;">
-                    <!-- Usamos colspan="2" para unir las primeras dos celdas (N° y Detalle) -->
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;" colspan="2">
-                        TOTAL GENERAL
-                    </td>
+            <!-- Main Content Table -->
+            <table style="width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 0;">
+                <thead>
+                    <tr style="background-color: #e6e6e6; font-weight: bold; text-transform: uppercase;">
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 2%;">N°</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 15%;">
+                            Detalle</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">
+                            Solicitud de desembolsos de Recursos Humanos en Bs.</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Número
+                            de beneficiarios PCD.</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Monto
+                            total pagado a PCD. en Bs.</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Número
+                            de pagos a PCD beneficiadas</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 7%;">
+                            Cantidad de personas que no han cobrado el bono PCD.</th>
+                        <th style="border: 1px solid #333; padding-bottom: 10px; text-align: center; width: 8%;">Total
+                            de saldos no cancelados</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(item, index) in props.datos" :key="item.id_gestion">
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ index + 1 }}</td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: left; vertical-align: middle; text-transform: uppercase;">
+                            Solicitud Económica <span class="ms-2">{{ getMonthNameFromDate(item.mes) }} {{ item.gestion
+                                }}</span>
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
+                            {{ formatCurrency(item.presupuesto_mes) || 0 }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ item.cantidad_habilitadas }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
+                            {{ formatCurrency(item.total_pagado_contexto) }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ item.cantidad_total_pagos }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ item.cantidad_no_pagados }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
+                            {{ formatCurrency((item.presupuesto_mes || 0) - (item.total_pagado_contexto || 0)) }}
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr style="background-color: #f2f2f2; font-weight: bold;">
+                        <!-- Usamos colspan="2" para unir las primeras dos celdas (N° y Detalle) -->
+                        <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;"
+                            colspan="2">
+                            TOTAL GENERAL
+                        </td>
 
-                    <!-- Ahora mostramos los totales calculados para cada columna -->
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
-                        {{ formatCurrency(totalGeneralPresupuesto) }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
-                        {{ totalGeneralBeneficiarios }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
-                        {{ formatCurrency(totalGeneralPagado) }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
-                        {{ totalGeneralPagos }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
-                        {{ totalGeneralNoPagados }}
-                    </td>
-                    <td style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
-                        {{ formatCurrency(totalSaldoDisponible) }}
-                    </td>
-                </tr>
-            </tfoot>
-        </table>
+                        <!-- Ahora mostramos los totales calculados para cada columna -->
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
+                            {{ formatCurrency(totalGeneralPresupuesto) }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ totalGeneralBeneficiarios }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
+                            {{ formatCurrency(totalGeneralPagado) }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ totalGeneralPagos }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: center; vertical-align: middle;">
+                            {{ totalGeneralNoPagados }}
+                        </td>
+                        <td
+                            style="border: 1px solid #ddd; font-size: 10px; padding-bottom: 12px; text-align: right; vertical-align: middle;">
+                            {{ formatCurrency(totalSaldoDisponible) }}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
 
-    </div>
-</AuthenticatedLayout>
+        </div>
+    </AuthenticatedLayout>
 </template>
 
 <style>

@@ -5,7 +5,7 @@ import { Link, usePage, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { can } from '@/lib/can.ts';
 
-const { isOpen } = useSidebar();
+const { isOpen, closeSidebar } = useSidebar();
 const page = usePage();
 
 const activeClass = "bg-[#223B87] border-gray-50 rounded-r-lg mr-2 text-white border-l-4 border-black dark:text-white dark:bg-gray-700 dark:text-white dark:border-white"
@@ -103,6 +103,7 @@ function updateActiveButton() {
 
 const setActiveButton = (button) => {
     activeButton.value = button;
+    isOpen.value = false;
 }
 </script>
 
@@ -113,14 +114,13 @@ const setActiveButton = (button) => {
             class="fixed inset-0 z-20 transition-opacity bg-black opacity-50 lg:hidden" @click="isOpen = false" />
         <!-- End Backdrop -->
 
-        <div :class="isOpen ? 'translate-x-0 ease-out ml-1 mt-1 mb-1' : '-translate-x-full ease-in'"
-            class="rounded-lg fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto transition duration-300 transform bg-[#13326A] dark:bg-gray-900 lg:translate-x-0 lg:static lg:inset-0">
+        <div :class="isOpen ? 'translate-x-0 ease-out' : '-translate-x-96 ease-in'"
+            class="ml-1 mt-1 mb-1 sm:mt-0 sm:mb-0 rounded-lg fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto transition duration-300 transform bg-[#13326A] dark:bg-gray-900 lg:translate-x-0 lg:static lg:inset-0">
             <div class="flex items-center justify-center mt-8">
-                <div class="flex items-center">
-                    <!-- Texto  -->
-                    <span class="mx-2 text-4xl font-semibold text-white dark:text-white"
-                        style="text-shadow: -5px 5px 4px rgb(158 158 158 / 79%);">UMADIS</span>
-                </div>
+                <!-- Texto  -->
+                <span class="mx-2 text-4xl font-semibold text-white dark:text-white"
+                    style="text-shadow: -5px 5px 4px rgb(158 158 158 / 79%);">UMADIS</span>
+
             </div>
             <AuthenticatedLayout>
                 <nav class="mt-8">
@@ -209,8 +209,18 @@ const setActiveButton = (button) => {
                         <span class="mx-4">Roles</span>
                     </Link>
 
+                    <Link class="flex items-center px-6 py-2 mt-4 duration-200"
+                        :class="[activeButton === 'bandeja' ? activeClass : inactiveClass]"
+                        :href="route('bandeja.index')" @click="setActiveButton('bandeja')">
+                        <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24"
+                            height="24" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd"
+                                d="M9 15a6 6 0 1 1 12 0 6 6 0 0 1-12 0Zm3.845-1.855a2.4 2.4 0 0 1 1.2-1.226 1 1 0 0 1 1.992-.026c.426.15.809.408 1.111.749a1 1 0 1 1-1.496 1.327.682.682 0 0 0-.36-.213.997.997 0 0 1-.113-.032.4.4 0 0 0-.394.074.93.93 0 0 0 .455.254 2.914 2.914 0 0 1 1.504.9c.373.433.669 1.092.464 1.823a.996.996 0 0 1-.046.129c-.226.519-.627.94-1.132 1.192a1 1 0 0 1-1.956.093 2.68 2.68 0 0 1-1.227-.798 1 1 0 1 1 1.506-1.315.682.682 0 0 0 .363.216c.038.009.075.02.111.032a.4.4 0 0 0 .395-.074.93.93 0 0 0-.455-.254 2.91 2.91 0 0 1-1.503-.9c-.375-.433-.666-1.089-.466-1.817a.994.994 0 0 1 .047-.134Zm1.884.573.003.008c-.003-.005-.003-.008-.003-.008Zm.55 2.613s-.002-.002-.003-.007a.032.032 0 0 1 .003.007ZM4 14a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0v-4a1 1 0 0 1 1-1Zm3-2a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1Zm6.5-8a1 1 0 0 1 1-1H18a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-.796l-2.341 2.049a1 1 0 0 1-1.24.06l-2.894-2.066L6.614 9.29a1 1 0 1 1-1.228-1.578l4.5-3.5a1 1 0 0 1 1.195-.025l2.856 2.04L15.34 5h-.84a1 1 0 0 1-1-1Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span class="mx-4">Bandeja de Pagos</span>
+                    </Link>
                 </nav>
-
             </AuthenticatedLayout>
         </div>
     </div>

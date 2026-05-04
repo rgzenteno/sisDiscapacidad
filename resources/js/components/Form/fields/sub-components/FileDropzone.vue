@@ -24,47 +24,81 @@ const emit = defineEmits(['click', 'drop', 'dragover', 'dragleave']);
 <template>
     <div @drop.prevent="emit('drop', $event)" @dragover.prevent="emit('dragover')"
         @dragleave.prevent="emit('dragleave')" @click="emit('click')" :class="[
-            'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-200',
+            'group relative border-[1.5px] border-dashed rounded-xl px-6 py-2 text-center cursor-pointer transition-all duration-200',
             isDragging
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-500'
                 : error
-                    ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                    : 'border-gray-300 hover:border-gray-400 dark:border-gray-600 dark:hover:border-gray-500'
+                    ? 'border-red-400 bg-red-50 dark:bg-red-950/30 dark:border-red-500'
+                    : 'border-gray-200 hover:border-gray-300 bg-white dark:bg-transparent dark:border-gray-700 dark:hover:border-gray-500'
         ]">
-        <div class="flex flex-col items-center justify-center">
-            <!-- Icono de upload -->
-            <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" stroke="currentColor" fill="none"
-                viewBox="0 0 48 48">
-                <path
-                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+        <div class="flex flex-col items-center gap-3">
 
-            <!-- Texto informativo -->
-            <div class="mt-4">
-                <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    {{ field.placeholder || 'Arrastra tu archivo aquí o haz clic para seleccionar' }}
-                </p>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {{ field.acceptedTypes || '.xlsx,.xls,.csv' }} hasta {{ field.maxSize || 5 }}MB
-                </p>
-
-                <!-- Mostrar columnas requeridas -->
-                <!-- <div v-if="field.requiredColumns && field.requiredColumns.length > 0" class="mt-3">
-                    <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Columnas requeridas:
-                    </p>
-                    <div class="flex flex-wrap gap-1 justify-center">
-                        <span
-                            v-for="col in field.requiredColumns"
-                            :key="col"
-                            class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
-                        >
-                            {{ col }}
-                        </span>
-                    </div>
-                </div> -->
+            <!-- Ícono -->
+            <div :class="[
+                'w-12 h-12 rounded-lg flex items-center justify-center transition-colors duration-200',
+                isDragging
+                    ? 'bg-blue-100 dark:bg-blue-900/40'
+                    : error
+                        ? 'bg-red-100 dark:bg-red-900/40'
+                        : 'bg-gray-100 dark:bg-gray-800 group-hover:bg-gray-200 dark:group-hover:bg-gray-700'
+            ]">
+                <!-- Ícono de error -->
+                <svg v-if="error" class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <!-- Ícono dragging -->
+                <svg v-else-if="isDragging" class="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+                <!-- Ícono normal -->
+                <svg v-else class="w-5 h-5 text-gray-400 dark:text-gray-500 transition-colors group-hover:text-gray-500"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
             </div>
+
+            <!-- Texto -->
+            <div class="space-y-1">
+                <p :class="[
+                    'text-sm font-medium',
+                    isDragging ? 'text-blue-600 dark:text-blue-400'
+                        : error ? 'text-red-600 dark:text-red-400'
+                            : 'text-gray-700 dark:text-gray-200'
+                ]">
+                    {{ isDragging ? 'Suelta para cargar' : error
+                        ? error : (field.placeholder || 'Arrastra tu archivo aquí') }}
+                </p>
+                <p v-if="!isDragging" :class="[
+                    'text-xs',
+                    error ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'
+                ]">
+                    o <span :class="error ? '' : 'text-blue-500 hover:underline'">haz clic para seleccionar</span>
+                </p>
+            </div>
+
+            <!-- Pill de tipos aceptados -->
+            <span :class="[
+                'text-[11px] px-3 py-1 rounded-full border transition-colors duration-200',
+                isDragging
+                    ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800'
+                    : error
+                        ? 'bg-red-100 text-red-600 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-800'
+                        : 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+            ]">
+                {{ field.acceptedTypes || '.xlsx · .xls · .csv' }} — máx {{ field.maxSize || 5 }}MB
+            </span>
+
         </div>
     </div>
 </template>

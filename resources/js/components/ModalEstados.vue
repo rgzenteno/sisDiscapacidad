@@ -47,7 +47,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
             <div v-if="props.tipo != 'registrado'">
 
                 <!-- Contenido -->
-                <div class="p-8 text-center">
+                <div class="py-7 px-3 sm:p-8 text-center">
                     <!-- Baja Temporal -->
                     <div v-show="props.tipo === 'baja_temporal'">
                         <!-- Icono -->
@@ -91,7 +91,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                         <!-- Texto -->
                         <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                             El beneficiario está marcado con
-                            <span class="font-semibold text-gray-800 dark:text-gray-100">Baja Definitiva</span>, lo que
+                            <span class="font-semibold text-red-700 dark:text-gray-100">Baja Definitiva</span>, lo que
                             significa que no es elegible para recibir más pagos de
                             bonos. Si considera que esta baja es un
                             <span class="font-semibold text-gray-800 dark:text-gray-100">error</span>, por favor

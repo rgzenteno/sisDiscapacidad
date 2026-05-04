@@ -3,15 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Carnet;
-use App\Models\NotificacionTutor;
 use App\Models\Persona;
-use App\Models\User;
 use App\Services\LogService;
-use App\Traits\PagosDisponiblesTrait;
 use Exception;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class CarnetController extends Controller
@@ -54,15 +49,15 @@ class CarnetController extends Controller
         if ($referrer) {
             if (str_contains($referrer, '/habilitado')) {
                 $origen = 'Habilitaciones';
-                session(['carnet_origen' => 'Habilitaciones']); // 👈 CAMBIADO
+                session(['carnet_origen' => 'Habilitaciones']);
             } elseif (str_contains($referrer, '/persona')) {
                 $origen = 'Beneficiarios';
-                session(['carnet_origen' => 'Beneficiarios']); // 👈 CAMBIADO
+                session(['carnet_origen' => 'Beneficiarios']);
             } else {
-                $origen = session('carnet_origen', 'Beneficiarios'); // 👈 CAMBIADO default
+                $origen = session('carnet_origen', 'Beneficiarios');
             }
         } else {
-            $origen = session('carnet_origen', 'Beneficiarios'); // 👈 CAMBIADO default
+            $origen = session('carnet_origen', 'Beneficiarios');
         }
 
         $nombreCompleto = $nombre->nombre_persona . ' ' . $nombre->apellido_persona;
@@ -89,19 +84,18 @@ class CarnetController extends Controller
      */
     public function store(Request $request)
     {
+        //dd($request->all());
         $data = $request->all();
 
-        //dd($data);
         $id_persona = $data['id_persona'];
 
         // Buscar la persona
         $persona = Persona::find($id_persona);
-        $nombre = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
 
-        // Calcular fecha de vencimiento (4 años después de fecha_emision)
-        if (isset($data['fecha_emision'])) {
-            $fechaEmision = \Carbon\Carbon::parse($data['fecha_emision']);
-            $data['fecha_vencimiento'] = $fechaEmision->addYears(4)->format('Y-m-d');
+
+        if (!empty($data['indefinido'])) {
+            $data['fecha_emision'] = null;
+            $data['fecha_vencimiento'] = now();
         }
 
         // Crear el carnet con la fecha_vencimiento calculada
@@ -122,7 +116,22 @@ class CarnetController extends Controller
             $persona->save();
         }
 
-        $this->logService->logCreation('Carnet', $carnet, "Carnet agregado, beneficiario: {$nombre}");
+        $nombre = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
+
+        $this->logService->logCreation(
+            'Carnet',
+            $carnet,
+            "Se registró el carnet de discapacidad del beneficiario {$nombre}.",
+            null,
+            [
+                'beneficiario'      => $nombre,
+                'c.i.'              => $persona->ci_persona,
+                'c.i. disc.'        => $carnet->doc,
+                'discapacidad'      => $carnet->discapacidad,
+                'fecha emision'     => $carnet->fecha_emision     ?? 'Indefinido',
+                'fecha vencimiento' => $carnet->fecha_vencimiento  ?? 'Indefinido',
+            ]
+        );
     }
 
     /**
@@ -147,43 +156,62 @@ class CarnetController extends Controller
     public function update(Request $request, string $id)
     {
         $carnet = Carnet::findOrFail($id);
-
-        // Buscar la persona usando el id_persona del carnet
         $persona = Persona::find($carnet->id_persona);
 
-        // Guardar datos antiguos antes de la actualización
-        $oldData = $carnet->getOriginal();
-
-        // Guardamos los datos que vienen en el request
         $fieldsToUpdate = $request->all();
 
-        // Calcular fecha de vencimiento (4 años después de fecha_emision)
-        if (isset($fieldsToUpdate['fecha_emision'])) {
-            $fechaEmision = \Carbon\Carbon::parse($fieldsToUpdate['fecha_emision']);
-            $fieldsToUpdate['fecha_vencimiento'] = $fechaEmision->addYears(4)->format('Y-m-d');
+        if (!empty($fieldsToUpdate['indefinido'])) {
+            $fieldsToUpdate['fecha_emision'] = null;
+            $fieldsToUpdate['fecha_vencimiento'] = now()->format('Y-m-d');
         }
+        unset($fieldsToUpdate['indefinido']);
 
-        // Preparar los cambios para el log
-        $changes = [
-            'campos_modificados' => [],
-            'valores_anteriores' => [],
-            'valores_nuevos' => []
+        $mapaLabels = [
+            'doc'              => 'Nº Doc.',
+            'discapacidad'     => 'Discapacidad',
+            'fecha_emision'    => 'Fecha Emisión',
+            'fecha_vencimiento' => 'Fecha Vencimiento',
         ];
 
-        // Registrar los cambios
-        foreach ($fieldsToUpdate as $field => $newValue) {
-            if (isset($oldData[$field]) && $oldData[$field] !== $newValue) {
-                $changes['campos_modificados'][$field] = $field;
-                $changes['valores_anteriores'][$field] = $oldData[$field];
-                $changes['valores_nuevos'][$field] = $newValue;
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
+
+        $formatearFecha = fn($campo, $valor) => in_array($campo, ['fecha_emision', 'fecha_vencimiento']) && is_null($valor)
+            ? 'Indefinido'
+            : $valor;
+
+        foreach ($fieldsToUpdate as $campo => $nuevoValor) {
+            if (!array_key_exists($campo, $mapaLabels)) continue;
+
+            $valorAnterior = $carnet->$campo;
+            $label         = $mapaLabels[$campo];
+
+            if ($valorAnterior != $nuevoValor) {
+                $camposModificados[$label] = $formatearFecha($campo, $nuevoValor);
+                $valoresAnteriores[$label] = $formatearFecha($campo, $valorAnterior);
+                $valoresNuevos[$label]     = $formatearFecha($campo, $nuevoValor);
             }
         }
 
-        // Actualizamos los datos del carnet
+        if (empty($camposModificados)) {
+            return;
+        }
+
         $carnet->update($fieldsToUpdate);
 
         $nombre = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
-        $this->logService->logUpdate('Carnet', $carnet, $changes, "Carnet Actualizado: {$nombre}");
+
+        $this->logService->logUpdate(
+            'Carnet',
+            $carnet,
+            [
+                'campos_modificados' => $camposModificados,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos'     => $valoresNuevos,
+            ],
+            "Se actualizó el carnet de disc. de {$nombre} en el sistema."
+        );
     }
 
     /**

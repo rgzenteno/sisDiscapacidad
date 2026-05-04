@@ -16,6 +16,10 @@ const props = defineProps({
     submensaje: {
         type: String,
         default: null
+    },
+    processing: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -72,18 +76,18 @@ const handleConfirmar = () => {
 
             <!-- Botón cerrar (X) -->
             <div class="flex items-start gap-3 flex-shrink-0 ms-3">
-                    <button type="button" @click="emit('close')"
-                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
-                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 6l12 12M6 18L18 6" />
-                        </svg>
-                    </button>
-                </div>
+                <button type="button" @click="emit('close')"
+                    class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
+                    <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg" fill="none"
+                        viewBox="0 0 24 24">
+                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 6l12 12M6 18L18 6" />
+                    </svg>
+                </button>
+            </div>
 
             <!-- Contenido -->
-            <div class="p-8 text-center">
+            <div class="py-8 sm:p-8 text-center">
                 <!-- Icono -->
                 <div :class="[
                     'w-16 h-16 mx-auto flex items-center justify-center rounded-full shadow-inner mb-4',
@@ -127,11 +131,22 @@ const handleConfirmar = () => {
                     class="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition">
                     Cancelar
                 </button>
-                <button @click="handleConfirmar" :class="[
+                <!-- Reemplaza el botón de confirmar -->
+                <button @click="handleConfirmar" :disabled="props.processing" :class="[
                     'flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition',
-                    config.botonColor
+                    props.processing
+                        ? 'bg-gray-400 cursor-not-allowed opacity-70'
+                        : config.botonColor
                 ]">
-                    {{ config.botonTexto }}
+                    <span v-if="props.processing" class="flex items-center justify-center gap-2">
+                        <svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
+                            viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        </svg>
+                        Procesando...
+                    </span>
+                    <span v-else>{{ config.botonTexto }}</span>
                 </button>
             </div>
         </div>

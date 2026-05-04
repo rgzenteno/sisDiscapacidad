@@ -1,7 +1,9 @@
 <template>
     <span v-if="iconButton" class="relative inline-block">
-        <div v-if="ripple" :class="rippleColor" class="w-3.5 h-3.5 ripple-background top-1 right-1.5"></div>
-        <svg :width="size" :height="height" viewBox="0 0 24 24" :fill="fill" :stroke="stroke"
+        <div v-if="ripple" :class="[rippleColor, rippleSmall ? 'ripple-small' : 'ripple-normal']"
+            class="ripple-background" :style="`width: ${rippleSize}px; height: ${rippleSize}px;`">
+        </div>
+        <svg :width="size" :height="height" :viewBox="viewBox" :fill="fill" :stroke="stroke"
             :stroke-width="strokeWidth" stroke-linecap="round" stroke-linejoin="round" :class="className">
             <component :is="iconPaths[name]" />
         </svg>
@@ -10,8 +12,10 @@
         class="cursor-pointer group relative p-1 pb-0 rounded-lg transition-all duration-200 hover:shadow-md"
         :title="title">
         <span class="relative inline-block">
-            <div v-if="ripple" :class="rippleColor" class="w-3.5 h-3.5 ripple-background top-1 right-1.5"></div>
-            <svg :width="size" :height="height" viewBox="0 0 24 24" :fill="fill" :stroke="stroke"
+            <div v-if="ripple" :class="[rippleColor, rippleSmall ? 'ripple-small' : 'ripple-normal']"
+                class="ripple-background" :style="`width: ${rippleSize}px; height: ${rippleSize}px;`">
+            </div>
+            <svg :width="size" :height="height" :viewBox="viewBox" :fill="fill" :stroke="stroke"
                 :stroke-width="strokeWidth" stroke-linecap="round" stroke-linejoin="round" :class="className">
                 <component :is="iconPaths[name]" />
             </svg>
@@ -28,8 +32,6 @@ const props = defineProps({
     size: { type: Number, default: 24 },
     height: { type: Number, default: 24 },
     color: { type: String, default: 'currentColor' },
-    fill: { type: String, default: 'none' },
-    stroke: { type: String, default: 'currentColor' },
     strokeWidth: { type: String, default: '2' },
     className: { type: String, default: 'text-gray-800' },
     style: {
@@ -41,6 +43,10 @@ const props = defineProps({
     rippleColor: { type: String, default: 'bg-orange-500' },
     fill: { type: String, default: 'currentColor' },
     stroke: { type: String, default: 'none' },
+    rippleSize: { type: Number, default: 10 },
+    rippleScale: { type: Number, default: 4 },
+    rippleSmall: { type: Boolean, default: false },
+    viewBox: { type: String, default: '0 0 24 24' },
 });
 
 const iconPaths = {
@@ -132,7 +138,68 @@ const iconPaths = {
     clipboardList: () => h('path', {
         'fill-rule': 'evenodd',
         d: 'M8 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1h2a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2Zm6 1h-4v2H9a1 1 0 0 0 0 2h6a1 1 0 1 0 0-2h-1V4Zm-3 8a1 1 0 0 1 1-1h3a1 1 0 1 1 0 2h-3a1 1 0 0 1-1-1Zm-2-1a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H9Zm2 5a1 1 0 0 1 1-1h3a1 1 0 1 1 0 2h-3a1 1 0 0 1-1-1Zm-2-1a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H9Z',
-    'clip-rule': 'evenodd'
+        'clip-rule': 'evenodd'
     }),
+    search: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'm21 21-3.5-3.5M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
+        'clip-rule': 'evenodd'
+    }),
+    bajaTemporal: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z',
+        'clip-rule': 'evenodd'
+    }),
+    depurado: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'M8.586 2.586A2 2 0 0 1 10 2h4a2 2 0 0 1 2 2v2h3a1 1 0 1 1 0 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a1 1 0 0 1 0-2h3V4a2 2 0 0 1 .586-1.414ZM10 6h4V4h-4v2Zm1 4a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0v-8Zm4 0a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0v-8Z',
+        'clip-rule': 'evenodd'
+    }),
+    dollar: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+        'clip-rule': 'evenodd'
+    }),
+    printer: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'M8 3a2 2 0 0 0-2 2v3h12V5a2 2 0 0 0-2-2H8Zm-3 7a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h1v-4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v4h1a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H5Zm4 11a1 1 0 0 1-1-1v-4h8v4a1 1 0 0 1-1 1H9Z',
+        'clip-rule': 'evenodd'
+    }),
+    arrowDownload: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'M4 15v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2m-8 1V4m0 12-4-4m4 4 4-4',
+        'clip-rule': 'evenodd'
+    }),
+    bajaDefinitiva: () => h('path', {
+        'fill-rule': 'evenodd',
+        d: 'M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z',
+        'clip-rule': 'evenodd'
+    }),
+    fileCheck: () => [
+        h('path', {
+            'fill-rule': 'evenodd',
+            d: 'M9 7V2.221a2 2 0 0 0-.5.365L4.586 6.5a2 2 0 0 0-.365.5H9Z',
+            'clip-rule': 'evenodd'
+        }),
+        h('path', {
+            'fill-rule': 'evenodd',
+            d: 'M11 7V2h7a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9h5a2 2 0 0 0 2-2Zm4.707 5.707a1 1 0 0 0-1.414-1.414L11 14.586l-1.293-1.293a1 1 0 0 0-1.414 1.414l2 2a1 1 0 0 0 1.414 0l4-4Z',
+            'clip-rule': 'evenodd'
+        })
+    ],
+    cash: () => [
+        h('path', {
+            'fill-rule': 'evenodd',
+            d: 'M7 6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2v-4a3 3 0 0 0-3-3H7V6Z',
+            'clip-rule': 'evenodd'
+        }),
+        h('path', {
+            'fill-rule': 'evenodd',
+            d: 'M2 11a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7Zm7.5 1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z',
+            'clip-rule': 'evenodd'
+        }),
+        h('path', { d: 'M10.5 14.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z' }),
+    ],
+
 };
 </script>

@@ -50,7 +50,7 @@ const tutorFields = [
         name: 'ci_tutor',
         label: 'C.I.',
         type: 'number',
-        required: false,
+        required: true,
         placeholder: 'la cédula de identidad',
         readonly: false,
         range: 10,
@@ -110,26 +110,24 @@ const tutorFields = [
         range: 40,
     },
     {
-        typeInput: 'text',
+        typeInput: 'direccion',
         name: 'direccion',
         label: 'Dirección',
-        type: 'text',
         required: false,
         placeholder: 'la dirección',
         readonly: false,
         nameStyle: false,
-        range: 49,
+        range: 200,
     }
 ];
-
 // ============================================================================
 // CONFIGURACIÓN DE TABLA
 // ============================================================================
 const tableColumns = [
     { label: 'Nombre Completo', field: 'nombre_completo', headerClass: 'px-3', cellClass: 'whitespace-nowrap capitalize' },
-    { label: 'Cedula de Identidad', field: 'ci_tutor', headerClass: 'px-3', cellClass: '' },
+    { label: 'C.I.', field: 'ci_tutor', headerClass: 'px-3', cellClass: '' },
     { label: 'Teléfono', field: 'telefono', headerClass: 'text-center px-3', cellClass: '' },
-    { label: 'Correo', field: 'email', headerClass: 'text-center px-3', cellClass: '' },
+    { label: 'Correo', field: 'email', headerClass: 'text-center px-3 hidden sm:block', cellClass: '' },
     { label: 'Dirección', field: 'direccion', headerClass: 'text-center px-3', cellClass: 'capitalize' },
     { label: 'Acciones', field: 'acciones', headerClass: 'text-center px-3', cellClass: '' }
 ];
@@ -238,7 +236,7 @@ const closeForm = () => {
 
     <Head title="UMADIS" />
 
-    <div class="flex h-screen bg-gray-200 font-roboto">
+    <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
         <!-- Sidebar de navegación -->
         <Sidebar />
 
@@ -278,15 +276,15 @@ const closeForm = () => {
             <!-- ============================================================================ -->
             <!-- ENCABEZADO DE PÁGINA -->
             <!-- ============================================================================ -->
-            <div class="px-5 py-3 flex justify-between">
-                <h1 class="font-semibold text-2xl">Tutores</h1>
-                <Rutas label1="Inicio" label3="Tutores" />
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Tutores</h1>
+                <Rutas label1="Inicio" label2="Tutores" class="sm:text-xs" />
             </div>
 
             <!-- ============================================================================ -->
             <!-- BARRA DE HERRAMIENTAS -->
             <!-- ============================================================================ -->
-            <div class="flex justify-between p-4 pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
+            <div class="flex justify-between p-2 sm:p-4 sm:pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
                 <Busqueda :initial-value="filters.buscador" name="tutor" only="tutor" :data="tutor"
                     ruta-busqueda="tutor.index" />
             </div>
@@ -300,7 +298,7 @@ const closeForm = () => {
                 <template #row="{ item }">
 
                     <!-- Columna: Nombre Completo -->
-                    <td class="capitalize px-3 py-1.5 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                    <td class="uppercase px-3 py-1.5 font-medium text-gray-900 whitespace-nowrap dark:text-white">
                         {{ item.nombre_tutor }} {{ item.apellido_tutor }}
                     </td>
 
@@ -326,7 +324,7 @@ const closeForm = () => {
                     </td>
 
                     <!-- Columna: Correo -->
-                    <td class="py-1.5">
+                    <td class="py-1.5 hidden sm:block">
                         <div @click.prevent="item.email ? openEmail(item.email) : null"
                             :class="item.email ? 'cursor-pointer hover:bg-red-100 rounded-lg ' : 'cursor-not-allowed'"
                             class="action-link flex items-center justify-center gap-1">

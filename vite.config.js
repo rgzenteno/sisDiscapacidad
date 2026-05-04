@@ -3,6 +3,12 @@ import laravel from 'laravel-vite-plugin';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
+    server: {
+        host: '0.0.0.0', // Permite conexiones externas
+        hmr: {
+            host: '192.168.1.100' // <--- ¡IMPORTANTE! Pon aquí la IP de tu PC
+        },
+    },
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.js'],
@@ -15,14 +21,11 @@ export default defineConfig({
                     includeAbsolute: false,
                 },
             },
-            css: {
-                postcss: './postcss.config.js',
-            },
         }),
     ],
     resolve: {
         alias: {
-            vue: 'vue/dist/vue.esm-bundler.js', // ← AGREGAR ESTO
+            vue: 'vue/dist/vue.esm-bundler.js',
         },
     },
 });

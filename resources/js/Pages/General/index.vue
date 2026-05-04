@@ -86,83 +86,109 @@ const modalData = ref({
 });
 // ============ FIN REFS - DATOS ============ //
 
-// ============ INICIO CONFIGURACIÓN DE CAMPOS ============ //
-const tutorFields = [{
-    typeCi: 'ci',
-    typeInput: 'cedula',
-    name: 'ci_tutor',
-    label: 'C.I.',
-    type: 'number',
-    required: false,
-    placeholder: 'la cédula de identidad',
-    readonly: false,
-    range: 10,
-},
-{
-    typeCi: 'ci',
-    typeInput: 'comple',
-    name: 'complemento_tutor',
-    label: 'Complemento C.I.',
-    type: 'complemento',
-    required: false,
-    readonly: false,
-    hidden: true
-},
-{
-    typeInput: 'text',
-    name: 'nombre_tutor',
-    label: 'Nombre',
-    type: 'text',
-    required: true,
-    placeholder: 'el nombre',
-    readonly: false,
-    nameStyle: true,
-    range: 30,
-},
-{
-    typeInput: 'text',
-    name: 'apellido_tutor',
-    label: 'Apellidos',
-    type: 'text',
-    required: true,
-    placeholder: 'el apellido',
-    readonly: false,
-    nameStyle: true,
-    range: 30,
-},
-{
-    typeInput: 'text',
-    name: 'telefono',
-    label: 'Celular',
-    type: 'number',
-    required: false,
-    placeholder: 'el número de teléfono',
-    readonly: false,
-    range: 10,
-},
-{
-    typeInput: 'text',
-    name: 'email',
-    label: 'Correo Electronico',
-    type: 'email',
-    required: false,
-    placeholder: 'el correo electronico',
-    readonly: false,
-    nameStyle: false,
-    range: 40,
-},
-{
-    typeInput: 'text',
-    name: 'direccion',
-    label: 'Dirección',
-    type: 'text',
-    required: false,
-    placeholder: 'la dirección',
-    readonly: false,
-    nameStyle: false,
-    range: 49,
-}
-];
+// ============================================================================
+// CONFIGURACIÓN DE CAMPOS - TUTORES
+// ============================================================================
+const esPropioTutor = ref(false);
+
+const tutorFields = computed(() => [
+    {
+        typeInput: 'propio_check',
+        name: 'es_propio',
+        label: '',
+        onPropioChange: (val) => { esPropioTutor.value = !!val; }
+    },
+    {
+        typeCi: 'ci',
+        typeInput: 'cedula',
+        name: 'ci_tutor',
+        label: 'C.I.',
+        type: 'number',
+        required: !esPropioTutor.value,
+        placeholder: 'la cédula de identidad',
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        range: 10,
+        nameStyle: true,
+        autofocus: true,
+        opaco: esPropioTutor.value
+    },
+    {
+        typeCi: 'ci',
+        typeInput: 'comple',
+        name: 'complemento_tutor',
+        label: 'Complemento C.I.',
+        type: 'complemento',
+        required: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        hidden: true,
+        opaco: esPropioTutor.value
+    },
+    {
+        typeInput: 'text',
+        name: 'nombre_tutor',
+        label: 'Nombre',
+        type: 'text',
+        required: !esPropioTutor.value,
+        placeholder: 'el nombre',
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        nameStyle: true,
+        range: 30,
+        opaco: esPropioTutor.value
+    },
+    {
+        typeInput: 'text',
+        name: 'apellido_tutor',
+        label: 'Apellidos',
+        type: 'text',
+        required: !esPropioTutor.value,
+        placeholder: 'el apellido',
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        nameStyle: true,
+        range: 30,
+        opaco: esPropioTutor.value
+    },
+    {
+        typeInput: 'text',
+        name: 'telefono',
+        label: 'Celular',
+        type: 'number',
+        required: false,
+        placeholder: 'el número de teléfono',
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        range: 10,
+        opaco: esPropioTutor.value
+    },
+    {
+        typeInput: 'text',
+        name: 'email',
+        label: 'Correo Electronico',
+        type: 'email',
+        required: false,
+        placeholder: 'el correo electronico',
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        nameStyle: false,
+        range: 40,
+        opaco: esPropioTutor.value
+    },
+    {
+        typeInput: 'direccion',
+        name: 'direccion',
+        label: 'Dirección',
+        required: false,
+        placeholder: 'la dirección',
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        nameStyle: false,
+        range: 200,
+        opaco: esPropioTutor.value
+    }
+]);
 
 const personaFieldsEdit = [{
     typeInput: 'text',
@@ -406,6 +432,7 @@ const closeModal = () => {
 };
 
 const closeForm = () => {
+    esPropioTutor.value = false;
     showModalCarnetEdit.value = false;
     formCreateOption.value = false;
     formCreateOptionDis.value = false;
@@ -449,6 +476,7 @@ const openPendingModal = (registradoId) => {
 };
 
 const omitir = () => {
+    esPropioTutor.value = false;
     mostrarMensaje('advertencia', 'Registro sin tutor', 'El beneficiario será registrado sin tutor asignado.');
     formCreateTutor.value = false;
     openModalEditBeneficiary();
@@ -457,6 +485,7 @@ const omitir = () => {
 /* mostrarMensaje('advertencia', 'Registro sin tutor', 'El beneficiario será registrado sin tutor asignado.'); */
 const openModalEditBeneficiary = () => {
     formCreateTutor.value = false;
+    esPropioTutor.value = false;
 
     const dataGeneral = general.value.data.find(p => p.id_persona === selectedId.value);
 
@@ -529,7 +558,7 @@ const hideTooltip = () => {
 // Definición de columnas para la tabla de general
 const tableColumns = [
     { label: 'Nº', field: 'numero', headerClass: 'text-center px-2', cellClass: 'whitespace-nowrap' },
-    { label: 'Documento de Identidad', field: 'ci_persona', headerClass: 'px-2 whitespace-nowrap', cellClass: 'whitespace-nowrap' },
+    { label: 'C.I.', field: 'ci_persona', headerClass: 'px-2 whitespace-nowrap', cellClass: 'whitespace-nowrap' },
     { label: 'Apellidos + Nombres', field: 'nombre_completo', headerClass: 'px-1 whitespace-nowrap', cellClass: 'whitespace-nowrap' },
     { label: 'Tutor(a)', field: 'tutor', headerClass: 'px-1', cellClass: '' },
     { label: 'Documento de Respaldo', field: 'documento_respaldo', headerClass: 'px-1', cellClass: '' },
@@ -585,6 +614,10 @@ const handleImportar = (archivo, limpiarArchivo) => {
     });
 };
 
+const clearTutorSession = () => {
+    axios.delete(route('persona.clearTutorSession'));
+};
+
 const handleDescargarPlantilla = (nombrePlantilla) => {
     const link = document.createElement('a');
     link.href = configPlanillaGeneral.urlPlantilla;
@@ -596,7 +629,7 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
 <template>
 
     <Head title="UMADIS" />
-    <div class="flex h-screen bg-gray-200 font-roboto">
+    <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
         <Sidebar />
         <div class="flex-1 flex flex-col overflow-hidden">
             <div class="fixed top-4 right-4 flex flex-col gap-2 z-50">
@@ -608,8 +641,9 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
             <Transition name="fade">
                 <Form v-if="formEdit" :fields="personaFieldsEdit" :distritos="distrito" :idFor="selectedId"
                     :existing-data="selectedItem || {}" :edit-mode="true" submit-route="general.editRegistro"
-                    @add="handleEdit" @openFormOption="openOption" @sinDatos="sinDatos" @cancel="closeForm"
-                    @close="closeForm">
+                    @add="handleEdit" @openFormOption="openOption" @sinDatos="sinDatos"
+                    @cancel="() => { clearTutorSession(); closeForm(); }"
+                    @close="() => { clearTutorSession(); closeForm(); }">
                     <template #icon>
                         <svg class="w-5 h-5 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24"
                             height="24" fill="currentColor" viewBox="0 0 24 24">
@@ -735,12 +769,11 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
                     :resultadoImportacion="resultadoImportacion || {}" @update:modelValue="cerrarModalResultados" />
             </Transition>
 
-            <div class="py-2">
-                <div class="px-5 py-1 flex justify-between">
-                    <h1 class="font-semibold text-2xl">Registro General</h1>
-                    <Rutas label1="Inicio" label3="Registro General" />
-                </div>
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Registro General</h1>
+                <Rutas label1="Inicio" label3="Registro General" class="sm:text-xs" />
             </div>
+
             <div class="flex justify-between p-4 pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
                 <Busqueda :initial-value="filters.buscador" name="registro" only="general" :data="general"
                     ruta-busqueda="general.index" />
@@ -752,7 +785,6 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
                         <!-- Efecto de fondo desde el centro -->
                         <span
                             class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
-
                         <!-- Icono -->
                         <span class="relative z-10">
                             <Icon :icon-button="true" name="fileImport"
@@ -781,7 +813,7 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
                     </td>
 
                     <!-- Columna: Documento de Identidad -->
-                    <td class="px-3 py-1.5 whitespace-nowrap">
+                    <td class="px-2 py-1.5 whitespace-nowrap">
                         <div class="font-medium text-gray-900 dark:text-gray-100">
                             {{ item.ci_persona }}
                             <span v-if="item.complemento !== null">-{{ item.complemento }}</span>
@@ -797,24 +829,30 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
 
                     <!-- Columna: Tutor(a) -->
                     <td class="px-1 py-1.5">
-                        <div class="text-gray-700 dark:text-gray-300 whitespace-nowrap uppercase">
-                            <!-- Si tiene relación con tutor-->
-                            <span v-if="item.tutor">
-                                {{ item.tutor.nombre_completo }}
-                            </span>
-                            <!-- Si no tiene relación pero tiene tutor_nombre en persona-->
-                            <span v-else-if="item.tutor_nombre">
-                                {{ item.tutor_nombre }}
-                            </span>
-                            <!-- Si no tiene ninguno-->
-                            <span v-else class="block text-red-400 text-center italic capitalize text-xs">
-                                Sin datos
-                            </span>
+                        <div class="dark:text-gray-300">
+                            <div v-if="item.tutor_nombre === 'propio'" class="text-blue-500 italic font-bold">
+                                <!-- Si tiene relación con tutor-->
+                                Tutor Propio
+                            </div>
+                            <div v-else class="text-gray-700 uppercase whitespace-nowrap">
+                                <!-- Si tiene relación con tutor-->
+                                <span v-if="item.tutor">
+                                    {{ item.tutor.nombre_completo }}
+                                </span>
+                                <!-- Si no tiene relación pero tiene tutor_nombre en persona-->
+                                <span v-else-if="item.tutor_nombre">
+                                    {{ item.tutor_nombre }}
+                                </span>
+                                <!-- Si no tiene ninguno-->
+                                <span v-else class="block text-red-400 text-center italic capitalize text-xs">
+                                    Sin datos
+                                </span>
+                            </div>
                         </div>
                     </td>
 
                     <!-- Columna: Documento de Respaldo -->
-                    <td class="px-1 py-1.5">
+                    <td class="px-0 py-1.5">
                         <div class="text-gray-700 dark:text-gray-300 truncate max-w-xs"
                             :title="item.documento_respaldo">
                             <span v-if="item.documento_respaldo">{{ item.documento_respaldo }}</span>

@@ -66,7 +66,7 @@ watch(() => props.initialValue, (newValue) => {
             type="text"
             v-model="buscador"
             :placeholder="`Buscar ${props.name}...`"
-            class="p-2 block ps-10 pr-10 text-sm text-gray-900 border border-gray-300 rounded-lg w-80 bg-white focus:ring-gray-500 focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-gray-500 dark:focus:border-gray-500"
+            class="p-2 block ps-10 pr-10 text-sm text-gray-900 border border-gray-300 rounded-lg w-full sm:w-80 bg-white focus:ring-gray-500 focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-gray-500 dark:focus:border-gray-500"
         />
 
         <!-- Botón X para limpiar (solo visible cuando hay texto) -->

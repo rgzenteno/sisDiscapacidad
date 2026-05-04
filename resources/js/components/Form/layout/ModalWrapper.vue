@@ -11,7 +11,7 @@ const props = defineProps({
 
 <template>
     <div :class="[
-        'relative w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl transform transition-all duration-300 my-8',
+        'relative w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl transform transition-all duration-300 sm:my-8',
         maxWidth
     ]">
         <slot />

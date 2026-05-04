@@ -33,10 +33,12 @@ class Persona extends Model
     ];
 
     protected $casts = [
-        'fecha_registro' => 'date'
+        'fecha_registro' => 'date:Y-m-d',
     ];
 
-    // ============ RELACIONES ============ //
+    // ============================================================
+    // RELACIONES
+    // ============================================================
 
     public function tutor()
     {
@@ -53,20 +55,29 @@ class Persona extends Model
         return $this->hasMany(Habilitado::class, 'id_persona', 'id_persona');
     }
 
+    public function habilitado()
+    {
+        return $this->belongsTo(Habilitado::class, 'id_habilitado', 'id_habilitado');
+    }
+
     public function historialEstados()
     {
         return $this->hasMany(HistorialEstados::class, 'id_persona', 'id_persona');
     }
 
-    // 👇 NUEVA RELACIÓN: Para obtener solo el último estado
     public function ultimoEstado()
     {
         return $this->hasOne(HistorialEstados::class, 'id_persona', 'id_persona')
-            ->orderBy('fecha_registro', 'desc')
-            ->orderBy('id', 'desc');
+            ->whereIn('id', function ($query) {
+                $query->selectRaw('MAX(id)')
+                    ->from('historial_estados')
+                    ->groupBy('id_persona');
+            });
     }
 
-    // ============ ACCESSORS ============ //
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
 
     public function getNombreCompletoAttribute($value)
     {
@@ -83,13 +94,59 @@ class Persona extends Model
 
     public function getCarnetVigenteAttribute()
     {
-        if (!$this->carnet) {
-            return false;
-        }
-        return $this->carnet->fecha_vencimiento >= now();
+        return $this->carnet && $this->carnet->fecha_vencimiento >= now();
     }
 
-    // ============ SCOPES ============ //
+    // ============================================================
+    // SCOPES — TIPO DE REGISTRO
+    // ============================================================
+
+    public function scopePostulantes($query)
+    {
+        return $query->where('tipo_registro', 'postulante');
+    }
+
+    public function scopeBeneficiarios($query)
+    {
+        return $query->whereIn('tipo_registro', ['beneficiario', 'pendiente']);
+    }
+
+    // ============================================================
+    // SCOPES — ESTADO (basados en ultimoEstado)
+    // ============================================================
+
+    public function scopeActivos($query)
+    {
+        return $query->whereHas('ultimoEstado', fn($q) => $q->where('estado', 'activo'));
+    }
+
+    public function scopeBajaTemporal($query)
+    {
+        return $query->whereHas('ultimoEstado', fn($q) => $q->where('estado', 'baja_temporal'));
+    }
+
+    public function scopeBajaDefinitiva($query)
+    {
+        return $query->whereHas('ultimoEstado', fn($q) => $q->where('estado', 'baja_definitiva'));
+    }
+
+    public function scopeDepurado($query)
+    {
+        return $query->whereHas('ultimoEstado', fn($q) => $q->where('estado', 'depurado'));
+    }
+
+    // ============================================================
+    // SCOPES — CARNET
+    // ============================================================
+
+    public function scopeSinCarnet($query)
+    {
+        return $query->whereDoesntHave('carnet');
+    }
+
+    // ============================================================
+    // SCOPES — BÚSQUEDA
+    // ============================================================
 
     public function scopeSearch($query, $buscador, $campos = [])
     {
@@ -111,118 +168,62 @@ class Persona extends Model
         }
 
         $lowerSearch = strtolower($search);
+        $searchUnderscore = str_replace(' ', '_', $lowerSearch);
 
-        return $query->where(function ($q) use ($search, $lowerSearch) {
+        return $query->where(function ($q) use ($search, $lowerSearch, $searchUnderscore) {
             $q->where('ci_persona', 'like', "%{$search}%")
                 ->orWhere('complemento', 'like', "%{$search}%")
                 ->orWhere('nombre_persona', 'like', "%{$search}%")
                 ->orWhere('apellido_persona', 'like', "%{$search}%")
                 ->orWhere('nombre_completo', 'like', "%{$search}%")
                 ->orWhere('distrito', 'like', "%{$search}%")
+                ->orWhere('fecha_registro', 'like', "%{$search}%")
                 ->orWhere('observacion_persona', 'like', "%{$search}%")
-                ->orWhere('tipo_registro', 'like', "%{$search}%") // ✅ CORREGIDO
-                ->orWhereHas('tutor', function ($tutorQuery) use ($search) {
-                    $tutorQuery->where('nombre_tutor', 'like', "%{$search}%")
+                ->orWhere('tipo_registro', 'like', "%{$search}%")
+                ->orWhereHas(
+                    'tutor',
+                    fn($q) =>
+                    $q->where('nombre_tutor', 'like', "%{$search}%")
                         ->orWhere('apellido_tutor', 'like', "%{$search}%")
-                        ->orWhere('ci_tutor', 'like', "%{$search}%");
-                })
-                ->orWhereHas('ultimoEstado', function ($estadoQuery) use ($search, $lowerSearch) {
-                    $estadoQuery->where(function ($stateQuery) use ($search, $lowerSearch) {
-                        // Búsqueda principal
-                        $stateQuery->where('estado', 'like', "%{$search}%");
+                        ->orWhere('ci_tutor', 'like', "%{$search}%")
+                )
+                ->orWhereHas('ultimoEstado', function ($q) use ($search, $lowerSearch, $searchUnderscore) {
+                    $q->where('estado', 'like', "%{$search}%");
 
-                        // Solo agregar búsquedas especiales si no está buscando "activo"
-                        if (!str_contains($lowerSearch, 'activo')) {
-                            // Búsqueda de palabras completas
-                            if (str_contains($lowerSearch, 'definitiva')) {
-                                $stateQuery->orWhere('estado', 'like', '%baja_definitiva%');
-                            }
+                    if ($searchUnderscore !== $lowerSearch) {
+                        $q->orWhere('estado', 'like', "%{$searchUnderscore}%");
+                    }
 
-                            if (str_contains($lowerSearch, 'temporal')) {
-                                $stateQuery->orWhere('estado', 'like', '%baja_temporal%');
-                            }
-
-                            if (
-                                str_contains($lowerSearch, 'baja') &&
-                                !str_contains($lowerSearch, 'temporal') &&
-                                !str_contains($lowerSearch, 'definitiva')
-                            ) {
-                                $stateQuery->orWhere('estado', 'like', '%baja_temporal%')
-                                    ->orWhere('estado', 'like', '%baja_definitiva%');
-                            }
+                    if (!str_contains($lowerSearch, 'activo')) {
+                        if (str_contains($lowerSearch, 'definitiva')) {
+                            $q->orWhere('estado', 'baja_definitiva');
+                        } elseif (str_contains($lowerSearch, 'temporal')) {
+                            $q->orWhere('estado', 'baja_temporal');
+                        } elseif (str_contains($lowerSearch, 'depurado')) {
+                            $q->orWhere('estado', 'depurado');
+                        } elseif (str_contains($lowerSearch, 'baja')) {
+                            $q->orWhereIn('estado', ['baja_temporal', 'baja_definitiva']);
                         }
-
-                        // Búsqueda con guión bajo
-                        $searchWithUnderscore = str_replace(' ', '_', $lowerSearch);
-                        if ($searchWithUnderscore !== $lowerSearch) {
-                            $stateQuery->orWhere('estado', 'like', "%{$searchWithUnderscore}%");
-                        }
-                    });
+                    }
                 });
         });
     }
 
-    // 👇 CORREGIDO: Scope con relación correcta y tabla específica
+    // ============================================================
+    // SCOPES — EAGER LOADING
+    // ============================================================
+
     public function scopeConRelacionesCompletas($query)
     {
         return $query->with([
             'tutor:id_tutor,nombre_tutor,apellido_tutor,ci_tutor,complemento_tutor,telefono,email,direccion',
             'carnet:id_carnet,id_persona,doc,discapacidad,fecha_emision,fecha_vencimiento',
-            'ultimoEstado' => function ($q) {
-                $q->select([
-                    'historial_estados.id',
-                    'historial_estados.id_persona',
-                    'historial_estados.estado',
-                    'historial_estados.fecha_inicio',
-                    'historial_estados.fecha_fin',
-                    'historial_estados.fecha_registro',
-                    'historial_estados.usuario_modificacion',
-                    'historial_estados.observaciones',
-                    'historial_estados.created_at',
-                    'historial_estados.updated_at'
-                ]);
-            }
+            'ultimoEstado:id,id_persona,estado,fecha_inicio,fecha_fin,fecha_registro,usuario_modificacion,observaciones,created_at,updated_at',
         ]);
     }
 
     public function scopeOrdenar($query, $campo, $direccion = 'asc')
     {
         return $query->orderBy($campo, $direccion);
-    }
-
-    public function scopeActivo($query)
-    {
-        return $query->whereDoesntHave('ultimoEstado', function ($q) {
-            $q->where('estado', 'baja_definitiva');
-        });
-    }
-
-    public function scopeSinCarnet($query)
-    {
-        return $query->whereDoesntHave('carnet');
-    }
-
-    public function scopePostulantes($query)
-    {
-        return $query->where('tipo_registro', 'postulante');
-    }
-
-    public function scopeBeneficiarios($query)
-    {
-        return $query->whereIn('tipo_registro', ['beneficiario', 'pendiente']);
-    }
-
-    public function scopeConCarnetVigente($query)
-    {
-        return $query->whereHas('carnet', function ($q) {
-            $q->where('fecha_vencimiento', '>=', now());
-        });
-    }
-
-    public function scopeConCarnetVencido($query)
-    {
-        return $query->whereHas('carnet', function ($q) {
-            $q->where('fecha_vencimiento', '<', now());
-        });
     }
 }

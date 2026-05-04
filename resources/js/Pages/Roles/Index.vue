@@ -2,7 +2,7 @@
     <AuthenticatedLayout>
 
         <Head title="UMADIS" />
-        <div class="flex h-screen bg-gray-200 font-roboto">
+        <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
             <Sidebar />
             <div class="flex-1 flex flex-col overflow-hidden">
                 <div class="fixed top-4 right-4 flex flex-col gap-2 z-50">
@@ -49,13 +49,13 @@
                     </template>
                 </Form>
 
-                <div class="py-2">
-                    <div class="px-5 py-1 flex justify-between">
-                        <h1 class="font-semibold text-2xl">Roles</h1>
-                        <Rutas label1="Inicio" label3="Roles" />
-                    </div>
+                <div
+                    class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                    <h1 class="font-semibold text-xl sm:text-2xl">Roles</h1>
+                    <Rutas label1="Inicio" label3="Roles" class="sm:text-xs" />
                 </div>
-                <div class="flex justify-between p-4 pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
+
+                <div class="flex justify-between p-2 sm:p-4 sm:pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
                     <Busqueda :initial-value="filters.buscador" name="rol" only="roles" :data="roles"
                         ruta-busqueda="roles.index" />
                     <Button v-if="can('agregar-roles')" id="btn-agregar" @click.prevent="openRol()"
@@ -211,7 +211,8 @@
                                                 d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                         </svg>
                                         <span class="font-semibold">{{ selectedRole.permissions.length }}</span>
-                                        {{ selectedRole.permissions.length === 1 ? 'permiso asignado' : 'permisos asignados' }}
+                                        {{ selectedRole.permissions.length === 1
+                                            ? 'permiso asignado' : 'permisos asignados' }}
                                     </p>
                                 </div>
 

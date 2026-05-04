@@ -1,34 +1,45 @@
 <script setup>
+// ============================================================================
+// IMPORTS
+// ============================================================================
+import { computed, ref, onMounted } from 'vue';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { router } from '@inertiajs/vue3';
+
+/**
+ * Componentes
+ */
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
 import Mensajes from '@/components/Mensajes.vue';
-import {
-    computed,
-    ref,
-    onMounted  
-} from 'vue';
-import {
-    Head,
-    Link,
-    useForm,
-    usePage
-} from '@inertiajs/vue3';
-import { router } from '@inertiajs/vue3';
 import Rutas from '@/components/Rutas.vue';
-import Reporte from './reporte.vue';
 import Dropdown from '@/components/Dropdown.vue';
-import Botones from '@/components/Botones.vue';
 import Paginacion from '@/components/Paginacion.vue';
+import DataTable from '@/components/DataTable.vue';
+import Icon from '@/components/Icon.vue';
+import Button from '@/components/Button.vue';
 
+/**
+ * Utilidades
+ */
+import { useReporteBeneficiarioPDF } from '@/composables/useReporteBeneficiarioPDF';
+
+// ============================================================================
+// PROPS Y COMPUTED - DATOS DE LA PÁGINA
+// ============================================================================
 const page = usePage();
+
+// Props principales
+const { generarReporte } = useReporteBeneficiarioPDF();
+
 const resultados = computed(() => page.props.resultados);
 const resultadosReporte = computed(() => page.props.resultadosReporte);
 const gestiones = computed(() => page.props.gestiones);
 const mesesNumeros = computed(() => page.props.mesesNumeros);
+const filters = computed(() => page.props.filters);
+const filtrosAplicados = computed(() => !!selectedYear.value && !!selectedMonth.value);
 
-//console.log("Resultados:", resultados.value);
-
-const reportes = ref(false);
+console.log(resultadosReporte.value);
 
 // Lista de mensajes
 const mensajes = ref([]);
@@ -47,29 +58,21 @@ const cerrarMensaje = (id) => {
     mensajes.value = mensajes.value.filter((m) => m.id !== id);
 };
 
-const form = useForm({
-    gestion: '',
-    mes: '',
-    errors: {
-        gestion: false
-    }
-});
 
-const Log = useForm({
-    descripcion: 'Impresión de reporte de pagos mensuales'
+const selectedYear = computed(() => filters.value?.gestion || null);
+const selectedMonth = computed(() => filters.value?.mes ? parseInt(filters.value.mes) : null);
+const selectedMonthLabel = computed(() => {
+    if (!selectedMonth.value) return '';
+    const mesesMap = [
+        { value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' },
+        { value: 3, label: 'Marzo' }, { value: 4, label: 'Abril' },
+        { value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
+        { value: 7, label: 'Julio' }, { value: 8, label: 'Agosto' },
+        { value: 9, label: 'Septiembre' }, { value: 10, label: 'Octubre' },
+        { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' },
+    ];
+    return mesesMap.find(m => m.value === selectedMonth.value)?.label || '';
 });
-
-const reporte = (item) => {
-    reportes.value = true;
-    Log.get(route('pago.reporteLog'), {
-        onSuccess: () => {
-            // Puedes agregar algún mensaje de éxito si lo deseas
-        },
-        onError: (errors) => {
-            console.error('Errores:', errors);
-        }
-    });
-}
 
 const formatCurrency = (amount) => {
     return `${new Intl.NumberFormat('es-BO', {
@@ -80,16 +83,6 @@ const formatCurrency = (amount) => {
 };
 // Script actualizado
 
-// Estados reactivos
-const selectedYear = ref(null);
-const selectedMonth = ref(null);
-const selectedMonthLabel = ref('');
-
-onMounted(() => {
-    selectedYear.value = localStorage.getItem('selectedYear') || null;
-    selectedMonth.value = localStorage.getItem('selectedMonth') ? parseInt(localStorage.getItem('selectedMonth')) : null;
-    selectedMonthLabel.value = localStorage.getItem('selectedMonthLabel') || '';
-});
 
 // Convertimos los números de mes a objetos para el dropdown
 const mesesDropdown = computed(() => {
@@ -110,352 +103,421 @@ const mesesDropdown = computed(() => {
     return mesesNumeros.value.map(n => mesesMap.find(m => m.value === n));
 });
 
+const tableColumns = [
+    { label: 'Nº', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
+    { label: 'C.I.', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
+    { label: 'Apellidos y nombres P.C.D.' },
+    { label: 'Grado de discapacidad', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
+    { label: 'Monto a Pagar (bs.)', headerClass: 'text-center whitespace-nowrap', cellClass: '' },
+    { label: 'Observaciones', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
+]
+
+const capitalizarNombre = (texto) => {
+    if (!texto) return '';
+    const conectores = ['de', 'del', 'de los', 'de las', 'la', 'las', 'los', 'y', 'e'];
+    return texto.toUpperCase().split(' ').map((palabra) => {
+        if (conectores.includes(palabra.toLowerCase())) return palabra.toLowerCase();
+        return palabra;
+    }).join(' ');
+};
+
 // Cuando seleccionas una gestión
 const selectGestion = (year) => {
     if (!selectedMonth.value) {
-        mostrarMensaje('info', 'Campos requeridos', 'Seleccione el mes para filtar los registros.');
-        
+        mostrarMensaje('info', 'Campos requeridos', 'Seleccione el mes para filtrar los registros.');
     }
-    selectedYear.value = year.anio;
-    localStorage.setItem('selectedYear', selectedYear.value); 
-    selectedMonth.value = null;
-    selectedMonthLabel.value = '';
-
-    // Pedimos al backend los meses disponibles para esta gestión
-    router.get(route('persona.reporte'), { 
-        'gestion_gestion': selectedYear.value  // Cambiado de 'gestion.gestion' a 'gestion_gestion'
-        
+    router.get(route('persona.reporte'), {
+        gestion_gestion: year.anio
     }, {
         preserveState: true,
         preserveScroll: true,
     });
 }
 
+const Log = useForm({
+    gestion: '',
+    mes: '',
+    total_beneficiarios: '',
+});
+
 const generearInforme = () => {
-    reportes.value = true;
+    if (!resultadosReporte.value?.length) {
+        mostrarMensaje('info', 'Sin datos', 'No hay datos para generar el reporte.');
+        return;
+    }
+
+    generarReporte(
+        resultadosReporte.value,
+        resultados.value.data[0].gestion,
+        resultados.value.data[0].mes,
+        'Gestión',
+    );
+
+    // ✅ Asignás los datos al form antes de enviarlo
+    Log.gestion = selectedYear.value;
+    Log.mes = selectedMonthLabel.value;
+    Log.total_beneficiarios = resultados.value.total ?? resultadosReporte.value.length;
+
     Log.get(route('pago.reporteLog'), {
-        onSuccess: () => {
-            // Puedes agregar algún mensaje de éxito si lo deseas
-        },
-        onError: (errors) => {
-            console.error('Errores:', errors);
-        }
+        onError: (errors) => console.error('Errores:', errors),
     });
-}
+};
 
 // Cuando seleccionas un mes
 const selectMes = (mes) => {
-    selectedMonth.value = mes.value;
-    selectedMonthLabel.value = mes.label;
-    localStorage.setItem('selectedMonth', selectedMonth.value); 
-    localStorage.setItem('selectedMonthLabel', selectedMonthLabel.value);
-
-    if (selectedYear.value && selectedMonth.value) {
-        router.get(route('persona.reporte'), {
-            'gestion_gestion': selectedYear.value,  // Cambiado aquí también
-            mes: selectedMonth.value
-        }, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-    }
+    if (!selectedYear.value) return;
+    router.get(route('persona.reporte'), {
+        gestion_gestion: selectedYear.value,
+        mes: mes.value
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+    });
 }
-
 </script>
 
 <template>
-<Head title="UMADIS" />
-<div class="flex h-screen bg-gray-50 font-roboto">
-    <Sidebar />
-    <div class="flex-1 flex flex-col overflow-hidden">
-        <div class="fixed top-4 right-4 flex flex-col gap-2 z-50">
-            <Mensajes v-for="m in mensajes" :key="m.id" :id="m.id" :tipo="m.tipo" :contenido="m.contenido" @close="cerrarMensaje" />
-        </div>
-        <Header class="mb-0" />
+    <!-- ============================================================================ -->
+    <!-- HEAD Y CONTENEDOR PRINCIPAL -->
+    <!-- ============================================================================ -->
 
-        <div class="py-2">
-            <div class="px-5 py-1 flex justify-between">
-                <h1 class="font-semibold text-2xl">Informe Beneficiarios</h1>
-                <Rutas label1="Inicio" label2="Beneficiarios" label3="Informe Beneficiarios" />
-            </div>           
-        </div>
+    <Head title="UMADIS" />
 
-        <div class="mx-0">
-            <div class="flex flex-col border border-gray-200 dark:border-gray-700 p-4 py-1 mr-1 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-                <!-- Formulario de búsqueda -->
-                <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end mb-1">
-                    <!-- Campo Gestión -->
-                    <div class="flex flex-col lg:col-span-1">
-                        <div class="group">
-                            <label for="gestion" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 transition-colors group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400">
-                                <div class="flex items-center space-x-1">
-                                    <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                        <path fill-rule="evenodd" d="M6 5V4a1 1 0 1 1 2 0v1h3V4a1 1 0 1 1 2 0v1h3V4a1 1 0 1 1 2 0v1h1a2 2 0 0 1 2 2v2H3V7a2 2 0 0 1 2-2h1ZM3 19v-8h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm5-6a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2H8Z" clip-rule="evenodd"/>
-                                    </svg>
-                                    <span>Gestión</span>
-                                    <span class="text-red-500">*</span>
-                                </div>
-                            </label>
+    <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
+        <!-- Sidebar de navegación -->
+        <Sidebar />
 
-                            <Dropdown align="left" width="60">
-                                <template #trigger>
-                                    <button class="inline-flex items-center gap-3 p-3 text-sm font-semibold text-white bg-[#13326A] hover:bg-blue-800 transition-all focus:ring-1 focus:ring-blue-300 rounded-lg shadow-lg hover:shadow-xl w-full" type="button">
-                                        
-                                        <span class="flex-1 text-left">{{ selectedYear || 'Seleccionar Gestión' }}</span>
-                                        <svg class="w-2.5 h-2.5 transition-transform duration-200" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-                                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4" />
-                                        </svg>
-                                    </button>
-                                </template>
+        <!-- Contenedor principal -->
+        <div class="flex-1 flex flex-col overflow-hidden">
 
-                                <template #content>
-                                    <div class="w-64 bg-gradient-to-r rounded-xl from-slate-50 to-slate-100 overflow-hidden">
-                                        <div class="max-h-60 overflow-y-auto">
-                                            <ul class="py-2">
+            <!-- ============================================================================ -->
+            <!-- SISTEMA DE MENSAJES -->
+            <!-- ============================================================================ -->
+            <Mensajes v-for="m in mensajes" :key="m.id" :id="m.id" :tipo="m.tipo" :contenido="m.contenido"
+                @close="cerrarMensaje" />
+
+            <!-- Header -->
+            <Header class="mb-0" />
+
+            <!-- ============================================================================ -->
+            <!-- ENCABEZADO DE PÁGINA -->
+            <!-- ============================================================================ -->
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Informe Beneficiarios</h1>
+                <Rutas label1="Inicio" label2="Beneficiarios" label3="Informe Beneficiarios" class="sm:text-xs" />
+            </div>
+
+            <div class="mx-0">
+                <div class="p-1 sm:p-3 bg-white border-x-2 border-t-2 border-gray-200 rounded-t-lg mr-1 shadow-sm">
+
+                    <!-- Fila principal: filtros + acciones -->
+                    <div class="flex flex-wrap items-center gap-2 mt-2">
+
+                        <!-- ── Bloque Gestión + Mes ── -->
+                        <div
+                            class="flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-xl border border-blue-100 bg-blue-50/50 transition-all duration-200">
+
+                            <!-- Gestión -->
+                            <div class="flex flex-col gap-0.5">
+                                <label
+                                    class="text-[10px] font-bold text-blue-400 uppercase tracking-widest pl-1">Gestión
+                                    <span class="text-red-400">*</span></label>
+                                <Dropdown align="left" width="48">
+                                    <template #trigger>
+                                        <button
+                                            class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all w-36 sm:w-40 bg-white border border-gray-200 hover:bg-gray-50 shadow-sm hover:shadow"
+                                            :class="selectedYear
+                                                ? 'border-[#13326A] text-[#13326A]'
+                                                : 'text-gray-600 hover:border-blue-300 hover:text-blue-700'"
+                                            type="button">
+                                            <span class="flex-1 text-left truncate">{{ selectedYear || 'Gestión'
+                                                }}</span>
+                                            <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none"
+                                                stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                    </template>
+                                    <template #content>
+                                        <div class="shadow-xl overflow-hidden">
+                                            <ul class="py-1.5 max-h-60 overflow-y-auto">
                                                 <li v-if="!gestiones || gestiones.length === 0" class="px-4 py-3">
                                                     <div class="flex items-center gap-3 text-slate-400">
-                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                                                         </svg>
                                                         <span class="text-sm">No hay datos disponibles</span>
                                                     </div>
                                                 </li>
                                                 <li v-for="year in gestiones" :key="year.anio">
-                                                    <a href="#" @click.prevent="selectGestion(year)" class="flex items-center justify-between px-4 py-3 text-sm hover:bg-blue-50 transition-colors duration-150" :class="selectedYear && selectedYear.toString() === year.anio.toString() ? 'bg-blue-100 text-blue-800 font-semibold border-r-4 border-blue-500' : 'text-slate-700 hover:text-blue-700'">
-                                                        <span>{{ year.anio }}</span>
-                                                        <svg v-if="selectedYear && selectedYear.toString() === year.anio.toString()" class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                                    <a href="#" @click.prevent="selectGestion(year)"
+                                                        class="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-blue-50 duration-150 group"
+                                                        :class="selectedYear && selectedYear.toString() === year.anio.toString()
+                                                            ? 'text-slate-700'
+                                                            : 'text-slate-700 hover:text-blue-700'">
+                                                        <span class="flex items-center gap-2">
+                                                            <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors"
+                                                                fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fill-rule="evenodd"
+                                                                    d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+                                                                    clip-rule="evenodd" />
+                                                            </svg>
+                                                            {{ year.anio }}
+                                                        </span>
+                                                        <svg v-if="selectedYear && selectedYear.toString() === year.anio.toString()"
+                                                            class="w-4 h-4 text-[#13326A] shrink-0" fill="currentColor"
+                                                            viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd"
+                                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                clip-rule="evenodd" />
                                                         </svg>
                                                     </a>
                                                 </li>
                                             </ul>
                                         </div>
-                                    </div>
-                                </template>
-                            </Dropdown>
-                        </div>
-                    </div>
-
-                    <!-- Campo Mes convertido a Dropdown -->
-                    <div class="lg:col-span-1">
-                        <label for="meses" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 transition-colors group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400">
-                            <div class="flex items-center space-x-2">
-                                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                    <path fill-rule="evenodd" d="M5 5a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1h1a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1h1a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1 2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a2 2 0 0 1 2-2ZM3 19v-7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm6.01-6a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm2 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm-10 4a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm2 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z" clip-rule="evenodd" />
-                                </svg>
-                                <span>Mes</span>
-                                <span class="text-red-500">*</span>
-                            </div>
-                        </label>
-
-                        <Dropdown align="left" width="60">
-                            <template #trigger>
-                                <button class="inline-flex items-center gap-3 p-3 text-sm font-semibold text-white bg-[#13326A] hover:bg-blue-800 transition-all focus:ring-1 focus:ring-blue-300 rounded-lg shadow-lg hover:shadow-xl w-full" type="button">
-                                    <span class="flex-1 text-left">{{ selectedMonthLabel || 'Seleccionar Mes' }}</span>
-                                    <svg class="w-2.5 h-2.5 transition-transform duration-200" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6">
-                                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 4 4 4-4" />
-                                    </svg>
-                                </button>
-                            </template>
-
-                            <template #content>
-                                <div class="w-64 bg-gradient-to-r rounded-xl from-slate-50 to-slate-100 overflow-hidden">
-                                    <div class="max-h-60 overflow-y-auto">
-                                        <ul class="py-2">
-                                            <li v-for="mes in mesesDropdown" :key="mes.value">
-                                                <a href="#" @click.prevent="selectMes(mes)" class="flex items-center justify-between px-4 py-3 text-sm hover:bg-blue-50 transition-colors duration-150" :class="selectedMonth && selectedMonth === mes.value ? 'bg-blue-100 text-blue-800 font-semibold border-r-4 border-blue-500' : 'text-slate-700 hover:text-blue-700'">
-                                                    <span>{{ mes.label }}</span>
-                                                    <svg v-if="selectedMonth && selectedMonth === mes.value" class="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                                                    </svg>
-                                                </a>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </template>
-                        </Dropdown>
-                    </div>
-
-                    <!-- Área de resultados con altura fija -->
-                    <div class="lg:col-span-3">
-                        <div class="min-h-[70px] flex items-center justify-center">
-                            <!-- Resultados con datos -->
-                            <div v-if="resultados.data?.length > 0" class="w-full space-y-2">
-                                <!-- Header -->
-                                <div class="text-center">
-                                    <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">
-                                        Información Presupuestaria
-                                    </h2>
-                                    <div class="w-12 h-0.5 bg-blue-600 mx-auto mt-1"></div>
-                                </div>
-
-                                <!-- Content -->
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-                                    <!-- Gestión -->
-                                    <div class="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 p-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="flex-shrink-0 w-6 h-6 mt-1 bg-blue-600 rounded-md flex items-center justify-center">
-                                                <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                                    <path fill-rule="evenodd" d="M5 5a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1h1a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1h1a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1 2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a2 2 0 0 1 2-2ZM3 19v-7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm6.01-6a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm2 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm-10 4a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm2 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z" clip-rule="evenodd" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                                    Gestión
-                                                </p>
-                                                <p class="text-xs font-bold text-gray-900 dark:text-gray-100">
-                                                    {{ resultados.data[0].gestion }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Anual -->
-                                    <div class="bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 p-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="flex-shrink-0 w-6 h-6 bg-emerald-600 rounded-md flex items-center justify-center">
-                                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                                    Total
-                                                </p>
-                                                <p class="text-xs font-bold text-gray-900 dark:text-gray-100">
-                                                    Bs. {{ formatCurrency(resultados.data[0].monto_total) }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Utilizado -->
-                                    <div class="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 p-3 py-1 rounded-lg border border-orange-200 dark:border-orange-800">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="flex-shrink-0 w-6 h-6 bg-orange-600 rounded-md flex items-center justify-center">
-                                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                                    No pagar
-                                                </p>
-                                                <p class="text-xs font-bold text-gray-900 dark:text-gray-100">
-                                                    Bs. {{ formatCurrency(resultados.data[0].monto_bajas) }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Restante -->
-                                    <div class="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 p-3 py-1 rounded-lg border border-purple-200 dark:border-purple-800">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="flex-shrink-0 w-6 h-6 bg-purple-600 rounded-md flex items-center justify-center">
-                                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                                                    Pagar
-                                                </p>
-                                                <p class="text-xs font-bold text-gray-900 dark:text-gray-100">
-                                                    Bs. {{ formatCurrency(resultados.data[0].monto_activos) }}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                    </template>
+                                </Dropdown>
                             </div>
 
-                            <!-- Estado vacío -->
-                            <div v-else class="text-center">
-                                <div class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto">
-                                    <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                </div>
-                                <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
-                                    Sin datos disponibles
-                                </h3>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">
-                                    Seleccione una gestión para ver la información.
-                                </p>
+                            <div class="hidden sm:block w-px h-8 bg-blue-400"></div>
+
+                            <!-- Mes -->
+                            <div class="flex flex-col gap-0.5">
+                                <label class="text-[10px] font-bold uppercase tracking-widest pl-1"
+                                    :class="selectedYear ? 'text-blue-400' : 'text-gray-300'">
+                                    Mes <span class="text-red-400">*</span>
+                                </label>
+                                <Dropdown align="left" width="48">
+                                    <template #trigger>
+                                        <button
+                                            class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all w-36 sm:w-40 bg-white border border-gray-200 shadow-sm"
+                                            :class="selectedMonth
+                                                ? 'border-[#13326A] text-[#13326A] hover:bg-gray-50 hover:shadow'
+                                                : selectedYear && mesesDropdown.length > 0
+                                                    ? 'text-gray-600 hover:border-blue-300 hover:text-blue-700 hover:bg-gray-50 hover:shadow cursor-pointer'
+                                                    : 'text-gray-400 cursor-not-allowed opacity-60'" type="button"
+                                            :disabled="!selectedYear">
+                                            <span class="flex-1 text-left truncate">{{ selectedMonthLabel || 'Mes'
+                                                }}</span>
+                                            <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none"
+                                                stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                    </template>
+                                    <template #content>
+                                        <div class="shadow-xl overflow-hidden">
+                                            <ul class="py-1.5 max-h-60 overflow-y-auto">
+                                                <li v-for="mes in mesesDropdown" :key="mes.value">
+                                                    <a href="#" @click.prevent="selectMes(mes)"
+                                                        class="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-blue-50 duration-150 group"
+                                                        :class="selectedMonth === mes.value
+                                                            ? 'text-slate-700'
+                                                            : 'text-slate-700 hover:text-blue-700'">
+                                                        <span class="flex items-center gap-2">
+                                                            <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors"
+                                                                fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fill-rule="evenodd"
+                                                                    d="M5 5a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1h1a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1h1a1 1 0 0 0 1-1 1 1 0 1 1 2 0 1 1 0 0 0 1 1 2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a2 2 0 0 1 2-2ZM3 19v-7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm6.01-6a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm2 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm-10 4a1 1 0 1 1 2 0 1 1 0 0 1-2 0Zm6 0a1 1 0 1 0-2 0 1 1 0 0 0 2 0Zm2 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z"
+                                                                    clip-rule="evenodd" />
+                                                            </svg>
+                                                            {{ mes.label }}
+                                                        </span>
+                                                        <svg v-if="selectedMonth === mes.value"
+                                                            class="w-4 h-4 text-[#13326A] shrink-0" fill="currentColor"
+                                                            viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd"
+                                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                clip-rule="evenodd" />
+                                                        </svg>
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                </Dropdown>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="flex justify-end lg:col-span-1">
-                        <Botones :data="{nombre: 'beneficiario', reporte: true}" @generearInforme="generearInforme"/>
+                        <!-- ── Spacer + Cards + Botón (al final del wrap) ── -->
+                        <div class="flex items-center gap-2 ml-auto flex-wrap">
+
+                            <!-- Cards de totales — solo si hay datos -->
+                            <template v-if="resultados.data?.length > 0">
+                                <!-- {{resultados.data}} -->
+                                <!-- Total -->
+                                <div
+                                    class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                                    <div
+                                        class="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                                        <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-[9px] text-emerald-500 uppercase tracking-widest font-bold leading-tight">
+                                            Total</p>
+                                        <p class="text-sm font-black text-emerald-700 leading-tight">
+                                            {{ formatCurrency(resultados.data[0].monto_total) }}
+                                            <span class="text-[10px] font-semibold">Bs</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- No pagar -->
+                                <div
+                                    class="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2">
+                                    <div
+                                        class="w-6 h-6 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+                                        <svg class="w-3.5 h-3.5 text-orange-600" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-[9px] text-orange-500 uppercase tracking-widest font-bold leading-tight">
+                                            No pagar</p>
+                                        <p class="text-sm font-black text-orange-700 leading-tight">
+                                            {{ formatCurrency(resultados.data[0].monto_bajas) }}
+                                            <span class="text-[10px] font-semibold">Bs</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Pagar -->
+                                <div
+                                    class="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2">
+                                    <div
+                                        class="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
+                                        <svg class="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p
+                                            class="text-[9px] text-purple-500 uppercase tracking-widest font-bold leading-tight">
+                                            Pagar</p>
+                                        <p class="text-sm font-black text-purple-700 leading-tight">
+                                            {{ formatCurrency(resultados.data[0].monto_activos) }}
+                                            <span class="text-[10px] font-semibold">Bs</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                            </template>
+
+                            <!-- Botón Informe -->
+                            <Button v-if="resultados.data?.length > 0" id="btn-informe"
+                                @click.prevent="generearInforme()" :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                                class="bg-gray-100 shrink-0 relative overflow-hidden group">
+                                <span
+                                    class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                <span class="relative z-10">
+                                    <Icon :icon-button="true" name="filePDF" fill="currentColor"
+                                        class-name="text-gray-500 group-hover:text-white transition-colors duration-500" />
+                                </span>
+                            </Button>
+
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <main class="flex-1 overflow-x-hidden overflow-y-auto mr-1">
-            <div class="mx-0" v-if="resultados.data?.length > 0">
-                <div class="relative overflow-x-auto shadow-md sm:rounded-lg mt-1">
-                    <table class="w-full text-xs text-left rtl:text-right border dark:text-gray-400">
-                        <thead class="text-xs text-gray-700 uppercase bg-white dark:text-gray-400">
-                            <tr class="border-b">
-                                <th scope="col" class="text-center px-2 py-2">Nº</th>
-                                <th scope="col" class="text-center px-2 py-2">C.I.</th>
-                                <th scope="col" class="text-center px-2 py-2">Apellidos y nombres P.C.D.</th>
-                                <th scope="col" class="text-center px-2 py-2">Grado de discapacidad</th>
-                                <th scope="col" class="text-center px-2 py-2">Monto a Pagar (bs.)</th>
-                                <th scope="col" class="text-center px-2 py-2">Observaciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="(item, index) in resultados.data" :key="item.id_habilitado" :class="{
-                                    'bg-white border-b font-bold text-black whitespace-nowrap': item.estado_actual.estado === 'activo',
-                                    'bg-blue-800 border-b font-medium text-blue-400 whitespace-nowrap': item.estado_actual.estado === 'baja_temporal',
-                                    'bg-yellow-300 border-b font-bold text-red-600 whitespace-nowrap': item.estado_actual.estado === 'baja_definitiva'
-                                }">
-                                <td class="text-center px-2 py-1.5">
-                                    {{ index + 1 }}
-                                </td>
-                                <td class="text-center px-2 py-1.5 ">
-                                    {{ item.ci }}
-                                </td>
-                                <td class="px-2 py-1.5 uppercase">
-                                    {{ item.apellido }} {{ item.nombre }}
-                                </td>
-                                <td class="text-center px-2 py-1.5">
-                                    <span>GRAVE MUY GRAVE</span>
-                                </td>
-                                <td class="text-center px-2 py-1.5">
-                                    {{ item.monto }}
-                                </td>
-                                <td class="text-center px-2 py-1.5">
-                                    <span v-if="item.estado_actual.estado !== 'activo'" class="uppercase">{{ item.observaciones }}</span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <Reporte v-if="reportes" :datos="resultadosReporte" :gestion="resultados.data[0].gestion" :mes="resultados.data[0].mes" :download="true" tipoR="Gestión" :tipo="false" style="display: none;" />
-                </div>
-            </div>
-            <div v-else class="flex flex-col items-center justify-center h-[60vh] w-full py-8 px-4 text-gray-700 dark:text-gray-300">
-                <!-- Icono con animación sutil -->
-                <div class="mb-4 p-4 rounded-full bg-gray-100 dark:bg-gray-800 transition-all duration-300 hover:scale-105">
-                    <svg class="w-12 h-12" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                        <path fill-rule="evenodd" d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm11-4a1 1 0 1 0-2 0v5a1 1 0 1 0 2 0V8Zm-1 7a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H12Z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-                <!-- Mensaje principal -->
-                <h3 class="text-xl font-semibold text-center mb-2">Datos no disponibles</h3>
+            <!-- datos: {{ resultados.data    }} -->
+            <DataTable :data="resultados.data" :columns="tableColumns" row-key="id_habilitado" :row-class="(item) => ({
+                'bg-white text-black hover:bg-gray-100': item.estado_periodo === 'activo',
+                '!bg-[#002060] font-bold !text-[#00B0F0] hover:!bg-[#002045]': item.estado_periodo === 'baja_temporal',
+                'bg-[#FFFF00] font-extrabold text-[#FF0000] hover:bg-[#FFFF00]': item.estado_periodo === 'baja_definitiva'
+            })">
 
-                <!-- Mensaje secundario -->
-                <p class="text-gray-500 dark:text-gray-400 text-center max-w-md mx-auto mb-6">
-                    No hemos encontrado información con los filtros actuales. Por favor, ajuste los parámetros de búsqueda.
-                </p>
+                <template #row="{ item, index }">
+
+                    <!-- Columna: Nº -->
+                    <td class="text-center px-1 py-1.5 whitespace-nowrap">
+                        {{ (resultados.from || 1) + index }}
+                    </td>
+
+                    <!-- Columna: C.I. -->
+                    <td class="text-center px-1 py-1.5 whitespace-nowrap">
+                        {{ item.ci }}
+                    </td>
+
+                    <td class="pl-2 py-1.5 whitespace-nowrap">
+                        <p v-if="item.nombre">
+                            {{ capitalizarNombre(item.apellido) }} {{ capitalizarNombre(item.nombre) }}
+                        </p>
+                        <p v-else>
+                            {{ capitalizarNombre(item.nombre_completo) }}
+                        </p>
+                    </td>
+
+                    <!-- Columna: Grado de discapacidad -->
+                    <td class="text-center px-1 py-1.5 whitespace-nowrap">
+                        <span>GRAVE MUY GRAVE</span>
+                    </td>
+
+                    <!-- Columna: Monto a Pagar -->
+                    <td class="text-center py-1.5 whitespace-nowrap">
+                        {{ item.monto }}
+                    </td>
+
+                    <!-- Columna: Observaciones -->
+                    <td class="text-center py-1.5 whitespace-nowrap">
+                        <span v-if="item.estado_periodo !== 'activo'" class="uppercase">
+                            {{ item.observaciones }}
+                        </span>
+                    </td>
+
+                </template>
+
+                <!-- Slot: Estado vacío -->
+                <template #empty>
+                    <div
+                        class="flex flex-col items-center justify-center h-[60vh] w-full py-8 px-4 text-gray-700 dark:text-gray-300">
+                        <div
+                            class="mb-4 p-4 rounded-full bg-gray-100 dark:bg-gray-800 transition-all duration-300 hover:scale-105">
+                            <svg class="w-12 h-12" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24"
+                                height="24" fill="currentColor" viewBox="0 0 24 24">
+                                <path fill-rule="evenodd"
+                                    d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm11-4a1 1 0 1 0-2 0v5a1 1 0 1 0 2 0V8Zm-1 7a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H12Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+
+                        <template v-if="filtrosAplicados">
+                            <h3 class="text-xl font-semibold text-center mb-2">Sin resultados</h3>
+                            <p class="text-gray-500 dark:text-gray-400 text-center max-w-md mx-auto mb-6">
+                                No se encontraron datos para la gestión y mes seleccionados.
+                            </p>
+                        </template>
+
+                        <template v-else>
+                            <h3 class="text-xl font-semibold text-center mb-2">Seleccione los filtros</h3>
+                            <p class="text-gray-500 dark:text-gray-400 text-center max-w-md mx-auto mb-6">
+                                Elija una <span class="font-semibold text-[#13326A]">gestión</span> y un
+                                <span class="font-semibold text-[#13326A]">mes</span> para visualizar los datos.
+                            </p>
+                        </template>
+
+                    </div>
+                </template>
+
+            </DataTable>
+            <div :class="resultados.length <= 100 ? 'mt-0.5' : 'mt-0'">
+                <Paginacion v-if="resultados?.last_page > 1" :links="resultados.links" :from="resultados.from"
+                    :to="resultados.to" :total="resultados.total" />
             </div>
-        </main>
-        <div :class="resultados.length <= 100 ? 'mt-0.5' : 'mt-0'">
-            <Paginacion v-if="resultados?.last_page > 1" :links="resultados.links" :from="resultados.from" :to="resultados.to" :total="resultados.total" />
         </div>
     </div>
-</div>
 </template>

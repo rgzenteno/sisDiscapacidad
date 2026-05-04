@@ -1,6 +1,6 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
-import { watch } from 'vue';
+import { computed, watch } from 'vue';
 import InputLabel from '@/components/InputLabel.vue';
 import Input from '@/components/Input.vue';
 import { usePresupuestoCalculation } from '../composables/usePresupuestoCalculation';
@@ -42,15 +42,44 @@ const { mostrarPresupuestoAnual, presupuestoSugerido } = usePresupuestoCalculati
 );
 // ============ FIN COMPOSABLES ============ //
 
+// ============ INICIO COMPUTED ============ //
+// PDF cargado y válido
+const pdfValido = computed(() =>
+    props.form.archivo_validacion?.isValid === true
+);
+
+// Monto ingresado y válido
+const montoIngresado = computed(() =>
+    !!props.form.monto && parseInt(props.form.monto) > 0
+);
+
+// Ambas condiciones cumplidas para habilitar el presupuesto
+const presupuestoHabilitado = computed(() =>
+    props.props.editMode || (pdfValido.value && montoIngresado.value)
+);
+
+const mensajeGuia = computed(() => {
+    if (props.props.editMode) return null;
+    if (!pdfValido.value && !montoIngresado.value) {
+        return 'Cargue el archivo PDF y el monto por persona para calcular';
+    }
+    if (!pdfValido.value) {
+        return 'Cargue el archivo PDF válido para calcular';
+    }
+    if (!montoIngresado.value) {
+        return 'Ingrese el monto por persona para calcular';
+    }
+    return null;
+});
+// ============ FIN COMPUTED ============ //
+
 // ============ INICIO WATCHERS ============ //
-// Watch para limpiar errores cuando se ingresa presupuesto anual
 watch(() => props.form.presupuesto_anual, (nuevoValor) => {
     if (nuevoValor && props.form.errors.presupuesto_anual) {
         delete props.form.errors.presupuesto_anual;
     }
 });
 
-// Watch para limpiar errores cuando se ingresa presupuesto
 watch(() => props.modelValue, (nuevoValor) => {
     if (nuevoValor && props.error) {
         emit('update:modelValue', nuevoValor);
@@ -80,7 +109,7 @@ watch(() => props.modelValue, (nuevoValor) => {
             />
         </div>
 
-        <!-- Presupuesto Mensual (calculado automáticamente) -->
+        <!-- Presupuesto Mensual -->
         <div>
             <div class="flex">
                 <InputLabel
@@ -90,16 +119,25 @@ watch(() => props.modelValue, (nuevoValor) => {
                 />
                 <span class="ms-1 text-red-600">*</span>
             </div>
-            <Input
-                :input-type="field.type"
-                :model-value="modelValue"
-                placeholder="Se calculará automáticamente al ingresar el monto"
-                :errors="error"
-                class="!bg-gray-100"
-                @update:model-value="emit('update:modelValue', $event)"
-            />
-            <p class="text-sm text-gray-500 mt-1">
-                Presupuesto sugerido: {{ presupuestoSugerido }}
+
+            <!-- Input opaco si no están las condiciones -->
+            <div :class="{ 'opacity-50 pointer-events-none': !presupuestoHabilitado }">
+                <Input
+                    :input-type="field.type"
+                    :model-value="modelValue"
+                    placeholder="Se calculará automáticamente"
+                    :errors="error"
+                    class="!bg-gray-100"
+                    @update:model-value="emit('update:modelValue', $event)"
+                />
+            </div>
+
+            <!-- Mensaje guía o presupuesto sugerido -->
+            <p v-if="!presupuestoHabilitado && !props.props.editMode" class="text-sm text-gray-400 mt-1 italic">
+                {{ mensajeGuia }}
+            </p>
+            <p v-else-if="presupuestoHabilitado && !props.props.editMode" class="text-sm text-gray-500 mt-1">
+                Presupuesto sugerido: <span class="font-medium text-gray-700">Bs. {{ presupuestoSugerido }}</span>
             </p>
         </div>
     </div>

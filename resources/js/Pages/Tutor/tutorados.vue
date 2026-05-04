@@ -22,7 +22,7 @@ const tutorData = computed(() => page.props.tutorData);
 const totalPersonas = computed(() => page.props.totalPersonas);
 
 const getUrl = (ruta, id) => {
-    const url = route(ruta, id); // ✅ UUID directo
+    const url = route(ruta, id);
     router.visit(url);
 };
 
@@ -30,7 +30,7 @@ const getUrl = (ruta, id) => {
 const tableColumns = [
     { label: 'Nombre Completo', field: 'nombre', headerClass: 'px-6', cellClass: 'capitalize whitespace-nowrap' },
     { label: 'Distrito', field: 'distrito', headerClass: 'px-6', cellClass: '' },
-    { label: 'Cedula de Identidad', field: 'ci', headerClass: 'px-6', cellClass: 'whitespace-nowrap' },
+    { label: 'C. I.', field: 'ci', headerClass: 'px-6', cellClass: 'whitespace-nowrap' },
     { label: 'Meses Habilitados', field: 'tiene_habilitado', headerClass: 'text-center px-6', cellClass: 'whitespace-nowrap' },
     { label: 'Pagos Disponibles', field: 'tiene_habilitado', headerClass: 'text-center px-6', cellClass: 'whitespace-nowrap' },
     { label: 'Estado', field: 'estado', headerClass: 'text-center px-6', cellClass: '' },
@@ -40,19 +40,28 @@ const tableColumns = [
 </script>
 
 <template>
+    <!-- ============================================================================ -->
+    <!-- HEAD Y CONTENEDOR PRINCIPAL -->
+    <!-- ============================================================================ -->
 
     <Head title="UMADIS" />
+
     <div class="flex h-screen bg-gray-200 font-roboto">
+        <!-- Sidebar de navegación -->
         <Sidebar />
+
+        <!-- Contenedor principal -->
         <div class="flex-1 flex flex-col overflow-hidden">
+
+            <!-- Header -->
             <Header class="mb-0" />
 
-            <div class="py-2">
-                <div class="px-5 py-1 flex justify-between">
-                    <h1 class="font-semibold text-2xl">Tutorados</h1>
-                    <Rutas label1="Inicio" label2="Tutores" label3="Tutorados" />
-                </div>
-                <!-- <Seccion class="mt-1 " nombre="Tutor" texto="Gestione todos los tutores existentes" :botonReportTutor="true" :boton="false" /> -->
+            <!-- ============================================================================ -->
+            <!-- ENCABEZADO DE PÁGINA -->
+            <!-- ============================================================================ -->
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Tutorados</h1>
+                <Rutas label1="Inicio" label2="Tutores" label3="Tutorados" class="sm:text-xs" />
             </div>
 
             <!-- Versión alternativa más compacta -->
@@ -88,13 +97,17 @@ const tableColumns = [
                 <template #row="{ item }">
                     <!-- Columna: Nombre Completo -->
                     <th scope="row"
-                        class="capitalize px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
-                        {{ item.nombre }} {{ item.apellido }}
+                        class="uppercase px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                        <p v-if="item.nombre">{{ item.nombre }} {{ item.apellido }}</p>
+                        <p v-else> {{ item.nombre_completo }}</p>
                     </th>
 
                     <!-- Columna: Distrito -->
-                    <td class="px-6 py-4">
-                        {{ item.distrito }}
+                    <td class="px-3 py-1 whitespace-nowrap">
+                        <div class="text-gray-700 dark:text-gray-300">
+                            <span v-if="item.distrito">{{ item.distrito }}</span>
+                            <span v-else class="block text-red-500 italic text-xs">Sin datos</span>
+                        </div>
                     </td>
 
                     <!-- Columna: Cedula de Identidad -->
@@ -159,7 +172,8 @@ const tableColumns = [
                                 <span class="text-gray-400">|</span>
                                 <div class="font-medium"
                                     :class="item.estado === 'activo' ? 'text-green-600' : item.estado === 'baja_definitiva' ? 'text-red-600' : 'text-orange-600'">
-                                    {{ item.estado === 'activo' ? 'Activo' : item.estado === 'baja_temporal' ? 'Baja Temporal' : 'Baja Definitiva' }}
+                                    {{ item.estado === 'activo' ? 'Activo' : item.estado === 'baja_temporal'
+                                        ? 'Baja Temporal' : 'Baja Definitiva' }}
                                 </div>
                             </div>
                         </li>

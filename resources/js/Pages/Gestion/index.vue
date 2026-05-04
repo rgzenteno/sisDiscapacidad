@@ -20,9 +20,14 @@ import Button from '@/components/Button.vue';
 import ModalResultadosMes from '@/components/ModalResultadosMes.vue';
 import { watch } from 'vue';
 
+import { useReporteArqueoGeneralPDF } from '@/composables/useReporteArqueoGeneralPDF';
+
+
 // Utilidades
 import { can } from '@/lib/can';
 import Icon from '@/components/Icon.vue';
+
+const { generarReporte } = useReporteArqueoGeneralPDF();
 
 // ============================================================================
 // PROPS Y COMPUTED - DATOS DE LA PÁGINA
@@ -32,6 +37,8 @@ const page = usePage();
 // Props principales
 const gestiones = computed(() => page.props.gestiones);
 const gestion = computed(() => page.props.gestion);
+const personasPagadasPorMes = computed(() => page.props.personasPagadasPorMes ?? {});
+//console.log(gestion.value);
 
 const filters = computed(() => page.props.filters);
 const años_registrados = computed(() => page.props.años_registrados);
@@ -54,13 +61,16 @@ const formCreateGestion = ref(false);
 const formEdit = ref(false);
 const formEditMes = ref(false);
 const showModal = ref(false);
-const reportes = ref(false);
+const importando = ref(false);
+const showMobileMenu = ref(false);
+const closeMobileMenu = () => { showMobileMenu.value = false; };
 
 // ============================================================================
 // REFS - DATOS TEMPORALES
 // ============================================================================
 const selectedItem = ref(null);
 const selectedId = ref(null);
+const selectedGestion = ref(null);
 const selectedMes = ref(null);
 const mensajes = ref([]);
 const mostrarModalResultadosMes = ref(false);
@@ -111,53 +121,100 @@ const getYearValue = (yearData) => {
 const selectedYear = computed(() => getYearValue(filters.value?.año));
 
 // ============================================================================
-// CONFIGURACIÓN DE CAMPOS - MES
+// CONFIGURACIÓN DE CAMPOS - MES (PARA EXCEL)
 // ============================================================================
-const mesFields = [{
-    name: 'mes',
-    label: '',
-    hidden: true
-},
-{
-    typeInput: 'text',
-    name: 'monto',
-    label: 'Monto - Persona (Bs.)',
-    type: 'number',
-    required: true,
-    placeholder: 'el monto a pagar',
-    readonly: false
-},
-{
-    name: 'presupuesto',
-    label: '',
-    type: 'number',
-    required: false,
-    placeholder: 'el presupuesto total',
-    readonly: false
-},
-{
-    name: 'archivo_excel',
-    label: `Archivo Excel aprobados ${getMonthNameFromNumber(mes_actual_disponible.value)}`,
-    typeInput: 'file_upload',
-    placeholder: 'Selecciona un archivo Excel',
-    acceptedTypes: '.xlsx,.xls',
-    maxSize: 5,
-    required: true,
-    requiredColumns: [
-        'N°',
-        'C.I.',
-        'APELLIDOS Y NOMBRES. P.C.D.',
-        'GRADO DE DISCAPACIDAD',
-        'MONTO A PAGAR (BS.)',
-        'OBSERVACIONES'
-    ]
-},
-{
-    name: 'id_gestion',
-    label: '',
-    hidden: true
-}
+const mesFieldsExcel = [
+    {
+        name: 'mes',
+        label: '',
+        hidden: true
+    },
+    {
+        typeInput: 'text',
+        name: 'monto',
+        label: 'Monto - Persona (Bs.)',
+        type: 'number',
+        required: true,
+        placeholder: 'el monto a pagar',
+        readonly: false
+    },
+    {
+        name: 'presupuesto',
+        label: '',
+        type: 'number',
+        required: false,
+        placeholder: 'el presupuesto total',
+        readonly: false
+    },
+    {
+        name: 'archivo_excel',
+        label: `Archivo Excel aprobados ${getMonthNameFromNumber(mes_actual_disponible.value)}`,
+        typeInput: 'file_upload',
+        placeholder: 'Selecciona un archivo Excel',
+        acceptedTypes: '.xlsx,.xls',
+        maxSize: 5,
+        required: true,
+        requiredColumns: [
+            'N°',
+            'C.I.',
+            'APELLIDOS Y NOMBRES. P.C.D.',
+            'GRADO DE DISCAPACIDAD',
+            'MONTO A PAGAR (BS.)',
+            'OBSERVACIONES'
+        ]
+    },
+    {
+        name: 'id_gestion',
+        label: '',
+        hidden: true
+    }
 ];
+
+// ============================================================================
+// CONFIGURACIÓN DE CAMPOS - MES (PARA PDF)
+// ============================================================================
+const mesFieldsPdf = [
+    {
+        name: 'mes',
+        label: '',
+        hidden: true
+    },
+    {
+        name: 'archivo_pdf',
+        label: `Archivo PDF aprobados ${getMonthNameFromNumber(mes_actual_disponible.value)}`,
+        typeInput: 'file_upload',
+        placeholder: 'Arrastra tu archivo aquí o haz clic para seleccionar',
+        acceptedTypes: '.pdf',
+        maxSize: 5,
+        required: true,
+        requiredColumns: []
+    },
+    {
+        typeInput: 'text',
+        name: 'monto',
+        label: 'Monto - Persona (Bs.)',
+        type: 'number',
+        required: true,
+        placeholder: 'el monto a pagar',
+        readonly: false
+    },
+    {
+        name: 'presupuesto',
+        label: '',
+        type: 'number',
+        required: false,
+        placeholder: 'el presupuesto total',
+        readonly: false
+    },
+    {
+        name: 'id_gestion',
+        label: '',
+        hidden: true
+    }];
+
+// ✅ USAR UNO U OTRO
+const mesFields = mesFieldsPdf; // Cambiar a mesFieldsExcel si quieres usar Excel
+// const mesFields = mesFieldsExcel; // ← Comentar esta línea si usas PDF
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - EDITGESTIÓN
@@ -321,14 +378,12 @@ const getCurrentMonthYear = () => {
  * @param {number} month - Mes a verificar
  * @returns {boolean} true si coincide con la fecha actual
  */
-const verifyDate = (year, month) => {
-    const current = getCurrentMonthYear()
+const verifyDate = (year, month, records) => {
+    if (!records || records.length === 0) return false
 
-    if (year && month && current.month === month && current.year === year) {
-        return true
-    } else {
-        return false
-    }
+    const lastRecord = records[records.length - 1]
+
+    return lastRecord.gestion === year && lastRecord.mes === month
 }
 
 /**
@@ -375,16 +430,33 @@ const openFormEdit = () => {
  * Formulario para registrar logs de reportes
  */
 const Log = useForm({
-    descripcion: 'Impresión de reporte de pagos anuales'
+    gestion: '',
+    total_meses: '',
+    tipo: 'arqueo_general',
 });
 
 /**
  * Genera y descarga el informe de pagos anuales
  */
-const generearInforme = () => {
-    reportes.value = true;
+const generarInforme = () => {
+    Log.gestion = selectedYear.value;
+    Log.total_meses = gestion.value.length;
     Log.get(route('pago.reporteLog'));
-}
+
+    const nombreUsuario =
+        `${page.props.auth.user.nombre} ${page.props.auth.user.apellido}`;
+
+    const datosParaPDF = gestion.value.map(item => ({
+        ...item,
+        presupuesto_mes: item.monto,
+        total_pagado_contexto: item.total_pagado_contexto ?? 0,
+        cantidad_habilitadas: item.cantidad_habilitadas ?? 0,
+        cantidad_total_pagos: item.cantidad_total_pagos ?? 0,
+        cantidad_no_pagados: item.cantidad_no_pagados ?? 0,
+    }));
+
+    generarReporte(datosParaPDF, nombreUsuario, 'ArqueoGeneral');
+};
 
 // ============================================================================
 // FUNCIONES - CALLBACKS
@@ -419,7 +491,11 @@ const handleUpdate = () => {
  * @param {Object} datos - Datos la gestion
  */
 const openModalMes = (item) => {
-    selectedItem.value = { ...item };
+    const personas = personasPagadasPorMes.value[item.id_mes] ?? [];
+    selectedItem.value = {
+        ...item,
+        personas_pagadas: personas
+    };
     showModal.value = true;
 }
 
@@ -429,13 +505,15 @@ const openModalMes = (item) => {
  * @param {string} item - Nombre del mes
  * @param {number} mes - mes
  */
-const openEditMes = (idMes, monto, presupuesto) => {
+const openEditMes = (idMes, monto, presupuesto, mes, gestion) => {
     showModal.value = false;
     selectedItem.value = {
         monto: monto,
         presupuesto: presupuesto
     };
     selectedId.value = idMes;
+    selectedMes.value = mes;
+    selectedGestion.value = gestion;
     formEditMes.value = true;
 }
 
@@ -476,7 +554,7 @@ watch(
 
     <Head title="UMADIS" />
 
-    <div class="flex h-screen bg-gray-200 font-roboto">
+    <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
         <!-- Sidebar de navegación -->
         <Sidebar />
 
@@ -537,10 +615,14 @@ watch(
 
             <!-- Formulario: Crear mes -->
             <Transition name="fade">
-                <Form v-if="formCreateMes" :data="{ tipo: 'gestion', id: año_actual.id, mes: mes_actual_disponible }"
+                <Form v-if="formCreateMes"
+                    :data="{ tipo: 'gestion', id: año_actual.id, mes: mes_actual_disponible, año: año_actual.añoActualSistema }"
                     :fields="mesFields" :dataGestion="años_registrados" :presupuestosAnuales="presupuestosAnuales"
-                    :personasValidas="total_personas_validas" submit-label="Registrar nuevo Mes"
-                    submit-route="gestion.addMes" :importing="importando" importing-text="Importando archivo..."
+                    :personasValidas="total_personas_validas"
+                    :cisPersonasActivas="page.props.cis_personas_activas ?? []"
+                    :cisTodasPersonas="page.props.cis_todas_personas ?? []" submit-label="Registrar nuevo Mes"
+                    submit-route="gestion.addMes" importing-text="Importando archivo..."
+                    @importingStart="importando = true" @importingEnd="importando = false" :importing="importando"
                     boton-name="Agregar" @add="handleAdd" @mesExiste="existe" @mesDelante="mensajeDelante"
                     @cancel="closeForm">
                     <template #icon>
@@ -565,10 +647,10 @@ watch(
                         <Icon :icon-button="true" name="calendarEdit" class-name="text-white" />
                     </template>
                     <template #label1>
-                        Editar Mes de {{ getMonthNameFromNumber(selectedMes) }} - {{ año_actual.añoActualSistema }}
+                        Editar <span class="hidden sm:contents">Mes de</span> {{ getMonthNameFromNumber(selectedMes) }} - {{ selectedGestion }}
                     </template>
                     <template #label2>
-                        Modifique monto y presupuesto del mes
+                        Modifique el monto y presupuesto
                     </template>
                 </Form>
             </Transition>
@@ -579,11 +661,11 @@ watch(
 
             <!-- Modal: Visualizar datos mes -->
             <Transition name="fade">
-                <ModalGestion v-if="showModal" :user="selectedId" :data="selectedItem" @close="closeForm" />
+                <ModalGestion v-if="showModal"
+                    :nombre-usuario="`${$page.props.auth.user.nombre} ${$page.props.auth.user.apellido}`"
+                    :ultimo_mes_id="gestion[gestion.length - 1]?.id_mes"
+                    :user="selectedId" :data="selectedItem" @close="closeForm" />
             </Transition>
-
-            <Reporte v-if="reportes" :datos="gestion" :gestion="gestion.gestion" :download="true" tipoR="Gestión"
-                :tipo="false" style="display: none;" />
 
             <ModalResultadosMes v-model="mostrarModalResultadosMes" :datos="resultadosMes || {}"
                 @close="cerrarModalResultadosMes" />
@@ -591,241 +673,333 @@ watch(
             <!-- ============================================================================ -->
             <!-- ENCABEZADO DE PÁGINA -->
             <!-- ============================================================================ -->
-            <div class="px-5 py-3 flex justify-between">
-                <h1 class="font-semibold text-2xl">Gestiones</h1>
-                <Rutas label1="Inicio" label3="Gestiones" />
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Gestiones</h1>
+                <Rutas label1="Inicio" label3="Gestiones" class="sm:text-xs" />
             </div>
 
             <!-- ============================================================================ -->
             <!-- BARRA DE HERRAMIENTAS -->
             <!-- ============================================================================ -->
-            <div
-                class="grid grid-cols-4 items-center gap-6 px-4 py-4 border-b bg-white border-t mr-1 border-x border-gray-300 rounded-t-xl shadow-sm">
-                <!-- Columna Izquierda: Dropdown de Años -->
+            <!-- BARRA DE HERRAMIENTAS -->
+            <div class="px-4 py-4 border-b bg-white border-t mr-1 border-x border-gray-300 rounded-t-xl shadow-sm">
 
-                <div v-if="!gestionData && can('agregar-gestion')" class="flex justify-center lg:col-span-1">
-                    <button @click="openFormGestion()"
-                        class="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 rounded-lg transition-colors duration-150 shadow-sm dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
-                        <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path
-                                    d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-                            </svg>
-                        </div>
-                        <span>Crear Gestión</span>
-                    </button>
-                </div>
-                <div v-else class="flex justify-self-center lg:col-span-1">
-                    <h1
-                        class="text-3xl p-1.5 font-bold text-slate-800 text-center tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 bg-clip-text text-transparent">
-                        GESTIÓN
-                    </h1>
-                    <Dropdown align="left" width="60">
-                        <template #trigger>
-                            <button
-                                class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
-                                type="button">
-                                <span class="text-xl font-semibold text-slate-700">
-                                    {{ selectedYear || 'Seleccionar' }}
-                                </span>
-                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7" />
+                <!-- Fila principal: dropdown + botones de acción -->
+                <div class="flex items-center justify-between gap-3">
+
+                    <!-- Izquierda: Crear Gestión o Dropdown de año -->
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div v-if="!gestionData && can('agregar-gestion')">
+                            <button @click="openFormGestion()"
+                                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 rounded-lg transition-colors duration-150 shadow-sm">
+                                <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path
+                                        d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
                                 </svg>
-                                <span
-                                    v-if="btnAgregar === false && can('agregar-gestion')"
-                                    class="absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-400 z-20">
-                                    <span
-                                        class="absolute inset-0 w-2 h-2 bg-orange-500 rounded-full opacity-75 animate-ping"></span>
-                                </span>
+                                <span class="hidden sm:inline">Crear Gestión</span>
+                                <span class="sm:hidden">Crear</span>
                             </button>
-                        </template>
-
-                        <template #content>
-                            <div
-                                class="w-64 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-200">
-                                <!-- Lista scrolleable -->
-                                <div
-                                    class="max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
-                                    <ul class="py-2">
-                                        <li v-if="!gestiones || gestiones.length === 0" class="px-4 py-3">
-                                            <div class="flex items-center gap-3 text-slate-400">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                                </svg>
-                                                <span class="text-sm">No hay datos disponibles</span>
-                                            </div>
-                                        </li>
-                                        <li v-for="year in gestiones" :key="year.gestion">
-                                            <a href="#" @click.prevent="selectGestion(year)"
-                                                class="flex items-center justify-between px-4 py-3 text-sm hover:bg-blue-50 transition-all duration-150 group"
-                                                :class="selectedYear.toString() === year.gestion.toString()
-                                                    ? 'bg-blue-100 text-blue-800 font-semibold border-r-4 border-blue-500'
-                                                    : 'text-slate-700 hover:text-blue-700'">
-                                                <span class="flex items-center gap-2">
-                                                    <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors"
-                                                        fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd"
-                                                            d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
-                                                            clip-rule="evenodd" />
-                                                    </svg>
-                                                    {{ year.gestion }}
-                                                </span>
-                                                <svg v-if="selectedYear.toString() === year.gestion.toString()"
-                                                    class="w-5 h-5 text-blue-600" fill="currentColor"
-                                                    viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd"
-                                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                        clip-rule="evenodd" />
-                                                </svg>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                                <!-- Botón para agregar nueva gestión (fuera del scroll) -->
-                                <div v-if="btnAgregar === false && can('agregar-gestion')"
-                                    class="border-t border-slate-200 p-3 bg-white">
-                                    <button @click="openFormGestion()"
-                                        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md active:scale-95">
-                                        <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center">
-                                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                <path
-                                                    d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-                                            </svg>
-                                        </div>
-                                        <span>Agregar Gestión</span>
+                        </div>
+                        <div v-else class="flex items-center gap-2">
+                            <h1
+                                class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 bg-clip-text text-transparent whitespace-nowrap">
+                                GESTIÓN
+                            </h1>
+                            <Dropdown align="left" width="60">
+                                <template #trigger>
+                                    <button
+                                        class="relative inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
+                                        type="button">
+                                        <span class="text-lg sm:text-xl font-semibold text-slate-700">
+                                            {{ selectedYear || 'Seleccionar' }}
+                                        </span>
+                                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                        <span v-if="btnAgregar === false && can('agregar-gestion')"
+                                            class="absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-400 z-20">
+                                            <span
+                                                class="absolute inset-0 w-2 h-2 bg-orange-500 rounded-full opacity-75 animate-ping"></span>
+                                        </span>
                                     </button>
-                                </div>
-                            </div>
-                        </template>
-                    </Dropdown>
-                </div>
-
-                <!-- Columna Central: Información Principal -->
-                <div class="justify-self-center text-center lg:col-span-2">
-                    <div v-if="existe_gestion" class="space-y-1">
-                        <div class="flex flex-wrap justify-center gap-2">
-                            <!-- Presupuesto Inicial -->
-                            <div
-                                class="inline-flex items-center gap-2 px-3 py-0.5 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium shadow-sm ">
-                                <svg class="w-4 h-4 flex-shrink-0 text-emerald-500" fill="currentColor"
-                                    viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd"
-                                        d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <div class="text-left">
-                                    <div class="text-xs text-emerald-600 font-semibold uppercase tracking-wide">Inicial
+                                </template>
+                                <template #content>
+                                    <div
+                                        class="w-64 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-200">
+                                        <!-- Lista scrolleable -->
+                                        <div
+                                            class="max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+                                            <ul class="py-2">
+                                                <li v-if="!gestiones || gestiones.length === 0" class="px-4 py-3">
+                                                    <div class="flex items-center gap-3 text-slate-400">
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                        </svg>
+                                                        <span class="text-sm">No hay datos disponibles</span>
+                                                    </div>
+                                                </li>
+                                                <li v-for="year in gestiones" :key="year.gestion">
+                                                    <a href="#" @click.prevent="selectGestion(year)"
+                                                        class="flex items-center justify-between px-4 py-3 text-sm hover:bg-blue-50 transition-all duration-150 group"
+                                                        :class="selectedYear.toString() === year.gestion.toString()
+                                                            ? 'bg-blue-100 text-blue-800 font-semibold border-r-4 border-blue-500'
+                                                            : 'text-slate-700 hover:text-blue-700'">
+                                                        <span class="flex items-center gap-2">
+                                                            <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors"
+                                                                fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fill-rule="evenodd"
+                                                                    d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
+                                                                    clip-rule="evenodd" />
+                                                            </svg>
+                                                            {{ year.gestion }}
+                                                        </span>
+                                                        <svg v-if="selectedYear.toString() === year.gestion.toString()"
+                                                            class="w-5 h-5 text-blue-600" fill="currentColor"
+                                                            viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd"
+                                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                                clip-rule="evenodd" />
+                                                        </svg>
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        <!-- Botón para agregar nueva gestión (fuera del scroll) -->
+                                        <div v-if="btnAgregar === false && can('agregar-gestion')"
+                                            class="border-t border-slate-200 p-3 bg-white">
+                                            <button @click="openFormGestion()"
+                                                class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md active:scale-95">
+                                                <div class="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path
+                                                            d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+                                                    </svg>
+                                                </div>
+                                                <span>Agregar Gestión</span>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <span class="text-sm font-bold text-emerald-800">
-                                        Bs. {{ formatCurrency(añoSeleccionado.presupuesto_anual || 0) }}
-                                    </span>
-                                </div>
-                            </div>
+                                </template>
+                            </Dropdown>
+                        </div>
+                    </div>
 
-                            <!-- Presupuesto Utilizado -->
-                            <div
-                                class="inline-flex items-center gap-2 px-3 py-0.5 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-200 text-rose-700 rounded-lg text-sm font-medium shadow-sm ">
-                                <svg class="w-4 h-4 flex-shrink-0 text-rose-500" fill="currentColor"
-                                    viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd"
-                                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <div class="text-left">
-                                    <div class="text-xs text-rose-600 font-semibold uppercase tracking-wide">Utilizado
-                                    </div>
-                                    <span class="text-sm font-bold text-rose-800">
-                                        Bs. {{ formatCurrency(sumaPresupuestoMensual || 0) }}
-                                    </span>
-                                </div>
-                            </div>
 
-                            <!-- Presupuesto Disponible -->
-                            <div
-                                class="inline-flex items-center gap-2 px-3 py-0.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 text-sky-700 rounded-lg text-sm font-medium shadow-sm ">
-                                <svg class="w-4 h-4 flex-shrink-0 text-sky-500" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd"
-                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <div class="text-left">
-                                    <div class="text-xs text-sky-600 font-semibold uppercase tracking-wide">Disponible
-                                    </div>
-                                    <span class="text-sm font-bold text-sky-800">
-                                        Bs. {{ formatCurrency((añoSeleccionado.presupuesto_anual || 0) -
-                                            (sumaPresupuestoMensual ||
-                                                0)) }}
-                                    </span>
+                    <!-- Fila secundaria: presupuestos (solo si existe gestión) -->
+                     <div class="hidden sm:contents">
+                        <div v-if="existe_gestion" class="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <!-- Presupuesto Inicial -->
+                        <div
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium shadow-sm">
+                            <Icon :icon-button="true" name="cash" class-name="text-emerald-500" :size="20"/>
+                            <div>
+                                <div
+                                    class="text-xs text-emerald-600 font-semibold uppercase tracking-wide leading-none">
+                                    Inicial
                                 </div>
+                                <span class="text-sm font-bold text-emerald-800">Bs. {{
+                                    formatCurrency(añoSeleccionado.presupuesto_anual || 0) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Presupuesto Utilizado -->
+                        <div
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-200 text-rose-700 rounded-lg text-sm font-medium shadow-sm">
+                            <Icon :icon-button="true" name="bajaTemporal" :viewBox="'0 0 20 20'" class-name="text-rose-500" :size="20"/>
+                            <div>
+                                <div class="text-xs text-rose-600 font-semibold uppercase tracking-wide leading-none">
+                                    Utilizado
+                                </div>
+                                <span class="text-sm font-bold text-rose-800">Bs. {{
+                                    formatCurrency(sumaPresupuestoMensual || 0)
+                                }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Presupuesto Disponible -->
+                        <div
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 text-sky-700 rounded-lg text-sm font-medium shadow-sm">
+                            <Icon :icon-button="true" name="checkCircle" class-name="text-sky-500" :size="20" />
+                            <div>
+                                <div class="text-xs text-sky-600 font-semibold uppercase tracking-wide leading-none">
+                                    Disponible
+                                </div>
+                                <span class="text-sm font-bold text-sky-800">Bs. {{
+                                    formatCurrency((añoSeleccionado.presupuesto_anual || 0) - (sumaPresupuestoMensual ||
+                                        0))
+                                }}</span>
                             </div>
                         </div>
                     </div>
+                     </div>
+
+
+
+
+                    <!-- Derecha: Botones de acción -->
+<div class="flex items-center gap-1.5 flex-shrink-0 relative">
+
+    <!-- MÓVIL: Botón "+" con dropdown -->
+    <div class="relative sm:hidden">
+        <Button @click.prevent="showMobileMenu = !showMobileMenu"
+            :style="'px-2 py-2 pb-0.5 rounded-full border-none'"
+            class="shrink-0 self-center bg-gray-200 relative overflow-hidden group">
+            <span class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+            <span class="relative z-10">
+                <Icon :icon-button="true" name="circlePlus"
+                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
+                    :size="32" :height="31" />
+            </span>
+        </Button>
+
+        <Transition enter-active-class="transition-all duration-300 ease-out"
+            enter-from-class="opacity-0 -translate-y-3 scale-95"
+            enter-to-class="opacity-100 translate-y-0 scale-100"
+            leave-active-class="transition-all duration-200 ease-in"
+            leave-from-class="opacity-100 translate-y-0 scale-100"
+            leave-to-class="opacity-0 -translate-y-3 scale-95">
+            <div v-if="showMobileMenu"
+                class="absolute right-0 top-full mt-2 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-2 z-50">
+
+                <Button
+                    v-if="can('agregar-mes') && año_actual.id === null ? false : (mes_actual_disponible !== 0 ? true : false)"
+                    @click.prevent="openFormCreate(); closeMobileMenu()"
+                    :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                    class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                    <span class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                    <span class="relative z-10">
+                        <Icon :icon-button="true" name="calendarPlus" fill="currentColor"
+                            class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+                    </span>
+                </Button>
+
+                <Button v-if="can('editar-gestion') && existe_gestion ? true : false"
+                    @click.prevent="openFormEdit(); closeMobileMenu()"
+                    :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                    class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                    <span class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                    <span class="relative z-10">
+                        <Icon :icon-button="true" name="calendarEdit" fill="currentColor"
+                            class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+                    </span>
+                </Button>
+
+                <Button v-if="can('reporte-gestion') && existe_gestion && tiene_meses && gestion.length > 0"
+                    @click.prevent="generarInforme(); closeMobileMenu()"
+                    :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                    class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                    <span class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                    <span class="relative z-10">
+                        <Icon :icon-button="true" name="filePDF" fill="currentColor"
+                            class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+                    </span>
+                </Button>
+
+            </div>
+        </Transition>
+    </div>
+
+    <!-- DESKTOP sm+: Botones normales -->
+    <template class="hidden sm:contents">
+        <Button
+            v-if="can('agregar-mes') && año_actual.id === null ? false : (mes_actual_disponible !== 0 ? true : false)"
+            id="btn-agregar" @click.prevent="openFormCreate()"
+            @mouseenter="showTooltip('Agregar', 'btn-agregar')" @mouseleave="hideTooltip"
+            :style="'px-3 py-3 pb-2 rounded-full border-none'"
+            class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+            <span class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+            <span class="relative z-10">
+                <Icon :icon-button="true" name="calendarPlus" fill="currentColor"
+                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+            </span>
+        </Button>
+
+        <Button v-if="can('editar-gestion') && existe_gestion ? true : false" id="btn-editar"
+            @click.prevent="openFormEdit()"
+            @mouseenter="showTooltip('Editar', 'btn-editar')" @mouseleave="hideTooltip"
+            :style="'px-3 py-3 pb-2 rounded-full border-none'"
+            class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+            <span class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+            <span class="relative z-10">
+                <Icon :icon-button="true" name="calendarEdit" fill="currentColor"
+                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+            </span>
+        </Button>
+
+        <Button v-if="can('reporte-gestion') && existe_gestion && tiene_meses && gestion.length > 0"
+            id="btn-reporte" @click.prevent="generarInforme()"
+            @mouseenter="showTooltip('Generar PDF', 'btn-reporte')" @mouseleave="hideTooltip"
+            :style="'px-3 py-3 pb-2 rounded-full border-none'"
+            class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+            <span class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+            <span class="relative z-10">
+                <Icon :icon-button="true" name="filePDF" fill="currentColor"
+                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+            </span>
+        </Button>
+    </template>
+
+    <!-- Tooltip (solo desktop, ya no hace falta en móvil) -->
+    <div v-if="showTooltipFlag" ref="tooltipRef"
+        class="fixed z-50 px-3 py-1.5 text-xs text-white bg-gray-800 rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
+        :style="tooltipStyle">
+        {{ tooltipText }}
+    </div>
+</div>
                 </div>
-                <!-- Columna Derecha: Sección Autenticada -->
-                <!-- Botones de acción -->
-                <div class="justify-self-end lg:col-span-1 relative flex gap-2">
-                    <!-- Botón: Agregar -->
-                    <Button
-                        v-if="can('agregar-mes') && año_actual.id === null ? false : (mes_actual_disponible !== 0 ? true : false)"
-                        id="btn-agregar" @click.prevent="openFormCreate()"
-                        @mouseenter="showTooltip('Agregar', 'btn-agregar')" @mouseleave="hideTooltip"
-                        :style="'px-3 py-3 pb-2 rounded-full border-none'"
-                        class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
-                        <span
-                            class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
 
-                        <!-- Icono -->
-                        <span class="relative z-10">
-                            <Icon :icon-button="true" name="calendarPlus" fill="currentColor" :ripple="true" ripple-color="bg-orange-700"
-                                class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
-                        </span>
-                    </Button>
+<!-- Fila secundaria: presupuestos (solo si existe gestión) -->
+ <!-- MÓVIL: Botón "+" con dropdown -->
+                <div v-if="existe_gestion" class="relative sm:hidden mt-3 pt-3 border-t border-gray-100">
+                    <div class="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <!-- Presupuesto Inicial -->
+                        <div
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium shadow-sm">
+                            <Icon :icon-button="true" name="cash" class-name="text-emerald-500" :size="17"/>
+                            <div>
+                                <div
+                                    class="text-xs text-emerald-600 font-semibold uppercase tracking-wide leading-none">
+                                    Inicial
+                                </div>
+                                <span class="text-xs font-bold text-emerald-800">Bs. {{
+                                    formatCurrency(añoSeleccionado.presupuesto_anual || 0) }}</span>
+                            </div>
+                        </div>
 
-                    <!-- Botón: Editar -->
-                    <Button v-if="can('editar-gestion') && existe_gestion ? true : false" id="btn-editar"
-                        @click.prevent="openFormEdit()" @mouseenter="showTooltip('Editar', 'btn-editar')"
-                        @mouseleave="hideTooltip" :style="'px-3 py-3 pb-2 rounded-full border-none'"
-                        class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
-                        <span
-                            class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                        <!-- Presupuesto Utilizado -->
+                        <div
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-rose-50 to-red-50 border border-rose-200 text-rose-700 rounded-lg text-sm font-medium shadow-sm">
+                            <Icon :icon-button="true" name="bajaTemporal" :viewBox="'0 0 20 20'" class-name="text-rose-500" :size="17"/>
+                            <div>
+                                <div class="text-xs text-rose-600 font-semibold uppercase tracking-wide leading-none">
+                                    Utilizado
+                                </div>
+                                <span class="text-xs font-bold text-rose-800">Bs. {{
+                                    formatCurrency(sumaPresupuestoMensual || 0)
+                                }}</span>
+                            </div>
+                        </div>
 
-                        <!-- Icono -->
-                        <span class="relative z-10">
-                            <Icon :icon-button="true" name="calendarEdit" fill="currentColor"
-                                class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
-                        </span>
-                    </Button>
-
-                    <!-- Botón: Generar PDF -->
-                    <Button v-if="can('reporte-gestion') && existe_gestion && tiene_meses && gestion.length > 0"
-                        id="btn-reporte" @click.prevent="generearInforme()"
-                        @mouseenter="showTooltip('Generar PDF', 'btn-reporte')" @mouseleave="hideTooltip"
-                        :style="'px-3 py-3 pb-2 rounded-full border-none'"
-                        class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
-                        <span
-                            class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
-
-                        <!-- Icono -->
-                        <span class="relative z-10">
-                            <Icon :icon-button="true" name="filePDF" fill="currentColor"
-                                class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
-                        </span>
-                    </Button>
-                </div>
-
-                <!-- Tooltip -->
-                <div v-if="showTooltipFlag" ref="tooltipRef"
-                    class="fixed z-50 px-3 py-1.5 text-xs text-white bg-gray-800 rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
-                    :style="tooltipStyle">
-                    {{ tooltipText }}
+                        <!-- Presupuesto Disponible -->
+                        <div
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 text-sky-700 rounded-lg text-sm font-medium shadow-sm">
+                            <Icon :icon-button="true" name="checkCircle" class-name="text-sky-500" :size="17" />
+                            <div>
+                                <div class="text-xs text-sky-600 font-semibold uppercase tracking-wide leading-none">
+                                    Disponible
+                                </div>
+                                <span class="text-xs font-bold text-sky-800">Bs. {{
+                                    formatCurrency((añoSeleccionado.presupuesto_anual || 0) - (sumaPresupuestoMensual ||
+                                        0))
+                                }}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -834,7 +1008,7 @@ watch(
             <!-- ============================================================================ -->
             <main
                 class="flex-1 overflow-x-hidden bg-white overflow-y-auto border-b border-x border-gray-300 rounded-b-lg mr-1">
-                <div v-if="existe_gestion && tiene_meses && gestion.length > 0" class="p-2 h-full">
+                <div v-if="existe_gestion && tiene_meses && gestion.length > 0" class="p-2 mb-3 h-full">
                     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                         <div v-for="item in gestion" :key="item.id_mes" class="w-full">
                             <form @submit.prevent="submit" @click.prevent="openModalMes(item)"
@@ -852,14 +1026,14 @@ watch(
                                                 <div :class="{
                                                     'px-4 py-1.5 rounded-lg text-xs font-medium shadow-sm text-center relative overflow-hidden': true,
                                                     'bg-green-100 text-green-800 border border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-600': item.cantidad_habilitadas === item.cantidad_total_pagos,
-                                                    'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-600': verifyDate(item.gestion, item.mes) && item.cantidad_habilitadas !== item.cantidad_total_pagos,
-                                                    'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-600': !verifyDate(item.gestion, item.mes) && item.cantidad_habilitadas !== item.cantidad_total_pagos
+                                                    'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-600': verifyDate(item.gestion, item.mes, gestion) && item.cantidad_habilitadas !== item.cantidad_total_pagos,
+                                                    'bg-yellow-100 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300 dark:border-yellow-600': !verifyDate(item.gestion, item.mes, gestion) && item.cantidad_habilitadas !== item.cantidad_total_pagos
                                                 }">
                                                     <span class="relative z-10">
                                                         {{
                                                             item.cantidad_habilitadas === item.cantidad_total_pagos ?
                                                                 'Completo' :
-                                                                verifyDate(item.gestion, item.mes) ? 'En Proceso' :
+                                                                verifyDate(item.gestion, item.mes, gestion) ? 'En Proceso' :
                                                                     'Pendiente'
                                                         }}
                                                     </span>
@@ -869,7 +1043,7 @@ watch(
                                             <!-- Edit Button -->
                                             <div v-if="can('editar-mes')" class="pb-0">
                                                 <Icon
-                                                    @click.stop.prevent="openEditMes(item.id_mes, item.monto, item.presupuesto)"
+                                                    @click.stop.prevent="openEditMes(item.id_mes, item.monto, item.presupuesto, item.mes, item.gestion)"
                                                     name="calendarEdit" class-name="text-gray-500" />
                                             </div>
                                         </div>

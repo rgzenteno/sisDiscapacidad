@@ -14,27 +14,26 @@ const props = defineProps({
 const emit = defineEmits(['edit', 'close']);
 
 const getCurrentDate = (data) => {
-    // Parsear la fecha manualmente para evitar problemas de zona horaria
+    if (!data) return 'Indefinido';
     const [year, month, day] = data.split('-').map(Number);
     const fecha = new Date(year, month - 1, day);
-
     const options = { year: 'numeric', month: 'short', day: 'numeric' };
     let dateStr = fecha.toLocaleDateString('es-ES', options);
-
-    // Capitalizar la primera letra del mes
     dateStr = dateStr.replace(/\b\w/g, char => char.toUpperCase());
-
     return dateStr;
 };
 
 const esVigente = ref(false);
 
 watch(() => props.data.carnet?.fecha_vencimiento, (nuevaFecha) => {
+    if (!props.data.carnet?.fecha_emision) {
+        esVigente.value = true; // indefinido siempre vigente
+        return;
+    }
     const fechaVenc = new Date(nuevaFecha);
     const fechaActual = new Date();
-
     esVigente.value = fechaVenc >= fechaActual;
-}, { immediate: true }); // immediate: true ejecuta al montar el componente
+}, { immediate: true });
 
 const closeOnEscape = (e) => {
     if (e.key === 'Escape') {
@@ -150,47 +149,65 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                 </div>
 
                 <!-- Fechas -->
-                <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div
-                        class="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-slate-300 hover:shadow-md transition-all">
-                        <div class="flex gap-3">
-                            <div
-                                class="w-9 h-9 bg-blue-100 border border-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <svg class="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path
-                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
+                <template v-if="props.data.carnet?.fecha_emision">
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div
+                            class="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-slate-300 hover:shadow-md transition-all">
+                            <div class="flex gap-3">
+                                <div
+                                    class="w-9 h-9 bg-blue-100 border border-blue-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" stroke-width="2">
+                                        <path
+                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span
+                                        class="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Emisión</span>
+                                    <span class="text-sm font-semibold text-slate-800 block mt-0.5">{{
+                                        getCurrentDate(props.data.carnet?.fecha_emision) }}</span>
+                                </div>
                             </div>
-                            <div>
-                                <span
-                                    class="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Emisión</span>
-                                <span class="text-sm font-semibold text-slate-800 block mt-0.5">{{
-                                    getCurrentDate(props.data.carnet?.fecha_emision) }}</span>
+                        </div>
+                        <div
+                            class="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-slate-300 hover:shadow-md transition-all">
+                            <div class="flex gap-3">
+                                <div
+                                    class="w-9 h-9 bg-amber-100 border border-amber-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg class="w-5 h-5 text-amber-600" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="M12 6v6l4 2" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <span
+                                        class="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Vencimiento</span>
+                                    <span class="text-sm font-semibold text-slate-800 block mt-0.5">{{
+                                        getCurrentDate(props.data.carnet?.fecha_vencimiento) }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
+                </template>
 
+                <template v-else>
                     <div
-                        class="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-slate-300 hover:shadow-md transition-all">
-                        <div class="flex gap-3">
-                            <div
-                                class="w-9 h-9 bg-amber-100 border border-amber-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <svg class="w-5 h-5 text-amber-600" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="M12 6v6l4 2" />
-                                </svg>
-                            </div>
-                            <div>
-                                <span
-                                    class="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Vencimiento</span>
-                                <span class="text-sm font-semibold text-slate-800 block mt-0.5">{{
-                                    getCurrentDate(props.data.carnet?.fecha_vencimiento) }}</span>
-                            </div>
+                        class="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col items-center gap-2 text-center">
+                        <div
+                            class="w-10 h-10 bg-blue-100 border border-blue-200 rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 8v4m0 4h.01" />
+                            </svg>
                         </div>
+                        <span class="text-sm font-bold text-blue-800">Carnet con Vigencia Indefinida</span>
+                        <span class="text-xs text-blue-600">Este carnet no tiene fecha de emisión ni vencimiento
+                            asignada.</span>
                     </div>
-                </div>
+                </template>
 
                 <!-- Info adicional -->
                 <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-3">

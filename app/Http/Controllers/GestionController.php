@@ -5,10 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Gestion;
 use App\Models\Habilitado;
 use App\Models\HistorialEstados;
-use App\Models\HistorialHabilitado;
 use App\Models\Mes;
 use App\Models\Persona;
-use App\Models\User;
 use App\Services\LogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,7 +15,6 @@ use Inertia\Inertia;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Str;
 
 class GestionController extends Controller
@@ -28,177 +25,200 @@ class GestionController extends Controller
     {
         $this->logService = $logService;
     }
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
+        $personasPagadasPorMes = [];
+
         $año = $request->input('año')
             ?? session('selected_year')
             ?? Gestion::max('gestion')
             ?? Carbon::now()->year;
 
-        session(['selected_year' => $año]); // Guardar en sesión
-        $selectedYear = session('selected_year'); // Obtener de sesión
-        //$añoActualSistema = Carbon::now()->year;
-        $añoActualSistema = 2025;
+        session(['selected_year' => $año]);
+        $selectedYear     = session('selected_year');
+        $añoActualSistema = Carbon::now()->year;
+        //$añoActualSistema = 2026;
 
-        $gestionActual = Gestion::where('gestion', $añoActualSistema)->first();
+        // ================== AÑO ACTUAL DEL SISTEMA ==================
+        // ✅ Una sola query reutilizada en lugar de dos iguales
+        $gestionAñoActual   = Gestion::where('gestion', $añoActualSistema)->first();
+        $existeAñoActual    = (bool) $gestionAñoActual;
+        $idGestionActual    = $gestionAñoActual?->id_gestion;
+        $PresuGestionActual = $gestionAñoActual?->presupuesto_anual;
 
-        if ($gestionActual) {
-            $existeAñoActual = true;
-            $idGestionActual = $gestionActual->id_gestion;
-            $PresuGestionActual = $gestionActual->presupuesto_anual;
-        } else {
-            $existeAñoActual = false;
-            $idGestionActual = null;
-        }
-
-        //dd(session('selected_year'));
         // ================== VERIFICACIÓN INICIAL ==================
-        // Verificar si existe la gestión para el año solicitado
         $gestionActual = Gestion::where('gestion', $selectedYear)->first();
-
         $existeGestion = Gestion::exists();
 
-        // Si no existe la gestión, inicializar colección vacía para la consulta principal
-        $gestion = collect();
-
-        // Si existe la gestión, verificar si tiene meses asociados
-        $tieneMeses = false;
-        if ($gestionActual) {
-            $tieneMeses = Mes::where('id_gestion', $gestionActual->id_gestion)->exists();
-        }
+        $tieneMeses = $gestionActual
+            ? $gestionActual->meses()->exists()   // ✅ Eloquent via relación
+            : false;
 
         // ================== CONSULTA PRINCIPAL (solo si hay gestión y meses) ==================
+        $gestion = collect();
+
         if ($gestionActual && $tieneMeses) {
-            $query = Gestion::query()
+            $gestion = Gestion::query()
                 ->select([
                     'gestion.id_gestion as id',
                     'gestion.gestion as gestion',
-                    'gestion.presupuesto_anual as presupuesto',
+                    'gestion.presupuesto_anual as presupuesto_anual',
                     'mes.id_mes as id_mes',
                     'mes.mes as mes',
                     'mes.monto as monto',
                     'mes.presupuesto as presupuesto',
 
-                    // Conteos - Optimizados con subconsultas más eficientes
+                    // ── Habilitados ──────────────────────────────────────────────
                     DB::raw('(SELECT COUNT(DISTINCT h.id_persona)
-                    FROM habilitado h
-                    WHERE h.id_mes = mes.id_mes) as cantidad_habilitadas'),
-
-                    DB::raw('(SELECT COUNT(DISTINCT p.id_persona) FROM persona p) as total_personas'),
-
-                    DB::raw('((SELECT COUNT(DISTINCT p.id_persona) FROM persona p) -
-                    (SELECT COUNT(DISTINCT h.id_persona) FROM habilitado h WHERE h.id_gestion = gestion.id_gestion)) as cantidad_no_habilitadas'),
-
-                    // Carnets
-                    DB::raw('(SELECT COUNT(DISTINCT p.id_persona)
-                    FROM persona p
-                    LEFT JOIN carnet c ON p.id_persona = c.id_persona
-                    WHERE c.id_persona IS NULL) as sin_carnet_discapacidad'),
+                        FROM habilitado h
+                        WHERE h.id_mes = mes.id_mes
+                    ) as cantidad_habilitadas'),
 
                     DB::raw('(SELECT COUNT(DISTINCT p.id_persona)
-                    FROM persona p
-                    INNER JOIN carnet c ON p.id_persona = c.id_persona
-                    WHERE c.fecha_vencimiento < CURDATE()) as carnet_vencidos'),
+                        FROM persona p
+                    ) as total_personas'),
 
-                    // Estados - CORREGIDOS para usar el último registro de historial_estados
+                    // ── Carnets ──────────────────────────────────────────────────
+                    DB::raw('(SELECT COUNT(DISTINCT p.id_persona)
+                        FROM persona p
+                        LEFT JOIN carnet c ON p.id_persona = c.id_persona
+                        JOIN historial_estados he ON p.id_persona = he.id_persona
+                        WHERE c.id_persona IS NULL
+                        AND he.estado = \'activo\'
+                    ) as sin_carnet_discapacidad'),
+
+                    DB::raw('(SELECT COUNT(DISTINCT p.id_persona)
+                        FROM persona p
+                        INNER JOIN carnet c ON p.id_persona = c.id_persona
+                        JOIN historial_estados he ON p.id_persona = he.id_persona
+                        WHERE c.fecha_vencimiento < CURDATE()
+                        AND c.fecha_emision IS NOT NULL
+                        AND c.fecha_vencimiento IS NOT NULL
+                        AND he.estado = \'activo\'
+                    ) as carnet_vencidos'),
+
+                    // ── Estados (último registro por persona) ────────────────────
                     DB::raw("(SELECT COUNT(DISTINCT p.id_persona)
-                    FROM persona p
-                    INNER JOIN historial_estados he ON p.id_persona = he.id_persona
-                    WHERE he.estado = 'activo'
-                    AND he.id = (
-                        SELECT MAX(he2.id)
-                        FROM historial_estados he2
-                        WHERE he2.id_persona = he.id_persona
-                    )) as personas_activos"),
+                        FROM persona p
+                        INNER JOIN historial_estados he ON he.id = (
+                            SELECT MAX(id)
+                            FROM historial_estados
+                            WHERE id_persona = p.id_persona
+                        )
+                        WHERE he.estado = 'activo'
+                        AND he.id = (
+                            SELECT MAX(he2.id) FROM historial_estados he2
+                            WHERE he2.id_persona = he.id_persona
+                        )
+                    ) as personas_activos"),
 
                     DB::raw("(SELECT COUNT(DISTINCT p.id_persona)
-                    FROM persona p
-                    INNER JOIN historial_estados he ON p.id_persona = he.id_persona
-                    WHERE he.estado = 'baja_temporal'
-                    AND he.id = (
-                        SELECT MAX(he2.id)
-                        FROM historial_estados he2
-                        WHERE he2.id_persona = he.id_persona
-                    )) as personas_baja_temporal"),
+                        FROM persona p
+                        INNER JOIN historial_estados he ON he.id = (
+                            SELECT MAX(id)
+                            FROM historial_estados
+                            WHERE id_persona = p.id_persona
+                        )
+                        WHERE he.estado = 'baja_temporal'
+                        AND he.id = (
+                            SELECT MAX(he2.id) FROM historial_estados he2
+                            WHERE he2.id_persona = he.id_persona
+                        )
+                    ) as personas_baja_temporal"),
 
                     DB::raw("(SELECT COUNT(DISTINCT p.id_persona)
-                    FROM persona p
-                    INNER JOIN historial_estados he ON p.id_persona = he.id_persona
-                    WHERE he.estado = 'baja_definitiva'
-                    AND he.id = (
-                        SELECT MAX(he2.id)
-                        FROM historial_estados he2
-                        WHERE he2.id_persona = he.id_persona
-                    )) as personas_baja_definitiva"),
+                        FROM persona p
+                        INNER JOIN historial_estados he ON he.id = (
+                            SELECT MAX(id)
+                            FROM historial_estados
+                            WHERE id_persona = p.id_persona
+                        )
+                        WHERE he.estado = 'baja_definitiva'
+                        AND he.id = (
+                            SELECT MAX(he2.id) FROM historial_estados he2
+                            WHERE he2.id_persona = he.id_persona)
+                        ) as personas_baja_definitiva"),
 
-                    DB::raw("(SELECT COUNT(DISTINCT p.id_persona) FROM persona p WHERE p.id_tutor IS NULL) AS personas_sin_tutor"),
+                    DB::raw('(SELECT COUNT(DISTINCT p.id_persona)
+                        FROM persona p
+                        INNER JOIN historial_estados he ON he.id = (
+                            SELECT MAX(id)
+                            FROM historial_estados
+                            WHERE id_persona = p.id_persona
+                        )
+                        WHERE he.estado = \'activo\'
+                        AND p.id_tutor IS NULL
+                        AND (p.tutor_nombre IS NULL OR p.tutor_nombre != \'propio\')
+                    ) AS personas_sin_tutor'),
 
-                    // PAGOS CORREGIDOS - Filtrados por mes específico
+                    // ── Pagos del mes ────────────────────────────────────────────
                     DB::raw('(SELECT COUNT(pag.id_pago)
-                    FROM pago pag
-                    INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
-                    WHERE hab.id_gestion = gestion.id_gestion
-                    AND hab.id_mes = mes.id_mes) as cantidad_total_pagos'),
+                        FROM pago pag
+                        INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
+                        WHERE hab.id_gestion = gestion.id_gestion
+                        AND hab.id_mes = mes.id_mes
+                    ) as cantidad_total_pagos'),
 
-                    DB::raw('((SELECT COUNT(DISTINCT h.id_persona) FROM habilitado h WHERE h.id_mes = mes.id_mes) -
-                    (SELECT COUNT(pag.id_pago) FROM pago pag
-                    INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
-                    WHERE hab.id_gestion = gestion.id_gestion
-                    AND hab.id_mes = mes.id_mes)) as cantidad_no_pagados'),
+                    DB::raw('((SELECT COUNT(DISTINCT h.id_persona)
+                        FROM habilitado h WHERE h.id_mes = mes.id_mes) -
+                        (SELECT COUNT(pag.id_pago)
+                        FROM pago pag
+                        INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
+                        WHERE hab.id_gestion = gestion.id_gestion
+                        AND hab.id_mes = mes.id_mes)
+                    ) as cantidad_no_pagados'),
 
+                    // ✅ Un solo campo unificado, usado por modal y PDF
                     DB::raw('(SELECT COALESCE(SUM(pag.monto), 0)
-                    FROM pago pag
-                    INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
-                    WHERE hab.id_gestion = gestion.id_gestion
-                    AND hab.id_mes = mes.id_mes) as total_pagado'),
+                        FROM pago pag
+                        INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
+                        WHERE hab.id_gestion = gestion.id_gestion
+                        AND hab.id_mes = mes.id_mes
+                    ) as total_pagado'),
 
-                    // Total pagado contexto (filtrado por mes)
-                    DB::raw('(SELECT COALESCE(SUM(pag.monto), 0)
-                    FROM pago pag
-                    INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
-                    WHERE hab.id_gestion = gestion.id_gestion
-                    AND hab.id_mes = mes.id_mes) as total_pagado_contexto'),
-
-                    // Presupuesto restante - Usando subconsulta (total de la gestión)
-                    DB::raw('(gestion.presupuesto_anual -
-                    (SELECT COALESCE(SUM(pag.monto), 0)
-                    FROM pago pag
-                    INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
-                    WHERE hab.id_gestion = gestion.id_gestion)) as presupuesto_restante'),
-
-                    // Presupuesto - Simplificado
-                    DB::raw('gestion.presupuesto_anual as presupuesto_anual'),
-
+                    // ── Presupuesto anual ────────────────────────────────────────
                     DB::raw('(SELECT COALESCE(SUM(p2.monto), 0)
-                    FROM pago p2
-                    INNER JOIN habilitado h2 ON p2.id_habilitado = h2.id_habilitado
-                    WHERE h2.id_gestion = gestion.id_gestion
+                        FROM pago p2
+                        INNER JOIN habilitado h2 ON p2.id_habilitado = h2.id_habilitado
+                        WHERE h2.id_gestion = gestion.id_gestion
                     ) as presupuesto_anual_utilizado'),
 
                     DB::raw('(gestion.presupuesto_anual -
-                    (SELECT COALESCE(SUM(p2.monto), 0)
-                    FROM pago p2
-                    INNER JOIN habilitado h2 ON p2.id_habilitado = h2.id_habilitado
-                    WHERE h2.id_gestion = gestion.id_gestion)
+                        (SELECT COALESCE(SUM(p2.monto), 0)
+                        FROM pago p2
+                        INNER JOIN habilitado h2 ON p2.id_habilitado = h2.id_habilitado
+                        WHERE h2.id_gestion = gestion.id_gestion)
                     ) as presupuesto_anual_restante'),
 
-                    // Porcentajes - Corregidos para mostrar por mes
-                    DB::raw('ROUND(((SELECT COUNT(DISTINCT h.id_persona) FROM habilitado h WHERE h.id_gestion = gestion.id_gestion) * 100.0) /
-                    NULLIF((SELECT COUNT(DISTINCT p.id_persona) FROM persona p), 0), 2) as porcentaje_habilitado'),
+                    // ── Porcentajes ──────────────────────────────────────────────
+                    DB::raw('ROUND(((SELECT COUNT(DISTINCT h.id_persona)
+                        FROM habilitado h WHERE h.id_gestion = gestion.id_gestion) * 100.0) /
+                        NULLIF((SELECT COUNT(DISTINCT p.id_persona) FROM persona p), 0)
+                    , 2) as porcentaje_habilitado'),
 
                     DB::raw('ROUND(((SELECT COUNT(pag.id_pago)
-                    FROM pago pag
-                    INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
-                    WHERE hab.id_gestion = gestion.id_gestion
-                    AND hab.id_mes = mes.id_mes) * 100.0) /
-                    NULLIF((SELECT COUNT(DISTINCT h.id_persona) FROM habilitado h WHERE h.id_mes = mes.id_mes), 0), 2) as porcentaje_pagado'),
+                        FROM pago pag
+                        INNER JOIN habilitado hab ON pag.id_habilitado = hab.id_habilitado
+                        WHERE hab.id_gestion = gestion.id_gestion
+                        AND hab.id_mes = mes.id_mes) * 100.0) /
+                        NULLIF((SELECT COUNT(DISTINCT h.id_persona)
+                        FROM habilitado h WHERE h.id_mes = mes.id_mes), 0)
+                    , 2) as porcentaje_pagado'),
+
+                    // ── ✅ NUEVO: Último número de boleta del consecutivo ─────────
+                    DB::raw('(SELECT bc.ultimo_numero
+                        FROM boleta_consecutivo bc
+                        WHERE bc.id_mes     = mes.id_mes
+                        AND   bc.id_gestion = gestion.id_gestion
+                        LIMIT 1
+                    ) as ultimo_numero_boleta'),
                 ])
                 ->from('gestion')
                 ->leftJoin('mes', 'mes.id_gestion', '=', 'gestion.id_gestion')
-
                 ->where('gestion.gestion', '=', $selectedYear)
                 ->groupBy([
                     'gestion.id_gestion',
@@ -209,21 +229,18 @@ class GestionController extends Controller
                     'mes.monto',
                     'mes.presupuesto',
                 ])
-                ->orderBy('mes.mes', 'asc');
-
-            $gestion = $query->get();
+                ->orderBy('mes.mes', 'asc')
+                ->get();
         }
 
-        // ================== MES DISPONIBLE CONF==================
-        //$mesActual = Carbon::now()->month;
-        $mesActual = 12;
+        // ================== MES DISPONIBLE CONF ==================
+        //$mesActual    = Carbon::now()->month;
+        $mesActual    = 4;
         $mesDisponible = 0;
 
-        // Buscar la gestión del año actual del sistema (no la seleccionada)
-        $gestionAñoActualSistema = Gestion::where('gestion', $añoActualSistema)->first();
-
-        if ($gestionAñoActualSistema) {
-            $mesYaExiste = Mes::where('id_gestion', $gestionAñoActualSistema->id_gestion)
+        // ✅ Reutiliza $gestionAñoActual en lugar de volver a consultar
+        if ($gestionAñoActual) {
+            $mesYaExiste = $gestionAñoActual->meses()   // ✅ Eloquent via relación
                 ->where('mes', $mesActual)
                 ->exists();
             if (!$mesYaExiste) {
@@ -232,79 +249,131 @@ class GestionController extends Controller
         }
 
         // ================== CONSULTAS AUXILIARES ==================
-        $presupuestosAnuales = Gestion::select('gestion as año', 'presupuesto_anual')
+        $gestiones = Gestion::select('gestion')   // ✅ Eloquent
             ->distinct()
-            ->orderBy('año', 'desc')
+            ->orderByDesc('gestion')
+            ->get();
+
+        $presupuestosAnuales = Gestion::select('gestion as año', 'presupuesto_anual')   // ✅ Eloquent
+            ->distinct()
+            ->orderByDesc('año')
             ->get()
             ->keyBy('año')
             ->map(fn($item) => $item->presupuesto_anual);
 
-        $gestiones = Gestion::select('gestion')
-            ->distinct()
-            ->orderBy('gestion', 'desc')
-            ->get();
+        $cisPersonasActivas = Persona::query()
+            ->whereHas('ultimoEstado', fn($q) => $q->where('estado', 'activo'))
+            ->pluck('ci_persona')
+            ->map(fn($ci) => (string) $ci)
+            ->toArray();
 
-        // Segunda consulta: solo la suma que necesitas
-        $sumaPresupuestoMensual = DB::table('mes as m')
-            ->join('gestion as g', 'm.id_gestion', '=', 'g.id_gestion')
-            ->where('g.gestion', $selectedYear)
-            ->sum('m.presupuesto') ?? 0;
+        $cisTodasPersonas = Persona::query()
+            ->pluck('ci_persona')
+            ->map(fn($ci) => (string) $ci)
+            ->toArray();
+
+        $sumaPresupuestoMensual = $gestionActual
+            ? $gestionActual->meses()->sum('presupuesto')   // ✅ Eloquent via relación
+            : 0;
 
         $total_personas_validas = Persona::query()
-            ->join('carnet', 'persona.id_persona', '=', 'carnet.id_persona')
-            ->join('historial_estados', function ($join) {
-                $join->on('historial_estados.id_persona', '=', 'persona.id_persona')
-                    ->where('historial_estados.id', '=', function ($query) {
-                        $query->select(DB::raw('MAX(he2.id)'))
-                            ->from('historial_estados as he2')
-                            ->whereColumn('he2.id_persona', 'historial_estados.id_persona');
-                    });
-            })
-            ->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                    ->from('historial_estados')
-                    ->whereColumn('historial_estados.id_persona', 'persona.id_persona')
-                    ->where('historial_estados.estado', 'activo')
-                    ->where('historial_estados.id', '=', function ($subQuery) {
-                        $subQuery->select(DB::raw('MAX(he2.id)'))
-                            ->from('historial_estados as he2')
-                            ->whereColumn('he2.id_persona', 'historial_estados.id_persona');
-                    });
-            })
-            ->whereNotNull('persona.id_tutor')
-            ->where('carnet.fecha_vencimiento', '>', now())
+            ->where('tipo_registro', '!=', 'registrado')
+            ->whereHas('ultimoEstado', fn($q) => $q->where('estado', 'activo'))
+            ->whereHas('carnet', fn($q) => $q->where('fecha_vencimiento', '>', now()))
+            ->where(fn($q) => $q->whereNotNull('id_tutor')
+                ->orWhere('tutor_nombre', 'propio'))
             ->count();
+
+        $personasPagadasPorMes = [];
+
+        if ($gestionActual && $tieneMeses) {
+
+            foreach ($gestionActual->meses as $mesModel) {
+                $fechaFinMes = Carbon::createFromDate($gestionActual->gestion, $mesModel->mes, 1)->endOfMonth()->toDateString();
+
+                $ultimoHistorial = DB::table('historial_estados as he')
+                    ->select('he.id_persona', 'he.estado')
+                    ->where('he.fecha_inicio', '<=', $fechaFinMes)
+                    ->whereNotExists(function ($sub) use ($fechaFinMes) {
+                        $sub->select(DB::raw(1))
+                            ->from('historial_estados as he2')
+                            ->whereColumn('he2.id_persona', 'he.id_persona')
+                            ->where('he2.fecha_inicio', '<=', $fechaFinMes)
+                            ->where(function ($q) {
+                                $q->whereColumn('he2.fecha_inicio', '>', 'he.fecha_inicio')
+                                    ->orWhere(function ($q2) {
+                                        $q2->whereColumn('he2.fecha_inicio', '=', 'he.fecha_inicio')
+                                            ->whereColumn('he2.id', '>', 'he.id');
+                                    });
+                            });
+                    })
+                    ->where('he.estado', '!=', 'depurado');
+
+                $resultados = DB::table('persona as p')
+                    ->select([
+                        'm.id_mes',
+                        'm.mes',
+                        'p.ci_persona',
+                        'p.apellido_persona',
+                        'p.nombre_persona',
+                        'p.nombre_completo',
+                        'pag.monto as monto_pago',
+                        'pag.numero_boleta',
+                        'h.estado as estado_actual',
+                    ])
+                    ->selectRaw("UPPER(COALESCE(
+                NULLIF(TRIM(CONCAT(COALESCE(p.apellido_persona,''), ' ', COALESCE(p.nombre_persona,''))), ' '),
+                p.nombre_completo
+            )) as nombre_orden")
+                    ->joinSub($ultimoHistorial, 'h', 'h.id_persona', '=', 'p.id_persona')
+                    ->crossJoin(DB::raw("(SELECT {$mesModel->id_mes} as id_mes, {$mesModel->mes} as mes) as m"))
+                    ->leftJoin('habilitado as hab', function ($join) use ($gestionActual, $mesModel) {
+                        $join->on('hab.id_persona', '=', 'p.id_persona')
+                            ->where('hab.id_gestion', $gestionActual->id_gestion)
+                            ->where('hab.id_mes', $mesModel->id_mes);
+                    })
+                    ->leftJoin('pago as pag', 'pag.id_habilitado', '=', 'hab.id_habilitado')
+                    ->where(function ($q) {
+                        $q->whereNotNull('hab.id_habilitado')
+                            ->orWhereIn('h.estado', ['baja_temporal', 'baja_definitiva']);
+                    })
+                    ->orderByRaw('nombre_orden ASC')
+                    ->get();
+
+                $personasPagadasPorMes[$mesModel->id_mes] = $resultados->values();
+            }
+        }
 
         // ================== RETORNO ==================
         return Inertia::render('Gestion/index', [
-            'totalGestion' => Gestion::count(),
-            'meses_registrados_año_actual' => $gestionActual && $tieneMeses ?
-                Mes::where('id_gestion', $gestionActual->id_gestion)->pluck('mes')->toArray() : [],
-            'gestiones' => $gestiones,
-            'gestion' => $gestion, // Será colección vacía si no hay gestión o no tiene meses
-            'filters' => [
-                'año' => $selectedYear,
-                'buscador' => $request->input('buscador', '')
+            'gestiones'              => $gestiones,
+            'gestion'                => $gestion,
+            'filters'                => [
+                'año'      => $selectedYear,
+                'buscador' => $request->input('buscador', ''),
             ],
-            'años_registrados' => $gestiones->pluck('gestion'),
-            'presupuestosAnuales' => $presupuestosAnuales,
+            'años_registrados'       => $gestiones->pluck('gestion'),
+            'presupuestosAnuales'    => $presupuestosAnuales,
+            'cis_personas_activas'   => $cisPersonasActivas,
+            'cis_todas_personas'     => $cisTodasPersonas,
             'sumaPresupuestoMensual' => $sumaPresupuestoMensual,
+            'personasPagadasPorMes' => $personasPagadasPorMes,
             'total_personas_validas' => $total_personas_validas,
-            'añoSeleccionado' => $gestionActual ? $gestionActual : (object) ['gestion' => $selectedYear],
-            'año_actual' => [
-                'añoActualSistema' => $añoActualSistema,
-                'existeAñoActual' => $existeAñoActual,
-                'id' => $idGestionActual,
-                'presupuesto_anual' => $PresuGestionActual ?? 0
+            'añoSeleccionado'        => $gestionActual ?? (object) ['gestion' => $selectedYear],
+            'año_actual'             => [
+                'añoActualSistema'  => $añoActualSistema,
+                'existeAñoActual'   => $existeAñoActual,
+                'id'                => $idGestionActual,
+                'presupuesto_anual' => $PresuGestionActual ?? 0,
             ],
-            'mes_actual_disponible' => $mesDisponible,
-            'gestionTotal' => Gestion::count(),
-            'existe_gestion' => $gestionActual ? true : false, // Flag adicional para la vista
-            'gestionData' => $existeGestion,
-            'tiene_meses' => $tieneMeses, // Flag adicional para la vista
-            'btnAgregar' => $existeAñoActual  // 👈 SOLO AGREGAR ESTA LÍNEA
+            'mes_actual_disponible'  => $mesDisponible,
+            'existe_gestion'         => (bool) $gestionActual,
+            'gestionData'            => $existeGestion,
+            'tiene_meses'            => $tieneMeses,
+            'btnAgregar'             => $existeAñoActual,
         ]);
     }
+
     /**
      * Show the form for creating a new resource.
      */
@@ -320,799 +389,284 @@ class GestionController extends Controller
     {
         $data = $request->all();
         $gestion = Gestion::create($data);
-        $mensaje = "Nueva gestion creada: {$gestion->gestion} - Presupuesto Anual: " . number_format($gestion->presupuesto_anual);
 
-        $this->logService->logCreation('Gestion:', $gestion, $mensaje);
+        $this->logService->logCreation(
+            'Gestion',
+            $gestion,
+            "Se registró la gestión {$gestion->gestion} en el sistema.",
+            null,
+            [
+                'gestión'           => $gestion->gestion,
+                'presupuesto anual' => $gestion->presupuesto_anual,
+            ]
+        );
 
         session(['selected_year' => $gestion->gestion]);
         return redirect()->route('gestion.index', ['año' => $gestion->gestion]);
     }
 
 
-
-
     public function addMes(Request $request)
     {
-        $userId = Auth::id();
-        $data = $request->all();
+        $request->validate([
+            'archivo_pdf' => 'required|file|mimes:pdf|max:5120',
+        ]);
 
-        $fechaHoy = Carbon::create(2025, 12, 01, 80, 00, 00, 'America/La_Paz');
-        // $fechaHoy = Carbon::now('America/La_Paz');
+        $userId = Auth::id();
+        $fechaHoy = Carbon::now('America/La_Paz');
         $fechaHoyString = $fechaHoy->format('Y-m-d');
 
-
-        $usuario = Auth::user();
-        $nombreCompletoUsuario = $this->obtenerNombreCompletoUsuario($usuario);
-
-        Log::info('Iniciando store de gestión', ['user_id' => $userId, 'datos' => $data]);
+        $registrosExtraidos = $request->input('registros_extraidos')
+            ? json_decode($request->input('registros_extraidos'), true)
+            : [];
 
         try {
             DB::beginTransaction();
 
-            // Crear mes
-            $mes = Mes::create($data);
-            $gestion = Gestion::where('id_gestion', $mes->id_gestion)->value('gestion');
+            $mes = Mes::create([
+                'mes'         => $request->input('mes'),
+                'monto'       => $request->input('monto'),
+                'presupuesto' => $request->input('presupuesto'),
+                'id_gestion'  => $request->input('id_gestion'),
+            ]);
 
-            // Registrar creación del mes
-            $this->registrarCreacionMes($mes);
+            DB::table('boleta_consecutivo')->insertOrIgnore([
+                'id_mes'        => $mes->id_mes,
+                'id_gestion'    => $mes->id_gestion,
+                'ultimo_numero' => 0,
+            ]);
 
-            // Procesar archivo Excel si existe
-            $resultado = $this->procesarArchivoExcel(
-                $request,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario
-            );
+            $insertados  = [];
+            $habilitados = [];
+            $errores     = [];
+            $omitidos    = [];
+            $fallecidos  = []; // ✅ NUEVO
+
+            $gestion = Gestion::find($request->input('id_gestion'));
+
+            $fechaPrimeroMes = Carbon::create($gestion->gestion, $request->input('mes'), 1)
+                ->format('Y-m-d');
+
+            $user = Auth::user();
+            $nombreCompleto = "{$user->nombre} {$user->apellido}";
+
+            $cisExistentes = Persona::pluck('id_persona', 'ci_persona')->toArray();
+
+            foreach ($registrosExtraidos as $registro) {
+                $ci     = trim($registro['ci']);
+                $nombre = trim($registro['nombre']);
+
+                if (empty($ci) || empty($nombre)) continue;
+
+                try {
+                    if (isset($cisExistentes[$ci])) {
+                        $idPersona = $cisExistentes[$ci];
+
+                        $ultimoEstado = HistorialEstados::where('id_persona', $idPersona)
+                            ->orderByDesc('id')
+                            ->first(); // ← objeto completo
+
+                        if ($ultimoEstado->estado === 'baja_temporal') {
+                            $omitidos[] = ['ci' => $ci, 'nombre' => $nombre, 'motivo' => 'baja_temporal'];
+                            continue;
+                        }
+
+                        if ($ultimoEstado->estado === 'baja_definitiva') {
+                            $omitidos[] = ['ci' => $ci, 'nombre' => $nombre, 'motivo' => 'baja_definitiva'];
+                            continue;
+                        }
+
+                        // ✅ NUEVO: depurado → baja_definitiva (FALLECIDO)
+                        if ($ultimoEstado->estado === 'depurado') {
+                            // Cerrar estado depurado anterior
+                            $ultimoEstado->update(['fecha_fin' => $fechaPrimeroMes]);
+
+                            // Crear baja_definitiva
+                            HistorialEstados::create([
+                                'id_persona'           => $idPersona,
+                                'estado'               => 'baja_definitiva',
+                                'fecha_inicio'         => $fechaPrimeroMes,
+                                'fecha_fin'            => null,
+                                'fecha_registro'       => $fechaPrimeroMes,
+                                'usuario_modificacion' => $nombreCompleto,
+                                'observaciones'        => 'FALLECIDO',
+                            ]);
+
+                            $fallecidos[] = ['ci' => $ci, 'nombre' => $nombre]; // ✅
+                            continue;
+                        }
+
+                        if ($ultimoEstado->estado !== 'activo') {
+                            $omitidos[] = ['ci' => $ci, 'nombre' => $nombre, 'motivo' => $ultimoEstado->estado];
+                            continue;
+                        }
+                    } else {
+                        $idPersona = (string) Str::uuid();
+
+                        Persona::create([
+                            'id_persona'      => $idPersona,
+                            'nombre_completo' => $nombre,
+                            'ci_persona'      => $ci,
+                            'tipo_registro'   => 'pendiente',
+                            'fecha_registro'  => $fechaPrimeroMes,
+                        ]);
+
+                        HistorialEstados::create([
+                            'id_persona'           => $idPersona,
+                            'estado'               => 'activo',
+                            'fecha_inicio'         => $fechaPrimeroMes,
+                            'fecha_fin'            => null,
+                            'fecha_registro'       => $fechaPrimeroMes,
+                            'usuario_modificacion' => $nombreCompleto,
+                            'observaciones'        => '',
+                        ]);
+
+                        $cisExistentes[$ci] = $idPersona;
+                        $insertados[] = ['ci' => $ci, 'nombre' => $nombre];
+                    }
+
+                    Habilitado::create([
+                        'habilitado'       => 1,
+                        'id'               => $userId,
+                        'id_persona'       => $idPersona,
+                        'id_gestion'       => $mes->id_gestion,
+                        'id_mes'           => $mes->id_mes,
+                        'fecha_habilitado' => $fechaHoy,
+                    ]);
+
+                    $habilitados[] = ['ci' => $ci, 'nombre' => $nombre];
+                } catch (Exception $e) {
+                    Log::error('Error al procesar registro PDF', [
+                        'ci'      => $ci,
+                        'nombre'  => $nombre,
+                        'error'   => $e->getMessage(),
+                        'linea'   => $e->getLine(),
+                        'archivo' => $e->getFile(),
+                    ]);
+                    $errores[] = ['ci' => $ci, 'nombre' => $nombre, 'error' => $e->getMessage()];
+                }
+            }
+
+            $nombreMes = [
+                1 => 'Enero',
+                2 => 'Febrero',
+                3 => 'Marzo',
+                4 => 'Abril',
+                5 => 'Mayo',
+                6 => 'Junio',
+                7 => 'Julio',
+                8 => 'Agosto',
+                9 => 'Septiembre',
+                10 => 'Octubre',
+                11 => 'Noviembre',
+                12 => 'Diciembre'
+            ];
+
+            $mesNumero = $request->input('mes');
+            $mesNombre = $nombreMes[$mesNumero] ?? $mesNumero;
+
+            // ─── Depurados ausentes del PDF ──────────────────────────────────────────
+            $cisEnPdf = collect($registrosExtraidos)
+                ->map(fn($r) => trim($r['ci']))
+                ->filter()
+                ->values()
+                ->toArray();
+
+            if (empty($cisEnPdf)) {
+                $ultimosHistoriales = collect();
+            } else {
+                $ultimosHistoriales = Persona::with('ultimoEstado')
+                    ->bajaDefinitiva()
+                    ->whereNotIn('ci_persona', $cisEnPdf)
+                    ->select('id_persona', 'ci_persona')
+                    ->get()
+                    ->map(fn($persona) => [
+                        'historial_id' => $persona->ultimoEstado->id,
+                        'id_persona'   => $persona->id_persona,
+                        'ci_persona'   => $persona->ci_persona,
+                    ]);
+            }
+
+            $depurados = [];
+
+            foreach ($ultimosHistoriales as $historial) {
+                DB::table('historial_estados')
+                    ->where('id', $historial['historial_id'])
+                    ->update(['fecha_fin' => $fechaPrimeroMes]);
+
+                HistorialEstados::create([
+                    'id_persona'           => $historial['id_persona'],
+                    'estado'               => 'depurado',
+                    'fecha_inicio'         => $fechaPrimeroMes,
+                    'fecha_fin'            => null,
+                    'fecha_registro'       => $fechaHoyString,
+                    'usuario_modificacion' => $nombreCompleto,
+                    'observaciones'        => 'Cambio automático: DEPURADO.',
+                ]);
+
+                $depurados[] = ['ci' => $historial['ci_persona']];
+            }
+            // ─────────────────────────────────────────────────────────────────────────
 
             DB::commit();
-            Log::info('Gestión creada exitosamente', [
-                'id_gestion' => $mes->id_gestion,
-                'id_mes' => $mes->id_mes
+
+            $this->logService->logCreation(
+                'Gestion',
+                $mes,
+                "Se registró el mes {$mesNombre} en el sistema.",
+                null,
+                [
+                    'gestión'         => $gestion->gestion,
+                    'mes'             => $mesNombre,
+                    'monto Bs.'       => $mes->monto,
+                    'presupuesto Bs.' => $mes->presupuesto,
+                ]
+            );
+
+            $this->logService->logHabilitacionMasiva(
+                'Gestion',
+                $mes,
+                [
+                    'mes'                          => $mesNombre,
+                    'monto'                        => $request->input('monto'),
+                    'presupuesto'                  => $request->input('presupuesto'),
+                    'beneficiarios_habilitados'    => count($habilitados),
+                    'bajas_temporales_omitidas'    => count(array_filter($omitidos, fn($o) => $o['motivo'] === 'baja_temporal')),
+                    'bajas_definitivas_omitidas'   => count(array_filter($omitidos, fn($o) => $o['motivo'] === 'baja_definitiva')),
+                    'registros_depurados'          => count($depurados),
+                    'fallecidos_detectados'        => count($fallecidos), // ✅
+                    'total'                        => count($habilitados) + count($errores),
+                    'successful'                   => count($habilitados),
+                    'failed'                       => count($errores),
+                    'filename'                     => $request->file('archivo_pdf')->getClientOriginalName(),
+                    'errors'                       => array_map(fn($e) => "CI: {$e['ci']} - {$e['error']}", $errores),
+                    'fallecidos'                   => array_map(fn($f) => "CI: {$f['ci']} - {$f['nombre']}", $fallecidos), // ✅
+                ]
+            );
+
+            return redirect()->back()->with('resultadosMes', [
+                'mes'             => $request->input('mes'),
+                'insertados'      => $insertados,
+                'habilitados'     => $habilitados,
+                'errores'         => $errores,
+                'bajas_temporales' => array_values(array_filter($omitidos, fn($o) => $o['motivo'] === 'baja_temporal')),
+                'bajas_definitivas' => array_values(array_filter($omitidos, fn($o) => $o['motivo'] === 'baja_definitiva')),
+                'omitidos'        => $omitidos,
+                'depurados'       => $depurados,
+                'fallecidos'      => $fallecidos,
+                'total_procesado' => count($habilitados) + count($omitidos),
             ]);
-
-            if ($resultado) {
-                // Antes del redirect, guarda en log
-                Log::info('Resultado a enviar:', $resultado);
-
-                return redirect()->back()
-                    ->with('resultadosMes', $resultado);
-            }
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
-            Log::error('Error al crear gestión', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+            Log::error('Error general en addMes PDF', [
+                'error'   => $e->getMessage(),
+                'linea'   => $e->getLine(),
+                'archivo' => $e->getFile(),
+                'trace'   => $e->getTraceAsString(),
             ]);
-
-            return redirect()->back()->with('error', 'Error al procesar el archivo: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error al procesar: ' . $e->getMessage());
         }
     }
-
-    /**
-     * Obtener nombre completo del usuario
-     */
-    private function obtenerNombreCompletoUsuario($usuario)
-    {
-        return trim($usuario->nombre . ' ' . ($usuario->apellido ?? ''));
-    }
-
-    /**
-     * Registrar la creación del mes en el log
-     */
-    private function registrarCreacionMes($mes)
-    {
-        $meses = [
-            '',
-            'Enero',
-            'Febrero',
-            'Marzo',
-            'Abril',
-            'Mayo',
-            'Junio',
-            'Julio',
-            'Agosto',
-            'Septiembre',
-            'Octubre',
-            'Noviembre',
-            'Diciembre'
-        ];
-
-        $nombreMes = $meses[$mes->mes];
-        $montoFormateado = number_format($mes->monto, 2);
-        $presupuestoFormateado = number_format($mes->presupuesto_mesual, 2);
-        $mensaje = "Nuevo mes creado: {$nombreMes} - Monto: {$montoFormateado} Presupuesto mensual: {$presupuestoFormateado}";
-
-        $this->logService->logCreation('Mes', $mes, $mensaje);
-    }
-
-    /**
-     * Procesar archivo Excel
-     */
-    private function procesarArchivoExcel($request, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario)
-    {
-        if (!$request->hasFile('archivo_excel')) {
-            Log::warning('No se recibió archivo Excel');
-            return null;
-        }
-
-        $file = $request->file('archivo_excel');
-
-        // LOGS DE DEBUG - Para diagnosticar el problema
-        Log::info('Información del archivo recibido', [
-            'nombre' => $file->getClientOriginalName(),
-            'tamaño' => $file->getSize(),
-            'mime' => $file->getMimeType(),
-            'path' => $file->getPathname(),
-            'existe' => file_exists($file->getPathname())
-        ]);
-
-        try {
-            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getPathname());
-            $worksheet = $spreadsheet->getActiveSheet();
-            $rows = $worksheet->toArray();
-
-            // LOG CRÍTICO - Ver cuántas filas se leyeron
-            Log::info('Filas leídas del Excel', [
-                'total_filas' => count($rows),
-                'primeras_3_filas' => array_slice($rows, 0, 3)
-            ]);
-
-            // Buscar encabezados
-            $headerInfo = $this->buscarEncabezados($rows);
-
-            if ($headerInfo['index'] === -1) {
-                throw new \Exception('No se encontraron las columnas requeridas (C.I., Nombres, Observaciones) en el archivo Excel');
-            }
-
-            Log::info('Encabezados encontrados en fila', [
-                'fila' => $headerInfo['index'] + 1,
-                'columnas' => $headerInfo['columns']
-            ]);
-
-            // Procesar filas
-            return $this->procesarFilasExcel(
-                $rows,
-                $headerInfo,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario
-            );
-        } catch (\Exception $e) {
-            Log::error('Error al procesar archivo Excel', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
-        }
-    }
-
-    /**
-     * Buscar encabezados en el archivo Excel
-     */
-    private function buscarEncabezados($rows)
-    {
-        $headerRowIndex = -1;
-        $columnIndexes = [];
-
-        for ($i = 0; $i < min(5, count($rows)); $i++) {
-            $row = array_map(function ($cell) {
-                return trim(strtoupper($cell ?? ''));
-            }, $rows[$i]);
-
-            $tempIndexes = [
-                'ci' => false,
-                'nombre' => false,
-                'observaciones' => false
-            ];
-
-            foreach ($row as $index => $cellValue) {
-                if (strpos($cellValue, 'C.I.') !== false || $cellValue === 'CI') {
-                    $tempIndexes['ci'] = $index;
-                }
-                if (strpos($cellValue, 'APELLIDOS Y NOMBRES') !== false || strpos($cellValue, 'NOMBRE') !== false) {
-                    $tempIndexes['nombre'] = $index;
-                }
-                if (strpos($cellValue, 'OBSERVACIONES') !== false) {
-                    $tempIndexes['observaciones'] = $index;
-                }
-            }
-
-            if ($tempIndexes['ci'] !== false && $tempIndexes['nombre'] !== false && $tempIndexes['observaciones'] !== false) {
-                $headerRowIndex = $i;
-                $columnIndexes = $tempIndexes;
-                break;
-            }
-        }
-
-        return [
-            'index' => $headerRowIndex,
-            'columns' => $columnIndexes
-        ];
-    }
-
-    /**
-     * Procesar todas las filas del Excel
-     */
-    private function procesarFilasExcel($rows, $headerInfo, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario)
-    {
-        $insertados = [];
-        $habilitados = [];
-        $bajasTemporales = [];
-        $bajasDefinitivas = [];
-        $errores = [];
-
-        // AGREGAR ESTOS ARRAYS:
-        $personasParaInsertar = [];
-        $historialEstadosParaInsertar = [];
-        $habilitadosParaInsertar = [];
-        $historialHabilitadosParaInsertar = [];
-
-        // OPTIMIZACIÓN 3: Pre-cargar todos los CIs existentes
-        $cisExistentes = Persona::pluck('ci_persona', 'ci_persona')->toArray();
-
-        $columnIndexes = $headerInfo['columns'];
-        $headerRowIndex = $headerInfo['index'];
-
-        for ($i = $headerRowIndex + 1; $i < count($rows); $i++) {
-            $row = $rows[$i];
-
-            $ciCompleto = trim($row[$columnIndexes['ci']] ?? '');
-            $nombreCompleto = trim($row[$columnIndexes['nombre']] ?? '');
-            $observaciones = trim($row[$columnIndexes['observaciones']] ?? '');
-
-            if (!$this->esFilaValida($ciCompleto, $nombreCompleto)) {
-                continue;
-            }
-
-            try {
-                $ciData = $this->separarCiYComplemento($ciCompleto);
-
-                $resultado = $this->procesarPersonaParaInsercion(
-                    $ciData,
-                    $nombreCompleto,
-                    $observaciones,
-                    $mes,
-                    $userId,
-                    $fechaHoy,
-                    $fechaHoyString,
-                    $nombreCompletoUsuario,
-                    $i,
-                    $personasParaInsertar,
-                    $historialEstadosParaInsertar,
-                    $habilitadosParaInsertar,
-                    $historialHabilitadosParaInsertar,
-                    $cisExistentes  // AGREGAR ESTE PARÁMETRO
-                );
-
-                $ciCompleto = $ciData['ci'] . ($ciData['complemento'] ? '-' . $ciData['complemento'] : '');
-
-                if ($resultado['tipo'] === 'creada') {
-                    $insertados[] = [
-                        'fila' => $i + 1,
-                        'ci' => $ciCompleto,
-                        'nombre' => $nombreCompleto
-                    ];
-                }
-
-                if ($resultado['habilitado']) {
-                    $habilitados[] = [
-                        'fila' => $i + 1,
-                        'ci' => $ciCompleto,
-                        'nombre' => $nombreCompleto
-                    ];
-                }
-
-                if ($resultado['estado'] === 'baja_temporal') {
-                    $bajasTemporales[] = [
-                        'fila' => $i + 1,
-                        'ci' => $ciCompleto,
-                        'nombre' => $nombreCompleto,
-                        'motivo' => $observaciones
-                    ];
-                }
-
-                if ($resultado['estado'] === 'baja_definitiva') {
-                    $bajasDefinitivas[] = [
-                        'fila' => $i + 1,
-                        'ci' => $ciCompleto,
-                        'nombre' => $nombreCompleto,
-                        'motivo' => $observaciones
-                    ];
-                }
-            } catch (\Exception $e) {
-                $errores[] = [
-                    'fila' => $i + 1,
-                    'ci' => $ciCompleto,
-                    'nombre' => $nombreCompleto,
-                    'error' => $e->getMessage()
-                ];
-            }
-        }
-
-        // 1. Insertar personas
-        if (!empty($personasParaInsertar)) {
-            Persona::insert($personasParaInsertar);
-        }
-
-        // 2. Insertar historial de estados
-        if (!empty($historialEstadosParaInsertar)) {
-            HistorialEstados::insert($historialEstadosParaInsertar);
-        }
-
-        // 3. Insertar habilitados
-        if (!empty($habilitadosParaInsertar)) {
-            Habilitado::insert($habilitadosParaInsertar);
-
-            // 4. Recuperar los IDs auto-generados
-            $idsPersonas = array_column($habilitadosParaInsertar, 'id_persona');
-            $habilitadosCreados = Habilitado::whereIn('id_persona', $idsPersonas)
-                ->where('id_gestion', $mes->id_gestion)
-                ->where('id_mes', $mes->id_mes)
-                ->get();
-
-            // 5. Crear historiales con los IDs correctos
-            foreach ($habilitadosCreados as $habilitado) {
-                $historialHabilitadosParaInsertar[] = [
-                    'habilitado_historial' => 1,
-                    'id' => $habilitado->id,
-                    'id_persona' => $habilitado->id_persona,
-                    'id_gestion' => $habilitado->id_gestion,
-                    'id_mes' => $habilitado->id_mes,
-                    'id_habilitado' => $habilitado->id_habilitado, // ✅ ID auto-generado
-                    'created_at' => $fechaHoy,
-                    'updated_at' => $fechaHoy,
-                ];
-            }
-        }
-
-        // 6. Insertar historial de habilitados
-        if (!empty($historialHabilitadosParaInsertar)) {
-            HistorialHabilitado::insert($historialHabilitadosParaInsertar);
-        }
-
-        return [
-            'insertados' => $insertados,
-            'habilitados' => $habilitados,
-            'bajas_temporales' => $bajasTemporales,
-            'bajas_definitivas' => $bajasDefinitivas,
-            'errores' => $errores,
-            'total_procesado' => count($insertados) + count($habilitados) + count($bajasTemporales) + count($bajasDefinitivas)
-        ];
-    }
-
-    /**
-     * Separar CI y complemento
-     * Ejemplos: "8505504 - 1P" -> ['ci' => '8505504', 'complemento' => '1P']
-     *           "8505504" -> ['ci' => '8505504', 'complemento' => null]
-     */
-    private function separarCiYComplemento($ciCompleto)
-    {
-        $ciCompleto = trim($ciCompleto);
-
-        // Buscar el guion para separar CI de complemento
-        if (strpos($ciCompleto, '-') !== false) {
-            $partes = explode('-', $ciCompleto, 2);
-            return [
-                'ci' => trim($partes[0]),
-                'complemento' => trim($partes[1])
-            ];
-        }
-
-        return [
-            'ci' => $ciCompleto,
-            'complemento' => null
-        ];
-    }
-
-    private function procesarPersonaParaInsercion($ciData, $nombreCompleto, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario, $fila, &$personasParaInsertar, &$historialEstadosParaInsertar, &$habilitadosParaInsertar, &$historialHabilitadosParaInsertar, $cisExistentes)
-    {
-        $ci = $ciData['ci'];
-        $complementoExcel = $ciData['complemento'];
-
-        // Verificar en array primero
-        if (!isset($cisExistentes[$ci])) {
-            $personaExistente = null;
-        } else {
-            $personaExistente = Persona::where('ci_persona', $ci)->first();
-        }
-
-        if (!$personaExistente) {
-            // ES NUEVA - PREPARAR PARA INSERCIÓN MASIVA
-            $idPersona = (string) Str::uuid();
-            $estadoInfo = $this->determinarEstadoSegunObservaciones($observaciones);
-
-            // Preparar persona para inserción
-            $personasParaInsertar[] = [
-                'id_persona' => $idPersona,
-                'nombre_completo' => $nombreCompleto,
-                'ci_persona' => $ci,
-                'complemento' => $complementoExcel,
-                'tipo_registro' => 'pendiente',
-                'fecha_registro' => $fechaHoyString,
-                'created_at' => $fechaHoy,
-                'updated_at' => $fechaHoy,
-            ];
-
-            // Preparar historial de estados
-            $historialEstadosParaInsertar[] = [
-                'id_persona' => $idPersona,
-                'estado' => $estadoInfo['estado'],
-                'fecha_inicio' => $fechaHoyString,
-                'fecha_fin' => null,
-                'fecha_registro' => $fechaHoy,
-                'usuario_modificacion' => $nombreCompletoUsuario,
-                'observaciones' => $estadoInfo['observacion'],
-                'created_at' => $fechaHoy,
-                'updated_at' => $fechaHoy,
-            ];
-
-            // Preparar habilitado si corresponde
-            $habilitado = false;
-            if ($this->debeCrearHabilitado($observaciones)) {
-                $habilitadosParaInsertar[] = [
-                    'habilitado' => 1,
-                    'id' => $userId,
-                    'id_persona' => $idPersona,
-                    'id_gestion' => $mes->id_gestion,
-                    'id_mes' => $mes->id_mes,
-                    'fecha_habilitado' => $fechaHoy,
-                    'created_at' => $fechaHoy,
-                    'updated_at' => $fechaHoy,
-                ];
-
-                $habilitado = true;
-            }
-
-            return [
-                'tipo' => 'creada',
-                'estado' => $estadoInfo['estado'],
-                'habilitado' => $habilitado
-            ];
-        } else {
-            // YA EXISTE - USAR LA FUNCIÓN NORMAL
-            return $this->actualizarPersonaExistente(
-                $personaExistente,
-                $complementoExcel,
-                $observaciones,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario,
-                $ci
-            );
-        }
-    }
-
-    /**
-     * Validar si la fila es válida para procesar
-     */
-    private function esFilaValida($ci, $nombreCompleto)
-    {
-        // Extraer solo el CI numérico (antes del guion si existe)
-        $ciNumerico = $ci;
-        if (strpos($ci, '-') !== false) {
-            $ciNumerico = trim(explode('-', $ci, 2)[0]);
-        }
-
-        // Saltar filas vacías y filas de totales/resúmenes
-        if (
-            empty($ciNumerico) ||
-            empty($nombreCompleto) ||
-            !is_numeric($ciNumerico) ||
-            stripos($nombreCompleto, 'TOTAL') !== false ||
-            stripos($nombreCompleto, 'PERSONAS CON DISCAPACIDAD') !== false ||
-            stripos($nombreCompleto, 'FUNCIONARIOS') !== false
-        ) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Procesar una persona (crear o actualizar)
-     */
-    private function procesarPersona($ciData, $nombreCompleto, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario, $fila)
-    {
-        $ci = $ciData['ci'];
-        $complementoExcel = $ciData['complemento'];
-        $personaExistente = Persona::where('ci_persona', $ci)->first();
-
-        if (!$personaExistente) {
-            return $this->crearNuevaPersona(
-                $ci,
-                $complementoExcel,
-                $nombreCompleto,
-                $observaciones,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario
-            );
-        } else {
-            return $this->actualizarPersonaExistente(
-                $personaExistente,
-                $complementoExcel,
-                $observaciones,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario,
-                $ci
-            );
-        }
-    }
-
-    /**
-     * Crear nueva persona
-     */
-    private function crearNuevaPersona($ci, $complemento, $nombreCompleto, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario)
-    {
-        $nuevaPersona = Persona::create([
-            'nombre_completo' => $nombreCompleto,
-            'ci_persona' => $ci,
-            'complemento' => $complemento,
-            'tipo_registro' => 'pendiente',
-            'fecha_registro' => $fechaHoyString,
-        ]);
-
-        $estadoInfo = $this->determinarEstadoSegunObservaciones($observaciones);
-
-        HistorialEstados::create([
-            'id_persona' => $nuevaPersona->id_persona,
-            'estado' => $estadoInfo['estado'],
-            'fecha_inicio' => $fechaHoyString,
-            'fecha_fin' => null,
-            'fecha_registro' => $fechaHoy,
-            'usuario_modificacion' => $nombreCompletoUsuario,
-            'observaciones' => $estadoInfo['observacion']
-        ]);
-
-        $habilitado = false;
-        if ($this->debeCrearHabilitado($observaciones)) {
-            $this->crearHabilitado($nuevaPersona->id_persona, $mes, $userId, $ci);
-            $habilitado = true;
-        }
-
-        Log::info('Nueva persona creada desde Excel', [
-            'ci' => $ci,
-            'complemento' => $complemento,
-            'nombre' => $nombreCompleto,
-            'estado' => $estadoInfo['estado']
-        ]);
-
-        return [
-            'tipo' => 'creada',
-            'estado' => $estadoInfo['estado'],
-            'habilitado' => $habilitado
-        ];
-    }
-
-    /**
-     * Actualizar persona existente
-     */
-    private function actualizarPersonaExistente($personaExistente, $complementoExcel, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario, $ci)
-    {
-        if ($complementoExcel && !$personaExistente->complemento) {
-            $personaExistente->update(['complemento' => $complementoExcel]);
-        }
-
-        if ($personaExistente->tipo_registro === 'registrado') {
-            return $this->procesarPersonaRegistrada(
-                $personaExistente,
-                $observaciones,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario,
-                $ci
-            );
-        } elseif (in_array($personaExistente->tipo_registro, ['beneficiario', 'pendiente'])) {
-            return $this->procesarPersonaBeneficiaria(
-                $personaExistente,
-                $observaciones,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario,
-                $ci
-            );
-        }
-
-        return ['tipo' => null, 'estado' => null, 'habilitado' => false];
-    }
-
-    /**
-     * Procesar persona con tipo_registro = 'registrado'
-     */
-    private function procesarPersonaRegistrada($personaExistente, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario, $ci)
-    {
-        $personaExistente->update(['tipo_registro' => 'pendiente']);
-        $estadoInfo = $this->determinarEstadoSegunObservaciones($observaciones);
-
-        HistorialEstados::create([
-            'id_persona' => $personaExistente->id_persona,
-            'estado' => $estadoInfo['estado'],
-            'fecha_inicio' => $fechaHoyString,
-            'fecha_fin' => null,
-            'fecha_registro' => $fechaHoy,
-            'usuario_modificacion' => $nombreCompletoUsuario,
-            'observaciones' => $estadoInfo['observacion']
-        ]);
-
-        $habilitado = false;
-        if (!in_array($estadoInfo['estado'], ['baja_temporal', 'baja_definitiva'])) {
-            $this->crearHabilitado($personaExistente->id_persona, $mes, $userId, $ci);
-            $habilitado = true;
-        }
-
-        return [
-            'tipo' => 'actualizada',
-            'estado' => $estadoInfo['estado'],
-            'habilitado' => $habilitado
-        ];
-    }
-
-    /**
-     * Procesar persona con tipo_registro = 'beneficiario' o 'pendiente'
-     */
-    private function procesarPersonaBeneficiaria($personaExistente, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario, $ci)
-    {
-        $ultimoHistorial = HistorialEstados::where('id_persona', $personaExistente->id_persona)
-            ->orderBy('id', 'desc')
-            ->first();
-
-        if (!$ultimoHistorial) {
-            return ['tipo' => null, 'estado' => null, 'habilitado' => false];
-        }
-
-        if (in_array($ultimoHistorial->estado, ['baja_temporal', 'baja_definitiva'])) {
-            return ['tipo' => null, 'estado' => $ultimoHistorial->estado, 'habilitado' => false];
-        }
-
-        if ($ultimoHistorial->estado === 'activo') {
-            return $this->procesarBeneficiarioActivo(
-                $personaExistente,
-                $observaciones,
-                $mes,
-                $userId,
-                $fechaHoy,
-                $fechaHoyString,
-                $nombreCompletoUsuario,
-                $ci
-            );
-        }
-
-        return ['tipo' => 'actualizada', 'estado' => 'activo', 'habilitado' => false];
-    }
-
-    /**
-     * Procesar beneficiario con estado activo
-     */
-    private function procesarBeneficiarioActivo($personaExistente, $observaciones, $mes, $userId, $fechaHoy, $fechaHoyString, $nombreCompletoUsuario, $ci)
-    {
-        $habilitado = false;
-        $estado = 'activo';
-
-        if (!empty($observaciones)) {
-            $estadoInfo = $this->determinarEstadoSegunObservaciones($observaciones);
-
-            if (in_array($estadoInfo['estado'], ['baja_temporal', 'baja_definitiva'])) {
-                HistorialEstados::create([
-                    'id_persona' => $personaExistente->id_persona,
-                    'estado' => $estadoInfo['estado'],
-                    'fecha_inicio' => $fechaHoyString,
-                    'fecha_fin' => null,
-                    'fecha_registro' => $fechaHoy,
-                    'usuario_modificacion' => $nombreCompletoUsuario,
-                    'observaciones' => $observaciones
-                ]);
-                $estado = $estadoInfo['estado'];
-            }
-        } else {
-            $this->crearHabilitado($personaExistente->id_persona, $mes, $userId, $ci);
-            $habilitado = true;
-        }
-
-        return [
-            'tipo' => 'actualizada',
-            'estado' => $estado,
-            'habilitado' => $habilitado
-        ];
-    }
-
-    /**
-     * Determinar estado según observaciones
-     */
-    private function determinarEstadoSegunObservaciones($observaciones)
-    {
-        $estado = 'activo';
-        $observacionHistorial = $observaciones;
-
-        if (!empty($observaciones)) {
-            $observacionesUpper = strtoupper($observaciones);
-
-            if (
-                strpos($observacionesUpper, 'FALLECIO') !== false ||
-                strpos($observacionesUpper, 'FALLECI') !== false ||
-                strpos($observacionesUpper, 'MUERTO') !== false
-            ) {
-                $estado = 'baja_definitiva';
-            } elseif (
-                strpos($observacionesUpper, 'PADRE FUNCIONARIO TRABAJANDO CON ITEM') !== false ||
-                strpos($observacionesUpper, 'FUNCIONARIO') !== false ||
-                strpos($observacionesUpper, 'TRABAJANDO') !== false
-            ) {
-                $estado = 'baja_temporal';
-            }
-        }
-
-        return [
-            'estado' => $estado,
-            'observacion' => $observacionHistorial
-        ];
-    }
-
-    /**
-     * Determinar si debe crear habilitado
-     */
-    private function debeCrearHabilitado($observaciones)
-    {
-        if (empty($observaciones)) {
-            return true;
-        }
-
-        $observacionesUpper = strtoupper($observaciones);
-
-        return stripos($observacionesUpper, 'FALLECIO') === false &&
-            stripos($observacionesUpper, 'PADRE FUNCIONARIO TRABAJANDO CON ITEM') === false;
-    }
-
-    /**
-     * Crear habilitado e historial habilitado
-     */
-    private function crearHabilitado($idPersona, $mes, $userId, $ci)
-    {
-        $habilitado = Habilitado::create([
-            'habilitado' => 1,
-            'id' => $userId,
-            'id_persona' => $idPersona,
-            'id_gestion' => $mes->id_gestion,
-            'id_mes' => $mes->id_mes,
-            'fecha_habilitado' => now()
-        ]);
-
-        HistorialHabilitado::create([
-            'habilitado_historial' => 1,
-            'id' => $userId,
-            'id_persona' => $idPersona,
-            'id_gestion' => $mes->id_gestion,
-            'id_mes' => $mes->id_mes,
-            'id_habilitado' => $habilitado->id_habilitado,
-        ]);
-
-        Log::info('Habilitado creado', [
-            'ci' => $ci,
-            'id_habilitado' => $habilitado->id_habilitado
-        ]);
-
-        return $habilitado;
-    }
-
-
-
-
-
-
 
     public function reporte(Request $request)
     {
@@ -1173,24 +727,24 @@ class GestionController extends Controller
 
                     // ✅ REUTILIZAR: Usar el cálculo anterior
                     DB::raw('(SELECT presupuesto_anual
-              FROM gestion g2
-              WHERE YEAR(g2.gestion) = YEAR(gestion.gestion)
-                    AND g2.presupuesto_anual IS NOT NULL
-              LIMIT 1) as presupuesto_anual'),
+                            FROM gestion g2
+                            WHERE YEAR(g2.gestion) = YEAR(gestion.gestion)
+                                    AND g2.presupuesto_anual IS NOT NULL
+                            LIMIT 1) as presupuesto_anual'),
 
                     // ✅ CALCULADO: Restar en la aplicación o usar expresión simple
                     DB::raw('(SELECT COALESCE(g2.presupuesto_anual, 0) - COALESCE(pagos.total, 0)
-              FROM gestion g2
-              LEFT JOIN (
-                  SELECT YEAR(g3.gestion) as year, SUM(p2.monto) as total
-                  FROM pago p2
-                  INNER JOIN habilitado h2 ON p2.id_habilitado = h2.id_habilitado
-                  INNER JOIN gestion g3 ON h2.id_gestion = g3.id_gestion
-                  GROUP BY YEAR(g3.gestion)
-              ) pagos ON YEAR(g2.gestion) = pagos.year
-              WHERE YEAR(g2.gestion) = YEAR(gestion.gestion)
-                    AND g2.presupuesto_anual IS NOT NULL
-              LIMIT 1) as presupuesto_anual_restante'),
+                            FROM gestion g2
+                            LEFT JOIN (
+                                SELECT YEAR(g3.gestion) as year, SUM(p2.monto) as total
+                                FROM pago p2
+                                INNER JOIN habilitado h2 ON p2.id_habilitado = h2.id_habilitado
+                                INNER JOIN gestion g3 ON h2.id_gestion = g3.id_gestion
+                                GROUP BY YEAR(g3.gestion)
+                            ) pagos ON YEAR(g2.gestion) = pagos.year
+                            WHERE YEAR(g2.gestion) = YEAR(gestion.gestion)
+                                    AND g2.presupuesto_anual IS NOT NULL
+                            LIMIT 1) as presupuesto_anual_restante'),
                 ])
 
                 // ✅ MEJORADO: Usar JOIN más eficiente que CROSS JOIN
@@ -1264,94 +818,86 @@ class GestionController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        // Buscar la gestión por ID
         $gestion = Gestion::findOrFail($id);
 
-        // Guardar datos antiguos antes de la actualización
-        $oldData = $gestion->getOriginal();
-
-        // Guardamos los datos que vienen en el request
+        $oldData        = $gestion->getOriginal();
         $fieldsToUpdate = $request->all();
 
-        // Preparar los cambios para el log
-        $changes = [
-            'campos_modificados' => [],
-            'valores_anteriores' => [],
-            'valores_nuevos' => []
+        $mapaLabels = [
+            'gestion'           => 'gestión',
+            'presupuesto_anual' => 'presupuesto anual',
         ];
 
-        // Identificar qué campos han cambiado
-        foreach ($fieldsToUpdate as $field => $newValue) {
-            if (isset($oldData[$field]) && $oldData[$field] !== $newValue) {
-                $changes['campos_modificados'][$field] = $field;
-                $changes['valores_anteriores'][$field] = $oldData[$field];
-                $changes['valores_nuevos'][$field] = $newValue;
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
+
+        foreach ($fieldsToUpdate as $campo => $nuevoValor) {
+            if (!array_key_exists($campo, $mapaLabels)) continue;
+
+            $valorAnterior = $oldData[$campo] ?? null;
+            $label         = $mapaLabels[$campo];
+
+            if ($valorAnterior != $nuevoValor) {
+                $camposModificados[$label] = $nuevoValor;
+                $valoresAnteriores[$label] = $valorAnterior;
+                $valoresNuevos[$label]     = $nuevoValor;
             }
         }
 
-        // Actualizamos los datos de la gestión
+        if (empty($camposModificados)) {
+            return;
+        }
+
         $gestion->update($fieldsToUpdate);
 
-        // Registro log
-        $mes = Gestion::where('id_gestion', $gestion->id_gestion)->first();
-
-        $meses = [
-            1 => 'Enero',
-            2 => 'Febrero',
-            3 => 'Marzo',
-            4 => 'Abril',
-            5 => 'Mayo',
-            6 => 'Junio',
-            7 => 'Julio',
-            8 => 'Agosto',
-            9 => 'Septiembre',
-            10 => 'Octubre',
-            11 => 'Noviembre',
-            12 => 'Diciembre'
-        ];
-
-        $mesNumero = Carbon::parse($mes->gestion)->month;
-        $nombreMes = $meses[$mesNumero];
-        $anio = date('Y', strtotime($gestion->gestion));
         $this->logService->logUpdate(
-            'gestion',
+            'Gestion',
             $gestion,
-            $changes,
-            'Registro de Mes Actualizado: ' . $nombreMes . ' - ' . $anio
+            [
+                'campos_modificados' => $camposModificados,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos'     => $valoresNuevos,
+            ],
+            "Se actualizó el registro de la gestión {$gestion->gestion} en el sistema."
         );
     }
 
     public function updateMes(Request $request, string $id)
     {
-        // Buscar el mes por ID
         $mes = Mes::findOrFail($id);
 
-        // Guardar datos antiguos antes de la actualización
-        $oldData = $mes->getOriginal();
-
-        // Guardamos los datos que vienen en el request (solo monto y presupuesto)
+        $oldData        = $mes->getOriginal();
         $fieldsToUpdate = $request->only(['monto', 'presupuesto']);
 
-        // Preparar los cambios para el log
-        $changes = [
-            'campos_modificados' => [],
-            'valores_anteriores' => [],
-            'valores_nuevos' => []
+        $mapaLabels = [
+            'monto'       => 'monto Bs.',
+            'presupuesto' => 'presupuesto Bs.',
         ];
 
-        // Identificar qué campos han cambiado
-        foreach ($fieldsToUpdate as $field => $newValue) {
-            if (isset($oldData[$field]) && $oldData[$field] !== $newValue) {
-                $changes['campos_modificados'][$field] = $field;
-                $changes['valores_anteriores'][$field] = $oldData[$field];
-                $changes['valores_nuevos'][$field] = $newValue;
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
+
+        foreach ($fieldsToUpdate as $campo => $nuevoValor) {
+            if (!array_key_exists($campo, $mapaLabels)) continue;
+
+            $valorAnterior = $oldData[$campo] ?? null;
+            $label         = $mapaLabels[$campo];
+
+            if ($valorAnterior != $nuevoValor) {
+                $camposModificados[$label] = $nuevoValor;
+                $valoresAnteriores[$label] = $valorAnterior;
+                $valoresNuevos[$label]     = $nuevoValor;
             }
         }
 
-        // Actualizamos los datos del mes
+        if (empty($camposModificados)) {
+            return;
+        }
+
         $mes->update($fieldsToUpdate);
 
-        // Registro log
         $meses = [
             1 => 'Enero',
             2 => 'Febrero',
@@ -1370,10 +916,14 @@ class GestionController extends Controller
         $nombreMes = $meses[$mes->mes] ?? 'Desconocido';
 
         $this->logService->logUpdate(
-            'mes',
+            'Mes',
             $mes,
-            $changes,
-            'Registro de Mes Actualizado: ' . $nombreMes . ' - Monto: ' . $mes->monto . ', Presupuesto: ' . $mes->presupuesto
+            [
+                'campos_modificados' => $camposModificados,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos'     => $valoresNuevos,
+            ],
+            "Se actualizó el registro del mes {$nombreMes} en el sistema."
         );
     }
 
@@ -1383,5 +933,6 @@ class GestionController extends Controller
     public function destroy(string $id)
     {
         //
+
     }
 }

@@ -1,6 +1,7 @@
 <script setup>
 // ============ INICIO IMPORTS ============ //
 import { computed } from 'vue';
+import { ref } from 'vue';
 
 // Layout Components
 import ModalWrapper from './layout/ModalWrapper.vue';
@@ -62,6 +63,10 @@ const props = defineProps({
     claveForanea: String,
     addTutor: Boolean,
     botonOmitir: Boolean,
+    apellidoFor: {
+        type: String,
+        default: null
+    },
     tutores: {
         type: Array,
         default: () => []
@@ -98,13 +103,21 @@ const props = defineProps({
         type: String,
         default: 'Importando...'
     },
-    keepButtonText: { // ✅ NUEVA PROP
+    keepButtonText: {
         type: Boolean,
         default: false
-    }
+    },
+    cisPersonasActivas: {
+        type: Array,
+        default: () => []
+    },
+    cisTodasPersonas: {
+        type: Array,
+        default: () => []
+    },
 });
 // ============ FIN PROPS ============ //
-//console.log('datos', props);
+//console.log('datos', props.idFor);
 // ============ INICIO EMITS ============ //
 const emit = defineEmits([
     'add',
@@ -119,10 +132,18 @@ const emit = defineEmits([
     'mesDelante',
     'tutorEncontradoSms',
     'fechaInvalida',
-    'openFormOption'
+    'openFormOption',
+    'indefinidoChange',
+    'importingStart',
+    'importingEnd',
 ]);
 // ============ FIN EMITS ============ //
+const currentFileValidation = ref({}); // ✅ NUEVO
 
+// Agregar método para capturar validación
+const handleValidationUpdate = (validation) => {
+    currentFileValidation.value = validation;
+};
 // ============ INICIO COMPUTED ============ //
 const visibleFields = computed(() =>
     props.fields.filter(field => !field.hidden)
@@ -138,7 +159,7 @@ const gridClasses = computed(() => {
     }
 
     // Si tiene muchos campos pero NO permisos, usa 2 columnas
-    if (fieldCount >= 6) {
+    if (fieldCount >= 7) {
         return 'gap-2 grid-cols-1 lg:grid-cols-2 mb-2';
     }
 
@@ -150,17 +171,22 @@ const contentClasses = computed(() => {
     const hasPermissions = visibleFields.value.some(f => f.typeInput === 'checkbox_permissions');
     const fieldCount = visibleFields.value.length;
 
-    if (hasPermissions || fieldCount >= 6) {
-        return 'p-6 max-h-[calc(100vh-200px)]';
+    if (hasPermissions || fieldCount >= 7) {
+        return 'px-3 py-2 sm:p-6 max-h-[calc(100vh-200px)]';
     }
     return 'p-6 max-h-[70vh]';
+});
+
+const esPropioTutor = computed(() => {
+    const propioField = props.fields.find(f => f.typeInput === 'propio_check');
+    return propioField ? form[propioField.name] == 1 : false;
 });
 
 const modalMaxWidth = computed(() => {
     const hasPermissions = visibleFields.value.some(f => f.typeInput === 'checkbox_permissions');
     const fieldCount = visibleFields.value.length;
 
-    if (hasPermissions || fieldCount >= 6) {
+    if (hasPermissions || fieldCount >= 7) {
         return 'max-w-2xl';
     }
     return 'max-w-md';
@@ -169,7 +195,13 @@ const modalMaxWidth = computed(() => {
 
 // ============ INICIO COMPOSABLES ============ //
 // Estado del formulario
-const { form, updateField, search } = useFormState(props, emit);
+const { form, updateField, search, isDirty, resetToInitial } = useFormState(props, emit);
+
+// Agregar en Form.vue junto a los otros computed/refs
+const propsConRegistros = computed(() => ({
+    ...props,
+    registrosPdf: currentFileValidation.value?.extractedData?.registros || []
+}));
 
 // Lógica de submit
 const { handleSubmit, handleCancel, handleOmitir } = useFormSubmit(form, props, emit);
@@ -178,12 +210,23 @@ const { handleSubmit, handleCancel, handleOmitir } = useFormSubmit(form, props, 
 useKeyboardShortcuts(handleCancel);
 // ============ FIN COMPOSABLES ============ //
 </script>
+<style scoped>
+.field-enter-active,
+.field-leave-active {
+    transition: all 0.25s ease;
+}
 
+.field-enter-from,
+.field-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
+}
+</style>
 <template>
     <div
-        class="fixed inset-0 bg-slate-900/75 flex items-center justify-center z-40 px-4 py-6 overflow-y-auto backdrop-blur-sm">
+        class="fixed inset-0 bg-slate-900/75 flex items-center justify-center z-40 px-4 sm:py-4 overflow-y-auto backdrop-blur-sm">
         <ModalWrapper :max-width="modalMaxWidth">
-            <form @submit.prevent="handleSubmit">
+            <form @submit.prevent="handleSubmit(currentFileValidation)">
                 <!-- Header del Modal -->
                 <FormHeader @close="handleCancel">
                     <!-- Propagar slots explícitamente -->
@@ -211,19 +254,35 @@ useKeyboardShortcuts(handleCancel);
                 <!-- Body del Formulario -->
                 <div :class="['overflow-y-auto', contentClasses]">
                     <div :class="['grid', gridClasses]">
+                        <TransitionGroup name="field">
+                            <FormField v-for="(field, index) in visibleFields" :key="field.name || index" :field="field"
+                                :nombreFor="props.nombreFor" :model-value="form[field.name]"
+                                :error="form.errors[field.name]" :form="form" :props="propsConRegistros"
+                                @update:model-value="updateField(field.name, $event)"
+                                @update:validation="handleValidationUpdate"
+                                @open-form-option="emit('openFormOption')" />
+                        </TransitionGroup>
+                    </div>
+                </div>
+
+                <!-- <div :class="['overflow-y-auto', contentClasses]">
+                    <div :class="['grid', gridClasses]">
                         <FormField v-for="(field, index) in visibleFields" :key="field.name || index" :field="field"
                             :nombreFor="props.nombreFor" :model-value="form[field.name]"
                             :error="form.errors[field.name]" :form="form" :props="props"
                             @update:model-value="updateField(field.name, $event)"
+
+                            @update:validation="handleValidationUpdate"
                             @open-form-option="emit('openFormOption')" />
                     </div>
-                </div>
+                </div> -->
 
                 <!-- Footer con Botones de Acción -->
                 <FormActions :processing="form.processing" :boton-name="botonName" :edit-mode="editMode"
                     :existing-data="existingData" :show-omitir="botonOmitir" :soli="soli"
                     :field-count="visibleFields.length" :importing="importing" :importing-text="importingText"
-                    :tutor-found="search" :keep-button-text="keepButtonText" @submit="handleSubmit"
+                    :tutor-found="search" :keep-button-text="keepButtonText" :is-dirty="isDirty"
+                    :es-propio-tutor="esPropioTutor" @reset="resetToInitial" @submit="handleSubmit"
                     @cancel="handleCancel" @omitir="handleOmitir" />
             </form>
         </ModalWrapper>

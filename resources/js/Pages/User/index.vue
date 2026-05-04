@@ -21,7 +21,6 @@ import {
     ref
 } from 'vue';
 import Rutas from '@/components/Rutas.vue';
-import Botones from '@/components/Botones.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import Button from '@/components/Button.vue';
 import Icon from '@/components/Icon.vue';
@@ -32,7 +31,7 @@ const filters = computed(() => page.props.filters || {});
 const roles = computed(() => page.props.roles || []);
 const notificacionTutor = computed(() => page.props.notificacionTutor);
 
-//console.log(roles.value);
+//console.log('usuarios: ', usuarios.value);
 
 // ✅ Mapear los roles para el dropdown
 const rolesOptions = computed(() => {
@@ -137,7 +136,7 @@ const usuarioFields = computed(() => [{
 }
 ]);
 
-// ✅ También para el formulario de edición
+
 const usuarioEditFields = computed(() => [{
     typeInput: 'text',
     name: 'nombre',
@@ -189,15 +188,11 @@ const usuarioEditFields = computed(() => [{
 ]);
 
 const usuariosAgrupadosPorRol = computed(() => {
-    if (!usuarios.value || !usuarios.value.data || !Array.isArray(usuarios.value.data)) {
-        return {};
-    }
+    if (!usuarios.value || !Array.isArray(usuarios.value)) return {};  // ← sin .data
 
-    return usuarios.value.data.reduce((grupos, usuario) => {
+    return usuarios.value.reduce((grupos, usuario) => {
         const rol = usuario.rol;
-        if (!grupos[rol]) {
-            grupos[rol] = [];
-        }
+        if (!grupos[rol]) grupos[rol] = [];
         grupos[rol].push(usuario);
         return grupos;
     }, {});
@@ -222,10 +217,10 @@ const cerrarMensaje = (id) => {
 
 const openEditUsuario = (item, idPersona) => {
     selectedId.value = idPersona;
-    // ✅ Convertir el valor booleano a número (1 o 0)
+
     selectedItem.value = {
         ...item,
-        habilitado: item.habilitado ? 1 : 0  // Convierte true a 1, false a 0
+        habilitado: item.habilitado ? 1 : 0
     };
     openFormEdit.value = true;
 }
@@ -369,10 +364,11 @@ const getColorForRole = (rol) => {
     return colorPalette[index];
 };
 
-const getFirstName = (fullName) => {
-    if (!fullName) return '';
-    return fullName.split(' ')[0];
-};
+const getFirstName = (value) => {
+    if (!value) return ''
+    const first = value.split(' ')[0].toLowerCase()
+    return first.charAt(0).toUpperCase() + first.slice(1)
+}
 
 const getBorderColor = (rol) => {
     return getColorForRole(rol).border;
@@ -395,7 +391,7 @@ const getHoverColor = (rol) => {
     <AuthenticatedLayout>
 
         <Head title="UMADIS" />
-        <div class="flex h-screen bg-gray-200 font-roboto">
+        <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
             <Sidebar />
             <div class="flex-1 flex flex-col overflow-hidden">
                 <div class="fixed top-4 right-4 flex flex-col gap-2 z-50">
@@ -456,14 +452,13 @@ const getHoverColor = (rol) => {
                     <ResetPasswordModal v-if="showResetModal" :user="selectedUserForReset" @close="closeResetModal" />
                 </Transition>
 
-                <div class="py-2">
-                    <div class="px-5 py-1 flex justify-between">
-                        <h1 class="font-semibold text-2xl">Usuarios</h1>
-                        <Rutas label1="Inicio" label3="Usuarios" />
-                    </div>
+                <div
+                    class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                    <h1 class="font-semibold text-xl sm:text-2xl">Usuarios</h1>
+                    <Rutas label1="Inicio" label3="Usuarios" class="sm:text-xs" />
                 </div>
 
-                <div class="flex justify-between p-4 pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
+                <div class="flex justify-between p-2 sm:p-4 sm:pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
                     <Busqueda :initial-value="filters.buscador" name="usuario" only="usuarios" :data="usuarios"
                         ruta-busqueda="usuario.index" />
                     <Button v-if="can('agregar-usuario')" id="btn-agregar" @click.prevent="openFormCreate()"
@@ -490,7 +485,7 @@ const getHoverColor = (rol) => {
                 </div>
                 <main class="flex-1 overflow-y-auto bg-white border-b-2 border-x-2 rounded-b-lg mr-1">
                     <!-- Contenedor vertical para secciones de roles -->
-                    <div class="p-4 space-y-4">
+                    <div class="p-1 sm:p-4 space-y-4">
 
                         <!-- Sección por cada rol -->
                         <div v-for="(usuariosDelRol, rolNombre) in usuariosAgrupadosPorRol" :key="rolNombre">
@@ -499,7 +494,6 @@ const getHoverColor = (rol) => {
                                 <span v-else>{{ rolNombre }}</span>
                             </h2>
 
-                            <!-- Cards de usuarios con scroll horizontal -->
                             <!-- Cards de usuarios con scroll horizontal -->
                             <div class="flex overflow-x-auto gap-4 pb-2">
                                 <!-- Card con borde según estado -->
@@ -592,13 +586,7 @@ const getHoverColor = (rol) => {
                         </div>
                     </div>
                 </main>
-
-                <div :class="usuarios.data.length <= 15 ? 'mt-0.5' : 'mt-0'">
-                    <Paginacion v-if="usuarios?.last_page > 1" :links="usuarios.links" :from="usuarios.from"
-                        :to="usuarios.to" :total="usuarios.total" />
-                    <Footer />
-                </div>
-
+                <Footer />
             </div>
         </div>
     </AuthenticatedLayout>

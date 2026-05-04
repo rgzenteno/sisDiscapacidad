@@ -19,18 +19,11 @@ const emit = defineEmits(['update:modelValue']);
 
 // ============ INICIO COMPUTED ============ //
 const canRegenerate = computed(() => {
-    // Buscar nombreFor
-    const nombre = props.props.nombreFor ||
-        props.props.existingData?.nombre_completo ||
-        props.props.existingData?.nombre_persona;
-
-    // Buscar fecha de nacimiento en múltiples lugares
-    const fecha = props.props.fechaNacimiento ||
-        props.props.existingData?.fecha_nacimiento;
-
-    const resultado = !!(nombre && fecha);
-
-    return resultado;
+    const nombre = props.props.nombreFor || props.props.existingData?.nombre_persona;
+    const apellido = props.props.apellidoFor?.trim() ||
+        props.props.existingData?.apellido_persona?.trim() || '';
+    const fecha = props.props.fechaNacimiento || props.props.existingData?.fecha_nacimiento;
+    return !!(nombre && apellido && fecha);
 });
 // ============ FIN COMPUTED ============ //
 
@@ -39,26 +32,16 @@ const canRegenerate = computed(() => {
  * Genera el código de carnet automáticamente
  */
 const generateCodigoCarnet = () => {
-    // Buscar nombre en múltiples lugares
-    const nombreCompleto = props.props.nombreFor ||
-        props.props.existingData?.nombre_completo ||
-        props.props.existingData?.nombre_persona;
+    const nombre = props.props.nombreFor?.trim().split(' ')[0] ||
+        props.props.existingData?.nombre_persona?.trim().split(' ')[0] || '';
+    const apellido = props.props.apellidoFor?.trim() ||
+        props.props.existingData?.apellido_persona?.trim() || '';
+    const fechaNac = props.props.fechaNacimiento || props.props.existingData?.fecha_nacimiento;
 
-    // Buscar fecha en múltiples lugares
-    const fechaNac = props.props.fechaNacimiento ||
-        props.props.existingData?.fecha_nacimiento;
-
-    if (!nombreCompleto || !fechaNac) {
-        return '';
-    }
-
-    const palabras = nombreCompleto.trim().split(' ');
-    const iniciales = palabras
-        .map(palabra => palabra.charAt(0).toUpperCase())
-        .join('');
-    const fechaFormateada = fechaNac.replace(/-/g, '');
-
-    return `03-${fechaFormateada}${iniciales}`;
+    if (!nombre || !apellido || !fechaNac) return '';
+    const inicialNombre = nombre.charAt(0).toUpperCase();
+    const inicialesApellido = apellido.split(' ').map(p => p.charAt(0).toUpperCase()).join('');
+    return `03-${fechaNac.replace(/-/g, '')}${inicialNombre}${inicialesApellido}`;
 };
 
 /**
@@ -102,13 +85,14 @@ const isFormatoValido = computed(() => {
 // Auto-generar si está vacío
 watch([
     () => props.props.nombreFor,
+    () => props.props.apellidoFor,
     () => props.props.fechaNacimiento,
-    () => props.props.existingData?.nombre_completo,
+    () => props.props.existingData?.nombre_persona,
+    () => props.props.existingData?.apellido_persona,
     () => props.props.existingData?.fecha_nacimiento
 ], () => {
     if (canRegenerate.value && !props.modelValue) {
-        const nuevoValor = generateCodigoCarnet();
-        emit('update:modelValue', nuevoValor);
+        emit('update:modelValue', generateCodigoCarnet());
     }
 }, { immediate: true });
 

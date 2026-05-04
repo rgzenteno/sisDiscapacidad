@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Services\LogService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,12 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
+    protected $logService;
+
+    public function __construct(LogService $logService)
+    {
+        $this->logService = $logService;
+    }
     /**
      * Display the user's profile form.
      */
@@ -38,7 +45,44 @@ class ProfileController extends Controller
             $request->user()->email_verified_at = null;
         }
 
+        // Capturar cambios antes de guardar
+        $dirty  = $request->user()->getDirty();
+        $original = $request->user()->getOriginal();
+
+        $mapaLabels = [
+            'nombre'   => 'nombre',
+            'apellido' => 'apellido',
+            'usuario'    => 'email',
+            'cargo'    => 'cargo',
+        ];
+
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
+
+        foreach ($dirty as $campo => $nuevoValor) {
+            if (!array_key_exists($campo, $mapaLabels)) continue;
+            $label                     = $mapaLabels[$campo];
+            $camposModificados[$label] = $nuevoValor;
+            $valoresAnteriores[$label] = $original[$campo] ?? null;
+            $valoresNuevos[$label]     = $nuevoValor;
+        }
+
         $request->user()->save();
+
+        if (!empty($camposModificados)) {
+            $nombre = ucwords(strtolower("{$request->user()->nombre} {$request->user()->apellido}"));
+            $this->logService->logUpdate(
+                'Usuario',
+                $request->user(),
+                [
+                    'campos_modificados' => $camposModificados,
+                    'valores_anteriores' => $valoresAnteriores,
+                    'valores_nuevos'     => $valoresNuevos,
+                ],
+                "Se actualizó el perfil del usuario {$nombre} en el sistema."
+            );
+        }
 
         return Redirect::route('profile.edit');
     }

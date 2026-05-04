@@ -32,8 +32,12 @@ return new class extends Migration {
                 ->onDelete('cascade') // Elimina este pago si se elimina el habilitado
                 ->onUpdate('cascade'); // Actualiza esta referencia si se actualiza el habilitado
 
+            // ✅ Forma recomendada
+            $table->foreignId('id')->constrained('users')->cascadeOnDelete()->cascadeOnUpdate();
+
             // Índices recomendados:
             $table->index('id_habilitado');       // ⭐ Para JOINs con habilitado
+            $table->index('id');       // ⭐ Para JOINs con habilitado
             $table->index('fecha_pago');          // ⭐ Para filtrar por fechas
             $table->index('pago');                // Para filtrar pagos realizados/pendientes
             $table->index('tipo_pago');           // Para reportes por tipo de pago

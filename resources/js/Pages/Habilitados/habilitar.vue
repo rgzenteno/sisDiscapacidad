@@ -1,55 +1,82 @@
 <script setup>
+// ============================================================================
+// IMPORTS
+// ============================================================================
+import { computed, onMounted, ref, onUnmounted } from 'vue';
+import { Head, useForm, usePage, router } from '@inertiajs/vue3';
+
+/**
+ * Componentes
+ */
 import Sidebar from '@/components/Sidebar.vue';
 import Header from '@/components/Header.vue';
 import Footer from '@/components/Footer.vue';
 import Mensajes from '@/components/Mensajes.vue';
 import Rutas from '@/components/Rutas.vue';
-import { computed, onMounted, ref } from 'vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
 import Dropdown from '@/components/Dropdown.vue';
-import { router } from '@inertiajs/vue3';
-import ModalHabilitar from '@/components/ModalHabilitar.vue';
-import { onUnmounted } from 'vue'; // Agregar este import
 import Icon from '@/components/Icon.vue';
 
-// Obtener las props de la página
+/**
+ * Utilidades
+ */
+import { can } from '@/lib/can';
+import ModalHabilitar from '@/components/ModalHabilitar.vue';
+
+// ============================================================================
+// PROPS Y COMPUTED - DATOS DE LA PÁGINA
+// ============================================================================
 const page = usePage();
-const persona = ref(page.props.persona);
-const datosPersona = computed(() => page.props.datosPersona);
-const habilited = computed(() => page.props.habilited);
-const datosHabilitado = computed(() => page.props.datosHabilitado);
-const año_actual = computed(() => page.props.año_actual);
-const existe_gestion = computed(() => page.props.existe_gestion);
-const añoSeleccionado = computed(() => page.props.añoSeleccionado);
-const gestiones = computed(() => page.props.gestiones);
+
+/**
+ * Props principales
+ */
 const filters = computed(() => page.props.filters);
+const gestiones = computed(() => page.props.gestiones);
+const habilited = computed(() => page.props.habilited);
 const tiene_meses = computed(() => page.props.tiene_meses);
+const datosPersona = computed(() => page.props.datosPersona);
+const existe_gestion = computed(() => page.props.existe_gestion);
+const datosHabilitado = computed(() => page.props.datosHabilitado);
 
-//console.log('datos:', datosPersona.value);
-
-const observationsMap = ref({});
-const openModalHabilitar = ref(false);
-const selectedItem = ref(null);
+// ============================================================================
+// REFS - ESTADO DE MODALES
+// ============================================================================
 const showPersonaModal = ref(false);
+const openModalHabilitar = ref(false);
 
-// Lista de mensajes
+// ============================================================================
+// REFS - DATOS TEMPORALES
+// ============================================================================
 const mensajes = ref([]);
+const selectedItem = ref(null);
+const observationsMap = ref({});
 
-// Mostrar mensaje
+// ============================================================================
+// FUNCIONES - MENSAJES
+// ============================================================================
+
+/**
+ * Muestra un mensaje en la interfaz
+ * @param {string} tipo - Tipo de mensaje (error, correcto, info, advertencia)
+ * @param {string} titulo - Título del mensaje
+ * @param {string} texto - Contenido del mensaje
+ */
 const mostrarMensaje = (tipo, titulo, texto) => {
     mensajes.value.push({
-        id: Date.now() + Math.random(), // ID único
+        id: Date.now() + Math.random(),
         tipo,
         contenido: [{ header: titulo, text: texto }],
     });
 };
 
-// Eliminar mensaje cuando hijo emite @close
+/**
+ * Cierra un mensaje específico
+ * @param {number} id - ID del mensaje a cerrar
+ */
 const cerrarMensaje = (id) => {
     mensajes.value = mensajes.value.filter((m) => m.id !== id);
 };
 
-//Fin Mensajes
 
 //Funciones Extras
 function getMonthNameFromDate(monthNumber) {
@@ -103,7 +130,13 @@ const getCurrentDate = (data) => {
     return dateStr;
 };
 
-// Función para abrir el modal
+// ============================================================================
+// FUNCIONES - FORMULARIOS CREACIÓN
+// ============================================================================
+
+/**
+ * Abre el modal de datos del beneficiario
+ */
 const openPersonaModal = () => {
     showPersonaModal.value = true;
 };
@@ -112,23 +145,6 @@ const openPersonaModal = () => {
 const closePersonaModal = () => {
     showPersonaModal.value = false;
 };
-
-// Cerrar con tecla ESC
-const handleEscape = (e) => {
-    if (e.key === 'Escape' && showPersonaModal.value) {
-        closePersonaModal();
-    }
-};
-
-// Agregar listener cuando se monta el componente
-onMounted(() => {
-    document.addEventListener('keydown', handleEscape);
-});
-
-// Limpiar el listener cuando se desmonta
-onUnmounted(() => {
-    document.removeEventListener('keydown', handleEscape);
-});
 
 const getYearValue = (yearData) => {
     if (typeof yearData === 'object' && yearData?.gestion) {
@@ -146,10 +162,45 @@ const getNombreEstado = (estado) => {
             return 'Baja Temporal'
         case 'baja_definitiva':
             return 'Baja Definitiva'
+        case 'depurado':
+            return 'Depurado'
         default:
             return '●'
     }
 }
+
+const getColorEstado = (estado) => {
+    if (!estado) return '●'
+    switch (estado.toLowerCase()) {
+        case 'activo':
+            return 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+        case 'baja_temporal':
+            return 'bg-amber-100 text-amber-700 border border-amber-200'
+        case 'baja_definitiva':
+            return 'bg-red-100 text-red-700 border border-red-200'
+        case 'depurado':
+            return 'bg-gray-100 text-gray-700 border border-gray-200'
+        default:
+            return '●'
+    }
+}
+
+const getCircleEstado = (estado) => {
+    if (!estado) return '●'
+    switch (estado.toLowerCase()) {
+        case 'activo':
+            return 'bg-emerald-500'
+        case 'baja_temporal':
+            return 'bg-amber-500'
+        case 'baja_definitiva':
+            return 'bg-red-500'
+        case 'depurado':
+            return 'bg-gray-500'
+        default:
+            return '●'
+    }
+}
+
 
 // ✅ Actualizar la función para obtener el año seleccionado
 const selectedYear = ref(getYearValue(filters.value?.año))
@@ -158,8 +209,8 @@ const selectedYear = ref(getYearValue(filters.value?.año))
 const selectGestion = (year) => {
     const yearValue = getYearValue(year);
     selectedYear.value = yearValue;
-    router.get(route('habilitado.show'), {
-        año: yearValue, // 🔑 siempre será un número
+    router.get(route('habilitado.show', { id: page.props.idPersona }), {
+        año: yearValue,
         buscador: filters.value?.buscador || ''
     }, {
         preserveState: true,
@@ -329,12 +380,25 @@ const toggleHabilitado = (habilitado, idHabilitado) => {
     });
 };
 
+const getInitials = (nombre, apellido) =>
+    `${(nombre || '')[0] ?? ''}${(apellido || '')[0] ?? ''}`.toUpperCase() || '?';
+
 const openModal = (item) => {
     selectedItem.value = {
         ...item,
     };
     openModalHabilitar.value = true;
 };
+
+const resumenMeses = computed(() => {
+    const meses = datosHabilitado.value ?? []
+    return {
+        habilitados: meses.filter(m => m.habilitado === true).length,
+        deshabilitados: meses.filter(m => m.habilitado === false).length,
+        bajaTemp: meses.filter(m => m.estado_mes === 'baja_temporal').length,
+        sinHabilitar: meses.filter(m => m.habilitado === null).length,
+    }
+})
 
 const handleCambioEstado = (data) => {
     form.id_habilitado = data.id_habilitado
@@ -356,6 +420,23 @@ const handleCambioEstado = (data) => {
 }
 
 //Fin Editar Habiltiado
+
+// Cerrar con tecla ESC
+const handleEscape = (e) => {
+    if (e.key === 'Escape' && showPersonaModal.value) {
+        closePersonaModal();
+    }
+};
+
+// Agregar listener cuando se monta el componente
+onMounted(() => {
+    document.addEventListener('keydown', handleEscape);
+});
+
+// Limpiar el listener cuando se desmonta
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleEscape);
+});
 </script>
 
 <style>
@@ -372,17 +453,35 @@ const handleCambioEstado = (data) => {
 }
 </style>
 <template>
+    <!-- ============================================================================ -->
+    <!-- HEAD Y CONTENEDOR PRINCIPAL -->
+    <!-- ============================================================================ -->
 
     <Head title="UMADIS" />
-    <div class="flex h-screen bg-gray-200 font-roboto">
+
+    <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
+        <!-- Sidebar de navegación -->
         <Sidebar />
+
+        <!-- Contenedor principal -->
         <div class="flex-1 flex flex-col overflow-hidden">
-            <!-- Mensajes de notificación -->
-            <div class="fixed top-4 right-4 flex flex-col gap-2 z-50">
-                <Mensajes v-for="m in mensajes" :key="m.id" :id="m.id" :tipo="m.tipo" :contenido="m.contenido"
-                    @close="cerrarMensaje" />
-            </div>
+
+            <!-- ============================================================================ -->
+            <!-- SISTEMA DE MENSAJES -->
+            <!-- ============================================================================ -->
+            <Mensajes v-for="m in mensajes" :key="m.id" :id="m.id" :tipo="m.tipo" :contenido="m.contenido"
+                @close="cerrarMensaje" />
+
+            <!-- Header -->
             <Header class="mb-0" />
+
+            <!-- ============================================================================ -->
+            <!-- ENCABEZADO DE PÁGINA -->
+            <!-- ============================================================================ -->
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Habilitar Meses</h1>
+                <Rutas label1="Inicio" label2="Beneficiarios" label3="Habilitar Meses" class="sm:text-xs" />
+            </div>
 
             <Transition name="fade">
                 <ModalHabilitar v-if="openModalHabilitar" :data="selectedItem || {}" @habilitar="submit"
@@ -390,15 +489,6 @@ const handleCambioEstado = (data) => {
                     @sinDatos="mostrarMensaje('error', 'Error al Deshabilitar', 'Debe agregar una observación válida para deshabilitar.')"
                     @close="openModalHabilitar = false" />
             </Transition>
-
-            <div class="py-2">
-                <div
-                    class="px-2 py-1 flex flex-col-reverse items-start justify-between sm:px-5 sm:flex-row sm:items-center sm:justify-between">
-                    <h1 class="font-semibold text-2xl">Habilitar Meses</h1>
-                    <Rutas label1="Inicio" label2="Beneficiarios" label3="Habilitar Meses" />
-                </div>
-            </div>
-
 
             <!-- Header Principal -->
             <div class="bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
@@ -413,14 +503,15 @@ const handleCambioEstado = (data) => {
                                         GESTIÓN
                                     </h1>
                                     <Dropdown align="left" width="60">
-                                        <template #trigger>
+                                        <template #trigger="{ open }">
                                             <button
                                                 class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
                                                 type="button">
                                                 <span class="text-xl font-semibold text-slate-700">
                                                     {{ selectedYear }}
                                                 </span>
-                                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                                                <svg class="w-4 h-4 text-gray-500 transition-transform flex-shrink-0"
+                                                    :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor"
                                                     viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round"
                                                         stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -482,33 +573,49 @@ const handleCambioEstado = (data) => {
                             <!-- Información del Beneficiario (Solo en Desktop) - Versión Mini -->
                             <div v-if="datosPersona && datosPersona.length > 0" class="hidden lg:block relative">
                                 <div v-for="persona in datosPersona" :key="persona.id_persona" @click="openPersonaModal"
-                                    class="bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 rounded-lg px-4 py-2 shadow-sm cursor-pointer hover:shadow-md hover:border-gray-300 transition-all duration-200">
-                                    <div class="flex items-center gap-4">
-                                        <div class="flex-1">
-                                            <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">
+                                    class="border border-gray-200 rounded-lg px-4 py-1 shadow-sm cursor-pointer hover:shadow-md hover:border-gray-300 transition-all duration-200">
+
+                                    <div class="flex items-center gap-3">
+                                        <!-- Avatar iniciales -->
+                                        <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                            <span class="text-xs font-medium text-blue-700 uppercase">
+                                                {{ getInitials(
+    persona.nombre_persona || persona.nombre_completo?.split(' ')[0],
+    persona.apellido_persona || persona.nombre_completo?.split(' ')[1] || ''
+) }}
+                                            </span>
+                                        </div>
+                                        <!-- Nombre -->
+                                        <div class="flex-1 min-w-0">
+                                            <p
+                                                class="text-[10px] text-gray-500 font-medium uppercase tracking-wide leading-none">
                                                 Beneficiario
                                             </p>
-                                            <h4 class="text-sm font-bold text-gray-900 capitalize">
-                                                {{ persona.nombre_persona }} {{ persona.apellido_persona }}
-                                            </h4>
+                                            <p
+                                                class="text-[13px] font-semibold text-gray-900 capitalize truncate mt-0.5 leading-tight">
+                                                {{ persona.apellido_persona && persona.nombre_persona
+    ? `${persona.apellido_persona} ${persona.nombre_persona}`
+    : persona.nombre_completo }}
+                                            </p>
                                         </div>
-                                        <span
-                                            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium"
-                                            :class="[
-                                                persona.estado === 'activo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                    : persona.estado === 'baja_temporal' ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                        : 'bg-red-100 text-red-700 border border-red-200'
-                                            ]">
-                                            <span class="w-1.5 h-1.5 rounded-full" :class="[
-                                                persona.estado === 'activo' ? 'bg-emerald-500'
-                                                    : persona.estado === 'baja_temporal' ? 'bg-amber-500'
-                                                        : 'bg-red-500'
-                                            ]"></span>
-                                            {{ getNombreEstado(persona.estado) }}
-                                        </span>
 
-                                        <!-- Indicador de clic -->
-                                        <svg class="w-4 h-4 text-gray-400 transition-transform"
+                                        <!-- Estado + CI -->
+                                        <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                                            <span
+                                                class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium"
+                                                :class="getColorEstado(persona.estado)">
+                                                <span class="w-1.5 h-1.5 rounded-full"
+                                                    :class="getCircleEstado(persona.estado)">
+                                                </span>
+                                                <span class="ms-1">{{ getNombreEstado(persona.estado) }}</span>
+                                            </span>
+                                            <span class="text-[10px] text-gray-500">CI:
+                                                <span class="text-gray-900">{{ persona.ci_persona }}</span>
+                                            </span>
+                                        </div>
+
+                                        <!-- Chevron -->
+                                        <svg class="w-3.5 h-3.5 text-gray-500 transition-transform flex-shrink-0"
                                             :class="showPersonaModal ? 'rotate-180' : ''" fill="none"
                                             stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -516,6 +623,7 @@ const handleCambioEstado = (data) => {
                                         </svg>
                                     </div>
                                 </div>
+
 
                                 <!-- Modal Expandido -->
                                 <Transition enter-active-class="transition ease-out duration-200"
@@ -527,100 +635,139 @@ const handleCambioEstado = (data) => {
                                     <div v-if="showPersonaModal" class="absolute top-full right-0 mt-2 z-50"
                                         @click.stop>
                                         <div v-for="persona in datosPersona" :key="'modal-' + persona.id_persona"
-                                            class="bg-gradient-to-br from-white to-gray-50 w-96 border border-gray-200 rounded-xl p-4 shadow-2xl">
+                                            class="bg-white w-96 border border-gray-200 rounded-xl shadow-xl overflow-hidden">
 
-                                            <!-- Botón cerrar -->
-                                            <button @click="closePersonaModal"
-                                                class="absolute top-3 right-3 p-1 rounded-lg bg-red-200 hover:bg-red-400 transition-colors"
-                                                title="Cerrar (ESC)">
-                                                <svg class="w-4 h-4 text-red-500 hover:text-red-600" fill="none"
-                                                    stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-
-                                            <!-- Header: Nombre y Estado -->
+                                            <!-- Header -->
                                             <div
-                                                class="flex items-start justify-between gap-3 mb-3 pb-3 border-b border-gray-100">
-                                                <div class="flex-1 min-w-0">
-                                                    <p
-                                                        class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
-                                                        Beneficiario
-                                                    </p>
-                                                    <h4 class="text-sm font-bold text-gray-900 capitalize truncate">
-                                                        {{ persona.nombre_persona }} {{ persona.apellido_persona }}
-                                                    </h4>
-                                                </div>
-                                            </div>
-
-                                            <!-- Información de fechas -->
-                                            <div class="grid grid-cols-2 gap-2 mb-3">
-                                                <!-- Fecha de Registro -->
-                                                <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                                    <div class="flex items-center gap-1.5 mb-1">
-                                                        <svg class="w-3.5 h-3.5 text-blue-500" fill="none"
-                                                            stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
-                                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        <span
-                                                            class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Registro</span>
+                                                class="flex items-center justify-between gap-3 px-3.5 py-3 border-b border-gray-100">
+                                                <div class="flex items-center gap-2.5 min-w-0">
+                                                    <div
+                                                        class="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                                        <span class="text-xs font-medium text-blue-700 uppercase">
+                                                            {{ getInitials(
+    persona.nombre_persona || persona.nombre_completo?.split(' ')[0],
+    persona.apellido_persona || persona.nombre_completo?.split(' ')[1] || ''
+) }}
+                                                        </span>
                                                     </div>
-                                                    <p class="text-xs font-bold text-gray-800"> {{
-                                                        getCurrentDate(persona.fecha_registro?.split('T')[0]) }}</p>
-                                                </div>
-
-                                                <!-- Fecha de Inicio Estado -->
-                                                <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                                    <div class="flex items-center gap-1.5 mb-1">
-                                                        <svg class="w-3.5 h-3.5 text-purple-500" fill="none"
-                                                            stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
-                                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                        <span
-                                                            class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado
-                                                            Desde</span>
-                                                    </div>
-                                                    <p class="text-xs font-bold text-gray-800">
-                                                        {{ getCurrentDate(persona.fecha_inicio?.split('T')[0]) }}</p>
-                                                </div>
-                                            </div>
-
-                                            <!-- Observaciones (si existen) -->
-                                            <div v-if="persona.observaciones"
-                                                class="bg-amber-50 border border-amber-100 rounded-lg p-2.5 mt-3">
-                                                <div class="flex items-start gap-2">
-                                                    <svg class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"
-                                                        fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd"
-                                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                                                            clip-rule="evenodd" />
-                                                    </svg>
-                                                    <div class="flex-1 min-w-0">
+                                                    <div class="min-w-0">
                                                         <p
-                                                            class="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-0.5">
-                                                            Observaciones
+                                                            class="text-[13px] font-semibold text-gray-900 uppercase truncate leading-tight">
+                                                            {{ persona.apellido_persona && persona.nombre_persona
+    ? `${persona.apellido_persona} ${persona.nombre_persona}`
+    : persona.nombre_completo }}
                                                         </p>
-                                                        <p class="text-xs text-amber-900 leading-relaxed">{{
-                                                            persona.observaciones }}</p>
+                                                        <p class="text-[11px] text-gray-500">CI: {{ persona.ci_persona
+                                                            }}</p>
                                                     </div>
                                                 </div>
+                                                <button @click="closePersonaModal"
+                                                    class="w-[26px] h-[26px] rounded-full border border-gray-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-colors flex-shrink-0"
+                                                    title="Cerrar (ESC)">
+                                                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none"
+                                                        stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
                                             </div>
 
-                                            <!-- Indicador visual inferior -->
-                                            <div class="mt-3 pt-2 border-t border-gray-100">
-                                                <div
-                                                    class="flex items-center justify-between text-[10px] text-gray-400">
-                                                    <span class="flex items-center gap-1">
-                                                        <span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
-                                                        ID: {{ persona.id_persona.substring(0, 8) }}...
-                                                    </span>
-                                                    <span class="font-medium">{{ selectedYear }}</span>
+                                            <div class="p-3.5 space-y-2.5">
+
+                                                <!-- Beneficiario -->
+                                                <div class="border border-gray-100 rounded-lg overflow-hidden">
+                                                    <div class="bg-gray-50 px-2.5 py-1.5 border-b border-gray-100">
+                                                        <h3
+                                                            class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                                                            Beneficiario</h3>
+                                                    </div>
+                                                    <div class="px-2.5 py-2">
+                                                        <div
+                                                            class="grid grid-cols-[84px_1fr] gap-x-2 gap-y-1.5 text-xs">
+                                                            <span class="text-gray-400">Registro</span>
+                                                            <span class="font-medium text-gray-800">{{
+                                                                getCurrentDate(persona.fecha_registro?.split('T')[0])
+                                                                }}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
+
+                                                <!-- Estado -->
+                                                <div class="border border-gray-100 rounded-lg overflow-hidden">
+                                                    <div class="bg-gray-50 px-2.5 py-1.5 border-b border-gray-100">
+                                                        <h3
+                                                            class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                                                            Estado actual
+                                                        </h3>
+                                                    </div>
+                                                    <div class="px-2.5 py-2 space-y-2">
+                                                        <div class="flex items-center justify-between">
+                                                            <span
+                                                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                                                                :class="getColorEstado(persona.estado)">
+                                                                <span class="w-1.5 h-1.5 rounded-full"
+                                                                    :class="getCircleEstado(persona.estado)"></span>
+                                                                {{ getNombreEstado(persona.estado) }}
+                                                            </span>
+                                                            <span v-if="persona.fecha_inicio"
+                                                                class="text-[11px] text-gray-400">
+                                                                Desde: {{
+                                                                    getCurrentDate(persona.fecha_inicio?.split('T')[0]) }}
+                                                            </span>
+                                                        </div>
+                                                        <div class="h-px bg-gray-100"></div>
+                                                        <div class="grid grid-cols-[84px_1fr] gap-x-2 text-xs">
+                                                            <span class="text-gray-400">Observación</span>
+                                                            <span v-if="persona.observaciones"
+                                                                class="text-gray-700 break-words">{{
+                                                                    persona.observaciones }}</span>
+                                                            <span v-else class="text-gray-400 italic">Sin
+                                                                observaciones</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Resumen meses gestión -->
+                                                <div class="border border-gray-100 rounded-lg overflow-hidden">
+                                                    <div class="bg-gray-50 px-2.5 py-1.5 border-b border-gray-100">
+                                                        <h3
+                                                            class="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                                                            Gestión {{ selectedYear }} — meses
+                                                        </h3>
+                                                    </div>
+                                                    <div class="px-2.5 py-2">
+                                                        <div class="flex flex-wrap gap-1.5">
+                                                            <span v-if="resumenMeses.habilitados > 0"
+                                                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                <span class="text-[13px] font-semibold">{{
+                                                                    resumenMeses.habilitados }}</span>
+                                                                Habilitados
+                                                            </span>
+                                                            <span v-if="resumenMeses.deshabilitados > 0"
+                                                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-red-50 text-red-700 border border-red-200">
+                                                                <span class="text-[13px] font-semibold">{{
+                                                                    resumenMeses.deshabilitados }}</span>
+                                                                Deshabilitados
+                                                            </span>
+                                                            <span v-if="resumenMeses.bajaTemp > 0"
+                                                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                                                <span class="text-[13px] font-semibold">{{
+                                                                    resumenMeses.bajaTemp }}</span> Baja
+                                                                temporal
+                                                            </span>
+                                                            <span v-if="resumenMeses.sinHabilitar > 0"
+                                                                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-50 text-gray-500 border border-gray-200">
+                                                                <span class="text-[13px] font-semibold">{{
+                                                                    resumenMeses.sinHabilitar }}</span> Sin
+                                                                habilitar
+                                                            </span>
+                                                            <span v-if="datosHabilitado.length === 0"
+                                                                class="text-xs text-gray-400 italic">Sin meses
+                                                                registrados</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
                                             </div>
                                         </div>
                                     </div>
@@ -636,8 +783,6 @@ const handleCambioEstado = (data) => {
                                 </div>
                             </Transition>
                         </div>
-
-
                     </div>
                 </div>
             </div>
@@ -647,69 +792,171 @@ const handleCambioEstado = (data) => {
                 class="flex-1 overflow-x-hidden overflow-y-auto border-b-2 border-x-2 bg-white rounded-b-lg px-2 pt-3 mr-1">
                 <!-- Grid de Cards optimizado para 1-12 items -->
                 <div v-if="existe_gestion && tiene_meses && datosHabilitado.length > 0">
-                    <div class="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                         <div v-for="item in datosHabilitado" :key="item.id_habilitado" @click="openModal(item)"
-                            class="group cursor-pointer h-[130px] bg-white rounded-2xl border-2 border-gray-200 hover:border-gray-400
-            hover:shadow-lg transition-all duration-700 overflow-hidden transform hover:-translate-y-1 relative p-4 z-0">
-
-                            <!-- Círculo animado de fondo -->
-                            <div class="circle absolute h-[5em] w-[5em] -top-[2.5em] -right-[2.5em] rounded-full group-hover:scale-[900%] duration-700 z-[-1] pointer-events-none"
-                                :class="{
-                                    'bg-emerald-500': item.habilitado === true,
-                                    'bg-amber-500': item.habilitado !== true && item.estado_mes === 'baja_temporal',
-                                    'bg-red-500': item.habilitado !== true && item.estado_mes === 'baja_definitiva',
-                                    'bg-gray-400': item.habilitado !== true && item.estado_mes === 'activo'
+                            class="group cursor-pointer h-[125px] rounded-2xl border-2 border-gray-100 hover:border-transparent
+                                hover:shadow-xl transition-all duration-500 overflow-hidden transform hover:-translate-y-1 relative z-0 bg-white" :class="{
+                                    'hover:bg-emerald-500': item.estado_mes === 'activo',
+                                    'hover:bg-amber-500': item.estado_mes === 'baja_temporal',
+                                    'hover:bg-red-500': item.estado_mes === 'baja_definitiva',
+                                    'hover:bg-gray-500': item.estado_mes === 'depurado',
+                                    'hover:bg-gray-100': !item.estado_mes
                                 }">
-                            </div>
-                            <!-- Título (Mes) -->
-                            <h1
-                                class="z-20 font-bold text-2xl group-hover:text-white group-hover:-translate-y-2 duration-700 mb-1 pointer-events-none">
-                                {{ getMonthNameFromDate(item.mes) }}
-                            </h1>
+                            <!-- Círculo decorativo esquina -->
+                            <div class="absolute h-[5em] w-[5em] -top-[2.5em] -right-[2.5em] rounded-full
+                                    opacity-100 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none"
+                                :class="{
+                                    'bg-emerald-300': item.estado_mes === 'activo',
+                                    'bg-amber-300': item.estado_mes === 'baja_temporal',
+                                    'bg-red-300': item.estado_mes === 'baja_definitiva',
+                                    'bg-gray-200': item.estado_mes === 'depurado',
+                                    'bg-gray-50': !item.estado_mes
+                                }"></div>
 
-                            <!-- Contenido -->
-                            <div class="space-y-0.5 relative z-10 pointer-events-none">
-                                <!-- Fecha de habilitación (solo visible en hover) -->
-                                <div
-                                    class="flex items-center justify-between opacity-0 group-hover:opacity-100 duration-700 max-h-0 group-hover:max-h-10 overflow-hidden transition-all">
-                                    <span class="text-xs font-semibold text-white/90">Fecha Habilitado</span>
-                                    <span class="text-xs font-bold text-white">
-                                        {{ formatDateTime(item.fecha_habilitado) }}
-                                    </span>
-                                </div>
+                            <!-- ═══════════════════════════════════ -->
+                            <!--  ESTADO BASE (visible sin hover)   -->
+                            <!-- ═══════════════════════════════════ -->
+                            <div class="absolute inset-0 p-4 flex flex-col justify-between
+                                    opacity-100 group-hover:opacity-0 translate-y-0 group-hover:-translate-y-2
+                                    transition-all duration-400 pointer-events-none z-10">
 
-                                <!-- Estado de pago (solo visible en hover) -->
-                                <div
-                                    class="flex items-center justify-between opacity-0 group-hover:opacity-100 duration-700 max-h-0 group-hover:max-h-10 overflow-hidden transition-all">
-                                    <span class="text-xs font-semibold text-white/90">Pago</span>
+                                <!-- Fila superior: Mes + ícono de pago -->
+                                <div class="flex items-start justify-between">
+                                    <h1 class="font-bold text-2xl leading-tight text-gray-800">
+                                        {{ getMonthNameFromDate(item.mes) }}
+                                    </h1>
+
+                                    <!-- Ícono de pago (solo si está habilitado) -->
                                     <span v-if="item.habilitado == 1"
-                                        class="text-xs font-bold px-2 py-1 rounded bg-white/20 text-white">
-                                        {{ item.pagado == 1 ? 'Pagado' : 'Pendiente' }}
-                                    </span>
-                                    <span v-else class="text-xs font-bold text-white">
-                                        N/A
+                                        class="flex items-center justify-center w-7 h-7 rounded-full mt-0.5" :class="{
+                                            'bg-emerald-100 ': item.pagado == 1,
+                                            'bg-gray-100': item.pagado != 1
+                                        }">
+                                        <svg class="w-6 h-6 "
+                                            :class="item.pagado == 1 ? 'text-emerald-600' : 'text-gray-500'" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
                                     </span>
                                 </div>
 
-                                <div
-                                    class="flex items-center justify-between translate-y-6 group-hover:translate-y-0 transition-transform duration-700">
-                                    <span
-                                        class="text-xs font-semibold text-gray-600 group-hover:text-white/90 duration-700">Estado</span>
-                                    <span
-                                        class="text-xs font-bold px-2 py-1 rounded group-hover:bg-white/20 group-hover:text-white duration-700"
-                                        :class="{
-                                            'bg-emerald-100 text-emerald-700': item.habilitado === true,
-                                            'bg-red-100 text-red-700': item.habilitado === false,
-                                            'bg-gray-100 text-gray-700': item.habilitado === null
-                                        }">
-                                        {{
-                                            item.habilitado === true ? 'Habilitado' :
-                                                item.habilitado === false ? 'Deshabilitado' :
-                                                    'Sin habilitar'
-                                        }}
+                                <!-- Fila inferior: Badge de estado -->
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-bold px-2.5 py-1 rounded-full" :class="{
+                                        'bg-emerald-100 text-emerald-700': item.habilitado === true,
+                                        'bg-red-100 text-red-700': item.habilitado === false,
+                                        'bg-gray-100 text-gray-500': item.habilitado === null
+                                    }">
+                                        {{ item.habilitado === true ? 'Habilitado' : item.habilitado === false ?
+                                            'Deshabilitado' :
+                                            'Sin habilitar' }}
+                                    </span>
+
+                                    <!-- Dot de estado del mes -->
+                                    <span class="flex items-center gap-1 text-[11px] text-gray-400">
+                                        <span class="w-1.5 h-1.5 rounded-full inline-block" :class="{
+                                            'bg-emerald-400': item.estado_mes === 'activo',
+                                            'bg-amber-400': item.estado_mes === 'baja_temporal',
+                                            'bg-red-400': item.estado_mes === 'baja_definitiva',
+                                            'bg-gray-400': item.estado_mes === 'depurado',
+                                            'bg-gray-200': !item.estado_mes
+                                        }"></span>
+                                        {{ item.estado_mes ? item.estado_mes.replace('_', ' ') : 'Sin estado' }}
                                     </span>
                                 </div>
                             </div>
+
+                            <!-- ═══════════════════════════════════ -->
+                            <!--  ESTADO HOVER (visible al pasar)   -->
+                            <!-- ═══════════════════════════════════ -->
+                            <div class="absolute inset-0 p-4 pt-3 flex flex-col justify-between
+                                    opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0
+                                    transition-all duration-500 pointer-events-none z-10">
+
+                                <!-- Título mes en hover -->
+                                <h1 class="font-bold text-xl text-white leading-tight">
+                                    {{ getMonthNameFromDate(item.mes) }}
+                                </h1>
+
+                                <!-- Detalles en hover -->
+                                <div class="space-y-1.5">
+
+                                    <!-- Fecha de habilitación -->
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-white/70 flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3" y="4" width="18" height="18" rx="2" />
+                                                <line x1="16" y1="2" x2="16" y2="6" />
+                                                <line x1="8" y1="2" x2="8" y2="6" />
+                                                <line x1="3" y1="10" x2="21" y2="10" />
+                                            </svg>
+                                            Habilitado
+                                        </span>
+                                        <span class="text-[11px] font-semibold text-white">
+                                            {{ formatDateTime(item.fecha_habilitado) }}
+                                        </span>
+                                    </div>
+
+                                    <!-- Fecha de pago (solo si pagado) -->
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] text-white/70 flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="1" y="4" width="22" height="16" rx="2" />
+                                                <line x1="1" y1="10" x2="23" y2="10" />
+                                            </svg>
+                                            Fecha pago
+                                        </span>
+                                        <span v-if="item.habilitado == 1 && item.pagado == 1"
+                                            class="text-[11px] font-semibold text-white">
+                                            {{ formatDateTime(item.fecha_pago) }}
+                                        </span>
+                                        <span v-else class="text-[11px] text-white/60">Pago N/A</span>
+                                    </div>
+
+                                    <div class="w-full h-px bg-white/20"></div>
+
+                                    <!-- Estado + pago -->
+                                    <div class="flex items-center justify-between">
+                                        <span
+                                            class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
+                                            {{ item.habilitado === true ? 'Habilitado' : item.habilitado === false ?
+                                                'Deshabilitado'
+                                                : 'Sin habilitar' }}
+                                        </span>
+
+                                        <span v-if="item.habilitado == 1"
+                                            class="flex items-center gap-1 text-[11px] font-bold "
+                                            :class="item.pagado == 1 ? 'text-white' : 'text-red-600'">
+                                            <svg v-if="item.pagado == 1" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+                                                stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <!--  <svg v-if="item.pagado == 1" xmlns="http://www.w3.org/2000/svg"
+                                                class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                                stroke-linejoin="round">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg> -->
+                                            <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <polyline points="12 6 12 12 16 14" />
+                                            </svg>
+                                            {{ item.pagado == 1 ? 'Pagado' : 'Pendiente' }}
+                                        </span>
+                                        <span v-else class="text-[11px] text-white/60">Pago N/A</span>
+                                    </div>
+
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -719,8 +966,8 @@ const handleCambioEstado = (data) => {
                     <!-- Icono dinámico según el estado -->
                     <div class="bg-white rounded-full p-6 ">
                         <!-- Sin gestión - Icono de calendario con X -->
-                         <Icon v-if="!existe_gestion" :icon-button="true" name="calendarMontSolid" class-name="text-gray-400 dark:text-gray-500"
-                            :size="64" :height="64" />
+                        <Icon v-if="!existe_gestion" :icon-button="true" name="calendarMontSolid"
+                            class-name="text-gray-400 dark:text-gray-500" :size="64" :height="64" />
 
                         <!-- Sin meses - Icono de reloj/calendario vacío -->
                         <svg v-else-if="!tiene_meses" class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor"

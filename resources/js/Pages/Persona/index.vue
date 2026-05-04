@@ -2,10 +2,12 @@
 // ============================================================================
 // IMPORTS
 // ============================================================================
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 
-// Componentes
+/**
+ * Componentes
+ */
 import ModalImportaciones from '@/components/ModalImportaciones.vue';
 import ModalEstadoBene from '@/components/ModalEstadoBene.vue';
 import ModalEstados from '@/components/ModalEstados.vue';
@@ -23,7 +25,9 @@ import Rutas from '@/components/Rutas.vue';
 import Icon from '@/components/Icon.vue';
 import Form from '@/components/Form/Form.vue';
 
-// Utilidades
+/**
+ * Utilidades
+ */
 import { can } from '@/lib/can';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
 import Modal from '@/components/Modal.vue';
@@ -40,6 +44,9 @@ const persona = computed(() => page.props.persona);
 const distrito = computed(() => page.props.distrito);
 const discapacidad = computed(() => page.props.discapacidad);
 const selectedTutorName = computed(() => page.props.selectedTutorName);
+const mesesDisponibles = computed(() => page.props.mesesDisponibles ?? []);
+
+//console.log(persona.value);
 
 // Opciones para selects
 const distritosOptions = computed(() => {
@@ -78,10 +85,12 @@ const formCreate = ref(false);
 const formEdit = ref(false);
 const formCreateTutor = ref(false);
 const formCreateCarnet = ref(false);
-const formCreateEstado = ref('');
+const formCreateEstado = ref(false);
+const formEditEstado = ref(false);
 const formCreateOption = ref(false);
 const formCreateOptionDis = ref(false);
 const asignateTutor = ref(false);
+const estadoDesdeModal = ref(false);
 
 // ============================================================================
 // REFS - DATOS TEMPORALES
@@ -89,6 +98,7 @@ const asignateTutor = ref(false);
 const selectedItem = ref(null);
 const selectedId = ref(null);
 const selectedNombre = ref(null);
+const selectedApellido = ref(null);
 const beneficiarioEncontrado = ref(null);
 const fechaNacimiento = ref(null);
 const tipoEstado = ref('');
@@ -110,18 +120,29 @@ const importando = ref(false);
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - TUTORES
 // ============================================================================
-const tutorFields = [
+const esPropioTutor = ref(false);
+
+const tutorFields = computed(() => [
+    {
+        typeInput: 'propio_check',
+        name: 'es_propio',
+        label: '',
+        onPropioChange: (val) => { esPropioTutor.value = !!val; }
+    },
     {
         typeCi: 'ci',
         typeInput: 'cedula',
         name: 'ci_tutor',
         label: 'C.I.',
         type: 'number',
-        required: false,
+        required: !esPropioTutor.value,
         placeholder: 'la cédula de identidad',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         range: 10,
-        autofocus: true
+        nameStyle: true,
+        autofocus: false,
+        opaco: esPropioTutor.value
     },
     {
         typeCi: 'ci',
@@ -130,30 +151,36 @@ const tutorFields = [
         label: 'Complemento C.I.',
         type: 'complemento',
         required: false,
-        readonly: false,
-        hidden: true
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        hidden: true,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
         name: 'nombre_tutor',
         label: 'Nombre',
         type: 'text',
-        required: true,
+        required: !esPropioTutor.value,
         placeholder: 'el nombre',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: true,
         range: 30,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
         name: 'apellido_tutor',
         label: 'Apellidos',
         type: 'text',
-        required: true,
+        required: !esPropioTutor.value,
         placeholder: 'el apellido',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: true,
         range: 30,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
@@ -162,8 +189,10 @@ const tutorFields = [
         type: 'number',
         required: false,
         placeholder: 'el número de teléfono',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         range: 10,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
@@ -172,22 +201,26 @@ const tutorFields = [
         type: 'email',
         required: false,
         placeholder: 'el correo electronico',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: false,
         range: 40,
+        opaco: esPropioTutor.value
     },
     {
-        typeInput: 'text',
+        typeInput: 'direccion',
         name: 'direccion',
         label: 'Dirección',
-        type: 'text',
         required: false,
         placeholder: 'la dirección',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: false,
-        range: 49,
+        range: 200,
+        opaco: esPropioTutor.value
     }
-];
+]);
+
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - PERSONAS
@@ -202,7 +235,7 @@ const personaFields = [
         placeholder: 'el nombre',
         nameStyle: true,
         readonly: false,
-        autofocus: true
+        autofocus: false
     },
     {
         typeInput: 'text',
@@ -252,6 +285,15 @@ const personaFields = [
         placeholder: 'la fecha de nacimiento',
         required: true
     },
+    /* {
+        typeInput: 'month_year',
+        name: 'fecha_registro',
+        label: 'Fecha de Registro',
+        required: false,
+        placeholder: 'Ingrese la fecha de registro',
+        hidden: !can('superusuario'),
+        mesesDisponibles: mesesDisponibles.value,
+    }, */
     {
         typeInput: 'text',
         name: 'observacion_persona',
@@ -274,12 +316,37 @@ const personaFields = [
     }
 ];
 
-const personaFieldsEdit = [...personaFields];
+const personaFieldsEdit = computed(() => {
+    const historial = selectedItem.value?.historial_completo || [];
+    const tieneMultiplesEstados = historial.length >= 2;
+
+    // Primer estado (el más antiguo) para usarlo como límite superior
+    const primerEstado = tieneMultiplesEstados
+        ? [...historial].sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))[0]
+        : null;
+
+    return personaFields.map(field => {
+        if (field.name === 'fecha_registro') {
+            return {
+                ...field,
+                hidden: !can('superusuario'),
+                mesesDisponibles: field.mesesDisponibles,
+                // Si tiene 2+ estados, pasar el límite al picker
+                fechaLimite: primerEstado
+                    ? String(primerEstado.fecha_inicio).split('T')[0]
+                    : null,
+            };
+        }
+        return field;
+    });
+});
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - CARNETS
 // ============================================================================
-const carnetFields = [
+const indefinidoCarnet = ref(false);
+
+const carnetFields = computed(() => [
     {
         typeInput: 'id',
         name: 'id_persona',
@@ -307,13 +374,20 @@ const carnetFields = [
         add: true
     },
     {
+        typeInput: 'indefinido_check',
+        name: 'indefinido',
+        label: '',
+        onIndefinidoChange: (val) => { indefinidoCarnet.value = !!val; } // ← callback
+    },
+    {
         typeInput: 'text',
         name: 'fecha_emision',
         label: 'Fecha de Emisión',
         type: 'date',
-        required: true,
+        required: !indefinidoCarnet.value,
         placeholder: 'la fecha de emisión',
-        readonly: false
+        readonly: false,
+        hidden: indefinidoCarnet.value
     },
     {
         typeInput: 'text',
@@ -322,51 +396,67 @@ const carnetFields = [
         type: 'date',
         required: false,
         readonly: true,
-        placeholder: 'Se calculará automáticamente'
+        placeholder: 'Se calculará automáticamente',
+        hidden: indefinidoCarnet.value
     }
-];
+]);
 
-const carnetFieldsEdit = [...carnetFields];
+const carnetFieldsEdit = computed(() => [...carnetFields.value]);
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - ESTADOS
 // ============================================================================
-const estadoFields = [
-    {
-        name: 'id_persona',
-        label: '',
-        hidden: true
-    },
-    {
-        name: 'id_estado',
-        label: '',
-        hidden: true
-    },
-    {
-        typeInput: 'select',
-        name: 'estado',
-        label: 'Estado del Beneficiario',
-        type: 'text',
-        placeholder: 'el estado del beneficiario',
-        options: [
-            { text: 'Activo', value: 'activo' },
-            { text: 'Baja Temporal', value: 'baja_temporal' },
-            { text: 'Baja Definitiva', value: 'baja_definitiva' }
-        ],
-        required: true,
-        readonly: false,
-        add: false
-    },
-    {
-        typeInput: 'text',
-        name: 'fecha_inicio',
-        label: 'Fecha de Inicio',
-        type: 'date',
-        required: true,
-        placeholder: 'la fecha de inicio del estado',
-        readonly: false
-    }
-];
+// Reemplaza el array estadoFields por este computed
+const estadoFields = computed(() => {
+    const estadoActual = selectedEstadoData.value?.estado_actual?.estado;
+    const esEdicion = formEditEstado.value;
+
+    const todasLasOpciones = [
+        { text: 'Activo', value: 'activo' },
+        { text: 'Baja Temporal', value: 'baja_temporal' },
+        { text: 'Baja Definitiva', value: 'baja_definitiva' },
+        { text: 'Depurado', value: 'depurado' }
+    ];
+
+    return [
+        {
+            typeInput: 'hidden',  // ← agregar esto
+            name: 'id_persona',
+            label: '',
+            hidden: true
+        },
+        {
+            typeInput: 'hidden',  // ← también este
+            name: 'id_estado',
+            label: '',
+            hidden: true
+        },
+        {
+            typeInput: 'select',
+            name: 'estado',
+            label: 'Estado del Beneficiario',
+            type: 'text',
+            placeholder: 'el estado del beneficiario',
+            options: esEdicion
+                ? todasLasOpciones  // ← en edición muestra todas las opciones incluido el actual
+                : todasLasOpciones.filter(op => op.value !== estadoActual),
+            required: true,
+            readonly: false,
+            add: false
+        },
+        {
+            typeInput: 'month_year',
+            name: 'fecha_inicio',
+            label: 'Mes y Gestión',
+            required: true,
+            placeholder: 'Seleccionar mes y gestión',
+            readonly: false,
+            editMode: esEdicion,
+            mesesDisponibles: esEdicion ? mesesDisponibles.value : undefined, // ← agrega esto
+            mesActualEdicion: esEdicion ? selectedEstadoData.value?.fecha_inicio : undefined, // ← y esto
+        },
+    ];
+});
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - OPCIONES (DISTRITO Y DISCAPACIDAD)
@@ -381,7 +471,7 @@ const DistritoFields = [
         placeholder: 'el distrito',
         nameStyle: true,
         readonly: false,
-        autofocus: true,
+        autofocus: false,
         nameStyle: 'uppercase'
     }
 ];
@@ -396,7 +486,7 @@ const DiscapacidadFields = [
         placeholder: 'la discapacidad',
         nameStyle: true,
         readonly: false,
-        autofocus: true,
+        autofocus: false,
         nameStyle: 'uppercase'
     }
 ];
@@ -407,8 +497,8 @@ const DiscapacidadFields = [
 const tableColumns = [
     { label: 'Nombre Completo', field: 'nombre_completo', headerClass: '', cellClass: 'whitespace-nowrap' },
     { label: 'Distrito', field: 'distrito', headerClass: '', cellClass: 'whitespace-nowrap' },
-    { label: 'Cedula de Identidad', field: 'ci_persona', headerClass: 'text-center whitespace-nowrap', cellClass: 'whitespace-nowrap' },
-    { label: 'Observación', field: 'observacion_persona', headerClass: 'text-center', cellClass: '' },
+    { label: 'C.I.', field: 'ci_persona', headerClass: 'text-center whitespace-nowrap', cellClass: 'whitespace-nowrap' },
+    { label: 'Observación', field: 'observacion_persona', headerClass: 'text-center hidden sm:block', cellClass: '' },
     { label: 'Estado', field: 'estado_actual', headerClass: 'text-center', cellClass: '' },
     { label: 'Carnet Dis.', field: 'carnet', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
     { label: 'Tutor', field: 'tutor', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
@@ -432,6 +522,11 @@ const configPlanillaGeneral = {
     nombrePlantilla: 'plantillaBaseDeDatos.xlsx',
     urlPlantilla: '/plantilla/PlantillaImportacion.xlsx',
     textoBotonImportar: 'Importar Excel'
+};
+
+const handleChangeTutor = () => {
+    showModal.value = false;
+    openAsignateTutor(selectedItem.value.id_persona);
 };
 
 // ============================================================================
@@ -551,6 +646,10 @@ const fechaInvalida = () => {
     mostrarMensaje('advertencia', 'Fecha incorrecta', 'La fecha ingresada no puede ser anterior al último estado registrado');
 };
 
+const sinEstadoPrimero = () => {
+    mostrarMensaje('advertencia', 'Estado requerido', 'Debe agregar el estado del beneficiario primero.');
+};
+
 // ============================================================================
 // FUNCIONES - TOOLTIP
 // ============================================================================
@@ -650,6 +749,24 @@ const handleCambioEstado = () => {
     mostrarMensaje('correcto', 'Registro exitoso', 'Los datos se registraron correctamente.');
     router.reload({ only: ['personas', 'persona'] });
     formCreateEstado.value = false;
+    formEditEstado.value = false; // ← faltaba esto
+};
+
+/**
+ * Maneja la edicion del estado del beneficiario
+ */
+const editarEstado = (registro) => {
+    selectedEstadoData.value = {
+        ...selectedItem.value,
+        estado_actual: { estado: registro.estado },
+        estado: registro.estado,
+        id_estado: registro.id,
+        fecha_inicio: registro.fecha_inicio,
+        observacion: registro.observacion,
+    };
+    selectedId.value = registro.id;
+    showModalEstado.value = false;
+    formEditEstado.value = true;
 };
 
 /**
@@ -728,8 +845,10 @@ const openEditPersona = (item, idPersona) => {
         apellido_persona: nombreSeparado.apellido,
         distrito: item.distrito,
         fecha_nacimiento: item.fecha_nacimiento,
+        fecha_registro: item.fecha_registro,
         observacion_persona: item.observacion_persona,
         documento_respaldo: item.documento_respaldo,
+        historial_completo: item.historial_completo || [],
     };
 
     selectedId.value = idPersona;
@@ -752,11 +871,17 @@ const handleEdit = () => {
  * @param {string} nombrePersona - Nombre de la persona
  */
 const openEditCarnet = (item, idCarnet, nombrePersona) => {
-
+    indefinidoCarnet.value = item.carnet?.fecha_emision === null; // ← falta esto
     selectedId.value = idCarnet;
-    selectedItem.value = { ...item };
+    selectedItem.value = {
+        ...item,
+        carnet: {
+            ...item.carnet,
+            indefinido: item.carnet?.fecha_emision === null ? 1 : 0
+        }
+    };
     selectedNombre.value = nombrePersona;
-
+    selectedApellido.value = item.apellido_persona; // ← también falta esto
     showModalCarnet.value = false;
     showModalCarnetEdit.value = true;
 };
@@ -769,10 +894,16 @@ const handleEditCarnet = () => {
     showModalCarnetEdit.value = false;
 };
 
+const handleCancelCreate = () => {
+    axios.delete(route('persona.clearTutorSession'));
+    formCreate.value = false;
+};
+
 /**
  * Cancela la edición del carnet y vuelve al modal de visualización
  */
 const handleEditCancel = () => {
+    indefinidoCarnet.value = false; // ← agregar
     showModalCarnetEdit.value = false;
     showModalCarnet.value = true;
 };
@@ -805,9 +936,10 @@ const openModalEstado = (datos) => {
  * @param {string} nombrePersona - Nombre de la persona
  * @param {string} fecha - Fecha de nacimiento
  */
-const openCreateCarnet = (idPersona, nombrePersona, fecha) => {
+const openCreateCarnet = (idPersona, nombrePersona, fecha, apellidoPersona) => {
     selectedId.value = idPersona;
     selectedNombre.value = nombrePersona;
+    selectedApellido.value = apellidoPersona;
     fechaNacimiento.value = fecha;
     formCreateCarnet.value = true;
 };
@@ -869,14 +1001,26 @@ const closeModal = () => {
     ModalE.value = false;
 };
 
+const showMobileMenu = ref(false)
+
+const closeMobileMenu = () => { showMobileMenu.value = false }
+
 /**
  * Abre el formulario de creación de estado
  * @param {Object} data - Datos del estado
  */
-const openFormEstado = (data) => {
-    selectedEstadoData.value = data;
-    showModalEstado.value = false;
-    formCreateEstado.value = true;
+const openFormEstado = (data, tipo) => {
+    if (tipo === 'add') {
+        selectedEstadoData.value = null;
+        selectedId.value = data;
+        estadoDesdeModal.value = false; // ← viene de la tabla
+        formCreateEstado.value = true;
+    } else {
+        selectedEstadoData.value = data;
+        estadoDesdeModal.value = true;  // ← viene del modal
+        showModalEstado.value = false;
+        formCreateEstado.value = true;
+    }
 };
 
 /**
@@ -884,7 +1028,10 @@ const openFormEstado = (data) => {
  */
 const abrirEstado = () => {
     formCreateEstado.value = false;
-    showModalEstado.value = true;
+    formEditEstado.value = false;
+    if (estadoDesdeModal.value) {
+        showModalEstado.value = true;
+    }
 };
 
 const registroAEliminar = ref(null);
@@ -919,6 +1066,14 @@ const confirmarEliminacion = () => {
         }
     });
 }
+
+onMounted(() => {
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.relative.sm\\:hidden')) {
+            showMobileMenu.value = false
+        }
+    })
+})
 
 // Nueva función para cancelar
 const cancelarEliminacion = () => {
@@ -983,6 +1138,10 @@ const handleImportar = (archivo, limpiarArchivo) => {
     });
 };
 
+const esCarnetIndefinido = (carnet) => {
+    return carnet?.fecha_emision === null;
+};
+
 /**
  * Descarga la plantilla de importación
  * @param {string} nombrePlantilla - Nombre del archivo a descargar
@@ -999,6 +1158,7 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
  * @param {string|number} ciPersona - CI de la persona encontrada
  */
 const encotrado = (ciPersona) => {
+    axios.delete(route('persona.clearTutorSession'));
     const personaExistente = usePage().props.flash.persona_existente;
     const tipoRegistro = personaExistente?.tipo_registro;
 
@@ -1020,7 +1180,7 @@ const encotrado = (ciPersona) => {
 
     <Head title="UMADIS" />
 
-    <div class="flex h-screen bg-gray-200 font-roboto">
+    <div class="flex h-screen -ml-1 bg-gray-200 font-roboto">
         <!-- Sidebar de navegación -->
         <Sidebar />
 
@@ -1039,69 +1199,126 @@ const encotrado = (ciPersona) => {
             <!-- ============================================================================ -->
             <!-- ENCABEZADO DE PÁGINA -->
             <!-- ============================================================================ -->
-            <div class="px-5 py-3 flex justify-between">
-                <h1 class="font-semibold text-2xl">Beneficiarios</h1>
-                <Rutas label1="Inicio" label3="Beneficiarios" />
+            <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                <h1 class="font-semibold text-xl sm:text-2xl">Beneficiarios</h1>
+                <Rutas label1="Inicio" label3="Beneficiarios" class="sm:text-xs" />
             </div>
 
             <!-- ============================================================================ -->
             <!-- BARRA DE HERRAMIENTAS -->
             <!-- ============================================================================ -->
-            <div class="flex justify-between p-4 pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
+            <div class="flex justify-between p-2 sm:p-4 sm:pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
                 <!-- Buscador -->
                 <Busqueda :initial-value="beneficiarioEncontrado || filters.buscador" name="beneficiario" only="persona"
                     :data="persona" ruta-busqueda="persona.index" />
 
                 <!-- Botones de acción -->
-                <div class="flex gap-2">
-                    <!-- Botón: Agregar -->
-                    <Button v-if="can('agregar-beneficiario')" id="btn-agregar" @click.prevent="openTutor()"
-                        @mouseenter="showTooltip('Agregar', 'btn-agregar')" @mouseleave="hideTooltip"
-                        :style="'px-2 py-2 pb-1 rounded-full border-none'"
-                        class="shrink-0 self-center bg-gray-200 relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
-                        <span
-                            class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                <div class="flex gap-1.5 sm:gap-2">
 
-                        <!-- Icono -->
-                        <span class="relative z-10">
-                            <Icon :icon-button="true" name="userAdd"
-                                class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
-                                :size="32" :height="32" />
-                        </span>
-                    </Button>
+                    <!-- MÓVIL: Botón "+" con dropdown -->
+                    <div class="relative sm:hidden">
+                        <Button @click.prevent="showMobileMenu = !showMobileMenu"
+                            :style="'px-2 py-2 pb-0.5 rounded-full border-none'"
+                            class="shrink-0 mr-2 self-center bg-gray-200 relative overflow-hidden group">
+                            <span
+                                class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                            <span class="relative z-10">
+                                <Icon :icon-button="true" name="circlePlus"
+                                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
+                                    :size="32" :height="31" />
+                            </span>
+                        </Button>
 
-                    <!-- Botón: Importar -->
-                    <Button v-if="can('importar-beneficiario')" id="btn-importar" @click.prevent="openModalImportar()"
-                        @mouseenter="showTooltip('Importar', 'btn-importar')" @mouseleave="hideTooltip"
-                        :style="'px-3 py-3 pb-2 rounded-full border-none'"
-                        class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
-                        <span
-                            class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                        <!-- Dropdown -->
+                        <Transition enter-active-class="transition-all duration-300 ease-out"
+                            enter-from-class="opacity-0 -translate-y-3 scale-95"
+                            enter-to-class="opacity-100 translate-y-0 scale-100"
+                            leave-active-class="transition-all duration-200 ease-in"
+                            leave-from-class="opacity-100 translate-y-0 scale-100"
+                            leave-to-class="opacity-0 -translate-y-3 scale-95">
+                            <div v-if="showMobileMenu"
+                                class="absolute right-0 top-full mt-2 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-2 z-50">
 
-                        <!-- Icono -->
-                        <span class="relative z-10">
-                            <Icon :icon-button="true" name="fileImport"
-                                class-name="text-gray-700 group-hover:text-white transition-colors duration-500" />
-                        </span>
-                    </Button>
+                                <Button v-if="can('agregar-beneficiario')"
+                                    @click.prevent="openTutor(); closeMobileMenu()"
+                                    :style="'px-2 py-2 pb-1 rounded-full border-none'"
+                                    class="shrink-0 self-center bg-gray-200 relative overflow-hidden group">
+                                    <span
+                                        class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                    <span class="relative z-10">
+                                        <Icon :icon-button="true" name="userAdd"
+                                            class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
+                                            :size="32" :height="32" />
+                                    </span>
+                                </Button>
 
-                    <!-- Botón: Generar PDF -->
-                    <Button v-if="can('reporte-beneficiario')" id="btn-reporte" @click.prevent="generearInforme()"
-                        @mouseenter="showTooltip('Generar PDF', 'btn-reporte')" @mouseleave="hideTooltip"
-                        :style="'px-3 py-3 pb-2 rounded-full border-none'"
-                        class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
-                        <span
-                            class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                <Button v-if="can('importar-beneficiario')"
+                                    @click.prevent="openModalImportar(); closeMobileMenu()"
+                                    :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                                    class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                                    <span
+                                        class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                    <span class="relative z-10">
+                                        <Icon :icon-button="true" name="fileImport"
+                                            class-name="text-gray-700 group-hover:text-white transition-colors duration-500" />
+                                    </span>
+                                </Button>
 
-                        <!-- Icono -->
-                        <span class="relative z-10">
-                            <Icon :icon-button="true" name="filePDF" fill="currentColor"
-                                class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
-                        </span>
-                    </Button>
+                                <Button v-if="can('reporte-beneficiario')"
+                                    @click.prevent="generearInforme(); closeMobileMenu()"
+                                    :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                                    class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                                    <span
+                                        class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                    <span class="relative z-10">
+                                        <Icon :icon-button="true" name="filePDF" fill="currentColor"
+                                            class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+                                    </span>
+                                </Button>
+
+                            </div>
+                        </Transition>
+                    </div>
+
+                    <!-- DESKTOP sm+: Botones normales -->
+                    <template class="hidden sm:contents">
+                        <Button v-if="can('agregar-beneficiario')" id="btn-agregar" @click.prevent="openTutor()"
+                            @mouseenter="showTooltip('Agregar', 'btn-agregar')" @mouseleave="hideTooltip"
+                            :style="'px-2 py-2 pb-1 rounded-full border-none'"
+                            class="shrink-0 self-center bg-gray-200 relative overflow-hidden group">
+                            <span
+                                class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                            <span class="relative z-10">
+                                <Icon :icon-button="true" name="userAdd"
+                                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
+                                    :size="32" :height="32" />
+                            </span>
+                        </Button>
+
+                        <Button v-if="can('importar-beneficiario')" id="btn-importar"
+                            @click.prevent="openModalImportar()" @mouseenter="showTooltip('Importar', 'btn-importar')"
+                            @mouseleave="hideTooltip" :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                            class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                            <span
+                                class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                            <span class="relative z-10">
+                                <Icon :icon-button="true" name="fileImport"
+                                    class-name="text-gray-700 group-hover:text-white transition-colors duration-500" />
+                            </span>
+                        </Button>
+
+                        <Button v-if="can('reporte-beneficiario')" id="btn-reporte" @click.prevent="generearInforme()"
+                            @mouseenter="showTooltip('Generar PDF', 'btn-reporte')" @mouseleave="hideTooltip"
+                            :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                            class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                            <span
+                                class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                            <span class="relative z-10">
+                                <Icon :icon-button="true" name="filePDF" fill="currentColor"
+                                    class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+                            </span>
+                        </Button>
+                    </template>
                 </div>
 
                 <!-- Tooltip -->
@@ -1112,23 +1329,22 @@ const encotrado = (ciPersona) => {
                 </div>
             </div>
 
-            <!-- ============================================================================ -->
-            <!-- TABLA DE DATOS -->
-            <!-- ============================================================================ -->
+
             <DataTable :data="persona.data" :columns="tableColumns" row-key="id_persona"
                 empty-message="No se encontraron datos. ¡Agregue beneficiarios para continuar!">
                 <!-- Slot personalizado para cada fila -->
                 <template #row="{ item }">
 
                     <!-- Columna: Nombre Completo -->
-                    <td class="px-3 py-1 whitespace-nowrap">
+                    <td class="pl-3 py-1 whitespace-nowrap">
                         <div class="font-medium text-gray-900 dark:text-gray-100 uppercase">
-                            {{ item.nombre_completo }}
+                            <p v-if="item.nombre_persona">{{ item.apellido_persona }} {{ item.nombre_persona }}</p>
+                            <p v-else> {{ item.nombre_completo }}</p>
                         </div>
                     </td>
 
                     <!-- Columna: Distrito -->
-                    <td class="px-3 py-1 whitespace-nowrap">
+                    <td class="px-1 py-1 whitespace-nowrap">
                         <div class="text-gray-700 dark:text-gray-300">
                             <span v-if="item.distrito">{{ item.distrito }}</span>
                             <span v-else class="block text-red-500 italic text-xs">Sin datos</span>
@@ -1136,7 +1352,7 @@ const encotrado = (ciPersona) => {
                     </td>
 
                     <!-- Columna: CI (Cédula de Identidad) -->
-                    <td class="px-3 py-1 whitespace-nowrap">
+                    <td class="px-4 py-1 whitespace-nowrap">
                         <div class="font-medium text-gray-900 dark:text-gray-100">
                             {{ item.ci_persona }}
                             <span v-if="item.complemento !== null">- {{ item.complemento }}</span>
@@ -1144,10 +1360,10 @@ const encotrado = (ciPersona) => {
                     </td>
 
                     <!-- Columna: Observación -->
-                    <td class="px-0 py-1">
+                    <td class="px-0 py-1 hidden sm:table-cell">
                         <div class="text-gray-700 dark:text-gray-300">
                             <span v-if="!item.observacion_persona"
-                                class="block text-center italic text-gray-500 text-xs">
+                                class="block text-center italic text-red-500 text-xs">
                                 ninguna
                             </span>
                             <span v-else class="text-xs line-clamp-1 cursor-help" :title="item.observacion_persona">
@@ -1155,13 +1371,12 @@ const encotrado = (ciPersona) => {
                             </span>
                         </div>
                     </td>
-
                     <!-- Columna: Estado -->
                     <td class="px-0 py-1">
                         <div v-if="item.estado_actual?.estado" @click.prevent="openModalEstado(item)"
                             class="cursor-pointer action-link flex items-center gap-1">
                             <p
-                                class="relative inline-blockrounded-lg block px-0 py-2 text-gray-700 dark:text-gray-200 dark:hover:text-white">
+                                class="relative rounded-lg block sm:py-2 text-gray-700 dark:text-gray-200 dark:hover:text-white">
                                 <!-- Icono: Activo -->
                                 <Icon v-if="item.estado_actual?.estado === 'activo'" :icon-button="true"
                                     name="checkCircle" class-name="text-green-500 pt-1" :size="17" />
@@ -1171,33 +1386,60 @@ const encotrado = (ciPersona) => {
                                 <!-- Icono: Baja Definitiva -->
                                 <Icon v-if="item.estado_actual?.estado === 'baja_definitiva'" :icon-button="true"
                                     name="circleMinus" class-name="text-red-600 pt-1" :size="17" />
+                                <!-- Icono: Depurado -->
+                                <Icon v-if="item.estado_actual?.estado === 'depurado'" :icon-button="true"
+                                    name="depurado" class-name="text-gray-500 pt-1" :size="17" />
                                 <!-- Icono: Sin Estado -->
                                 <Icon v-if="!item.estado_actual?.estado" :icon-button="true" name="exclamationCircle"
                                     class-name="text-red-500 pt-1" :size="17" />
                             </p>
                             <span class="text-gray-400">|</span>
-                            <div class="font-medium whitespace-nowrap"
-                                :class="item.estado_actual?.estado === 'activo' ? 'text-green-600' : item.estado_actual?.estado === 'baja_definitiva' ? 'text-red-600' : 'text-orange-600'">
+                            <div class="font-medium whitespace-nowrap" :class="item.estado_actual?.estado === 'activo' ? 'text-green-600' :
+                                item.estado_actual?.estado === 'baja_definitiva' ? 'text-red-600' :
+                                    item.estado_actual?.estado === 'depurado' ? 'text-gray-600' :
+                                        'text-orange-600'
+                                ">
                                 {{
                                     item.estado_actual?.estado === 'activo' ? 'Activo' :
                                         item.estado_actual?.estado === 'baja_temporal' ? 'Baja Temporal' :
-                                            'Baja Definitiva'
+                                            item.estado_actual?.estado === 'baja_definitiva' ? 'Baja Definitiva' :
+                                                item.estado_actual?.estado === 'depurado' ? 'Depurado' :
+                                                    'Sin estado'
                                 }}
+                            </div>
+                        </div>
+                        <div v-else @click="openFormEstado(item.id_persona, 'add')"
+                            class="cursor-pointer action-link flex items-center gap-1">
+                            <p
+                                class="relative block px-0 py-1 mt-1 text-gray-700 dark:text-gray-200 dark:hover:text-white">
+                                <Icon :icon-button="true" name="exclamationCircle" class-name="text-red-500"
+                                    :ripple="true" ripple-color="bg-red-700" :ripple-size="25" :ripple-small="true"
+                                    :size="17" />
+                            </p>
+                            <span class="text-gray-400">|</span>
+                            <div class="font-medium whitespace-nowrap text-red-500">
+                                Sin estado
                             </div>
                         </div>
                     </td>
 
                     <!-- Columna: Carnet -->
-                    <td class="px-3 py-1 whitespace-nowrap">
+                    <td class="px-1 py-1 whitespace-nowrap">
                         <div class="flex items-center">
-                            <div @click.prevent="item.carnet?.id_carnet ? getCarnetUrl(item) : (can('carnet') ? (!item.fecha_nacimiento ? openMissingDataModal() : openCreateCarnet(item.id_persona, `${item.nombre_persona} ${item.apellido_persona}`, `${item.fecha_nacimiento}`)) : null)"
-                                :class="[
+                            <div @click.prevent="item.estado_actual?.estado
+                                ? (item.carnet?.id_carnet ? getCarnetUrl(item) : (can('carnet') ? (!item.fecha_nacimiento ? openMissingDataModal() : openCreateCarnet(item.id_persona, item.nombre_persona, item.fecha_nacimiento, item.apellido_persona)) : null))
+                                : sinEstadoPrimero()" :class="[
                                     'flex items-center gap-1',
                                     item.carnet?.id_carnet ? 'cursor-pointer action-link' : (can('carnet') ? 'cursor-pointer action-link' : 'cursor-not-allowed'),
-                                    !item.carnet?.id_carnet ? 'text-red-600 hover:text-red-800' : item.carnet_vigente === false ? 'text-yellow-400 hover:text-yellow-700' : 'text-gray-600 hover:text-gray-800'
+                                    !item.carnet?.id_carnet ? 'text-red-600 hover:text-red-800'
+                                        : esCarnetIndefinido(item.carnet) ? 'text-blue-500 hover:text-blue-700'
+                                            : item.carnet_vigente === false ? 'text-yellow-400 hover:text-yellow-700'
+                                                : 'text-gray-600 hover:text-gray-800'
                                 ]">
-                                <Icon :icon-button="true" name="profileCard" :size="19"
-                                    :class-name="!item.carnet?.id_carnet ? 'text-red-500' : item.carnet_vigente === false ? 'text-yellow-500' : 'text-gray-600'" />
+                                <Icon :icon-button="true" name="profileCard" :size="19" :class-name="!item.carnet?.id_carnet ? 'text-red-500'
+                                    : esCarnetIndefinido(item.carnet) ? 'text-blue-500'
+                                        : item.carnet_vigente === false ? 'text-yellow-500'
+                                            : 'text-gray-600'" />
                                 <span>|</span>
                                 <div class="font-medium">
                                     <span v-if="item.carnet?.id_carnet">{{ item.carnet?.doc }}</span>
@@ -1210,8 +1452,17 @@ const encotrado = (ciPersona) => {
                     <!-- Columna: Tutor -->
                     <td class="px-1 py-1 whitespace-nowrap">
                         <div class="flex items-center">
-                            <div @click.prevent="item.tutor?.id_tutor ? ModalTutorDatos(item) : (can('asignar-tutor') ? openAsignateTutor(item.id_persona) : null)"
-                                :class="[
+                            <!-- Caso: tutor propio (no clickeable) -->
+                            <div v-if="item.tutor_nombre === 'propio'" class="flex items-center gap-1 text-blue-500">
+                                <Icon :icon-button="true" name="users" :size="19" class-name="text-blue-500" />
+                                <span>|</span>
+                                <div class="font-medium italic">Tutor Propio</div>
+                            </div>
+
+                            <!-- Caso: tutor normal o sin tutor -->
+                            <div v-else @click.prevent="item.estado_actual?.estado
+                                ? (item.tutor?.id_tutor ? ModalTutorDatos(item) : (can('asignar-tutor') ? openAsignateTutor(item.id_persona) : null))
+                                : sinEstadoPrimero()" :class="[
                                     'flex items-center gap-1',
                                     item.tutor?.id_tutor ? 'cursor-pointer action-link' : (can('asignar-tutor') ? 'cursor-pointer action-link' : 'cursor-not-allowed'),
                                     item.id_tutor ? 'text-gray-600 hover:text-gray-800' : 'text-red-500 hover:text-red-800'
@@ -1220,52 +1471,59 @@ const encotrado = (ciPersona) => {
                                     :class-name="item.id_tutor ? 'text-gray-600 hover:text-gray-800' : 'text-red-500 hover:text-red-800'" />
                                 <span>|</span>
                                 <div class="font-medium capitalize">
-                                    <span v-if="item.tutor?.id_tutor">{{ item.tutor?.nombre_tutor }}</span>
-                                    <span class="capitalize" v-else>no asignado</span>
+                                    <span v-if="item.tutor?.id_tutor">
+                                        {{ item.tutor?.nombre_tutor?.toLowerCase() }}
+                                    </span>
+                                    <span v-else>no asignado</span>
                                 </div>
                             </div>
                         </div>
                     </td>
 
                     <!-- Columna: Acciones -->
-                    <td class="px-3 py-2">
+                    <td class="px-1 py-1">
                         <div class="flex justify-center items-center gap-1">
                             <!-- Acción: Editar -->
                             <div v-if="can('editar-beneficiario')">
                                 <Icon v-if="item.tipo_registro === 'pendiente' &&
                                     item.estado_actual?.estado !== 'baja_definitiva' &&
-                                    item.estado_actual?.estado !== 'baja_temporal'"
-                                    @click.prevent="openEditPersona(item, item.id_persona)" name="userSettings"
-                                    class-name="text-orange-600" :ripple="true" ripple-color="bg-orange-500"
+                                    item.estado_actual?.estado !== 'baja_temporal' &&
+                                    item.estado_actual?.estado !== 'depurado'" @click.prevent="item.estado_actual?.estado
+                                        ? openEditPersona(item, item.id_persona)
+                                        : sinEstadoPrimero()" name="userSettings" class-name="text-orange-600"
+                                    :ripple="true" ripple-color="bg-orange-600" :ripple-size="12"
                                     title="Registro pendiente" />
-                                <Icon v-else @click.prevent="openEditPersona(item, item.id_persona)" name="userEdit"
-                                    title="Editar" />
+                                <Icon v-else @click.prevent="item.estado_actual?.estado
+                                    ? openEditPersona(item, item.id_persona)
+                                    : sinEstadoPrimero()" name="userEdit" title="Editar" />
                             </div>
 
                             <!-- Acción: Baja Definitiva o Habilitar Meses -->
                             <div v-if="can('habilitar')">
-                                <a v-if="item.estado_actual?.estado === 'baja_definitiva'"
+<!--                                 <a v-if="item.estado_actual?.estado === 'baja_definitiva'"
                                     @click.prevent="openModalE(item.estado_actual?.estado)"
                                     class="cursor-pointer action-link">
                                     <Icon name="circleMinus" class-name="text-red-700" title="Baja definitiva" />
-                                </a>
-                                <a v-else
-                                    @click.prevent="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? getUrl('persona.show', item.id_persona) : null">
+                                </a> -->
+                                <a  @click.prevent="getUrl('persona.show', item.id_persona)">
                                     <Icon name="calendarMont" fill="none" stroke="currentColor" stroke-width="2"
-                                        :class-name="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
-                                        :title="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'Habilitar meses' : 'Datos faltantes'" />
+                                        class-name="text-gray-800 cursor-pointer action-link" title="Habilitar meses" />
                                 </a>
+                                <!-- <a v-else
+                                    @click.prevent="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? getUrl('persona.show', item.id_persona) : null">
+                                    <Icon name="calendarMont" fill="none" stroke="currentColor" stroke-width="2"
+                                        :class-name="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
+                                        :title="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'Habilitar meses' : 'Datos faltantes'" />
+                                </a> -->
                             </div>
-
 
                             <!-- Acción: Ver Meses Disponibles -->
                             <a v-if="can('pago')"
-                                @click.prevent="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? getUrl('persona.showHabilitado', item.carnet?.id_persona) : null">
+                                @click.prevent="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? getUrl('persona.showHabilitado', item.carnet?.id_persona) : null">
                                 <Icon name="clipboardList"
-                                    :class-name="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
-                                    :title="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'Meses disponibles' : 'Datos faltantes'" />
+                                    :class-name="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
+                                    :title="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'Meses disponibles' : 'Datos faltantes'" />
                             </a>
-
                         </div>
                     </td>
                 </template>
@@ -1310,7 +1568,7 @@ const encotrado = (ciPersona) => {
         <Transition name="fade">
             <Form v-if="formCreate" :fields="personaFields" :distritos="distrito" :nombreFor="String(selectedTutorName)"
                 submit-route="persona.store" @add="handleAddBene" @openFormOption="showModalWaringDistrito = true"
-                @sinDatos="sinDatos" @cancel="formCreate = false" @close="encotrado">
+                @sinDatos="sinDatos" @cancel="handleCancelCreate" @close="encotrado">
                 <template #icon>
                     <Icon :icon-button="true" name="userAdd" class-name="text-white" />
                 </template>
@@ -1388,9 +1646,10 @@ const encotrado = (ciPersona) => {
         <!-- Formulario: Crear Carnet -->
         <Transition name="fade">
             <Form v-if="formCreateCarnet" :fields="carnetFields" :discapacidad="discapacidad" :idFor="selectedId"
-                :nombreFor="selectedNombre" :fechaNacimiento="fechaNacimiento" clave-foranea="id_persona"
-                submit-route="carnet.store" @add="addCarnet" @openFormOption="showModalWaringDiscapacidad = true"
-                @sinDatos="sinDatos" @cancel="formCreateCarnet = false">
+                :nombreFor="selectedNombre" :apellidoFor="selectedApellido" :fechaNacimiento="fechaNacimiento"
+                clave-foranea="id_persona" submit-route="carnet.store" @add="addCarnet"
+                @openFormOption="showModalWaringDiscapacidad = true" @indefinidoChange="indefinidoCarnet = $event"
+                @sinDatos="sinDatos" @cancel="formCreateCarnet = false; indefinidoCarnet = false">
                 <template #icon>
                     <Icon :icon-button="true" name="profileCard" class-name="text-white" />
                 </template>
@@ -1407,8 +1666,9 @@ const encotrado = (ciPersona) => {
         <Transition name="fade">
             <Form v-if="showModalCarnetEdit" :fields="carnetFieldsEdit" boton-name="Guardar"
                 :discapacidad="discapacidad" :existing-data="selectedItem || {}" :nombreFor="selectedNombre"
-                :idFor="selectedId" :edit-mode="true" submit-route="carnet.update" @add="handleEditCarnet"
-                @openFormOption="showModalWaringDiscapacidad = true" @sinDatos="sinDatos" @cancel="handleEditCancel"
+                :apellidoFor="selectedApellido" :idFor="selectedId" :edit-mode="true" submit-route="carnet.update"
+                @add="handleEditCarnet" @openFormOption="showModalWaringDiscapacidad = true"
+                @indefinidoChange="indefinidoCarnet = $event" @sinDatos="sinDatos" @cancel="handleEditCancel"
                 @close="handleEditCancel">
                 <template #icon>
                     <Icon :icon-button="true" name="userEdit" class-name="text-white" />
@@ -1428,9 +1688,9 @@ const encotrado = (ciPersona) => {
 
         <!-- Formulario: Agregar Estado -->
         <Transition name="fade">
-            <Form v-if="formCreateEstado" :fields="estadoFields" :data="selectedEstadoData"
-                submit-route="persona.estado" @add="handleCambioEstado" @fechaInvalida="fechaInvalida"
-                @sinDatos="sinDatos" @cancel="abrirEstado">
+            <Form v-if="formCreateEstado" :fields="estadoFields"
+                :data="selectedEstadoData || { id_persona: selectedId }" submit-route="persona.estado"
+                @add="handleCambioEstado" @fechaInvalida="fechaInvalida" @sinDatos="sinDatos" @cancel="abrirEstado">
                 <template #icon>
                     <Icon :icon-button="true" name="badgeCheck" class-name="text-white" />
                 </template>
@@ -1439,6 +1699,24 @@ const encotrado = (ciPersona) => {
                 </template>
                 <template #label2>
                     Registre un nuevo estado del beneficiario
+                </template>
+            </Form>
+        </Transition>
+
+        <!-- Formulario: Editar Estado -->
+        <Transition name="fade">
+            <Form v-if="formEditEstado" :fields="estadoFields" boton-name="Guardar" :data="selectedEstadoData"
+                :idFor="selectedId" :existing-data="selectedEstadoData || {}" :edit-mode="true"
+                submit-route="persona.estado.update" @add="handleCambioEstado" @fechaInvalida="fechaInvalida"
+                @sinDatos="sinDatos" @cancel="abrirEstado">
+                <template #icon>
+                    <Icon :icon-button="true" name="badgeCheck" class-name="text-white" />
+                </template>
+                <template #label1>
+                    Editar estado
+                </template>
+                <template #label2>
+                    Modifica el estado del beneficiario
                 </template>
             </Form>
         </Transition>
@@ -1583,13 +1861,15 @@ const encotrado = (ciPersona) => {
 
         <!-- Modal: Información del Tutor -->
         <Transition name="fade">
-            <ModalTutor v-if="showModal" :data="selectedItem" :tutor="tutor" @close="showModal = false" />
+            <ModalTutor v-if="showModal" :data="selectedItem" :tutor="tutor" @close="showModal = false"
+                @changeTutor="handleChangeTutor" />
         </Transition>
 
         <!-- Modal: Estados del Beneficiario -->
         <Transition name="fade">
             <ModalEstadoBene v-if="showModalEstado" :data="selectedItem" @add="handleCambioEstado"
-                @addEstado="openFormEstado" @close="showModalEstado = false" @delete="eliminarRegistro" />
+                @addEstado="openFormEstado" @editEstado="editarEstado" @close="showModalEstado = false"
+                @delete="eliminarRegistro" />
         </Transition>
 
         <!-- Modal: Confirmar Eliminacion de Estado -->

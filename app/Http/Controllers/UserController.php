@@ -31,7 +31,7 @@ class UserController extends Controller
         $user = Auth::user();
         $isSuperUser = $user->hasRole('superUsuario');
 
-        $query = User::with('roles'); // ✅ Cargar la relación de roles
+        $query = User::with('roles');
 
         $search = $request->input('buscador');
 
@@ -54,19 +54,23 @@ class UserController extends Controller
 
             $query->whereHas('roles', function ($q) use ($userMaxLevel) {
                 $q->where('hierarchy_level', '<=', $userMaxLevel);
-            })->orWhereDoesntHave('roles'); // Incluir usuarios sin roles
+            })->orWhereDoesntHave('roles');
         }
 
-        $users = $query->leftJoin('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
-            ->leftJoin('roles', 'model_has_roles.role_id', '=', 'roles.id')
+        $users = $query
             ->select('users.*')
-            ->orderBy('roles.hierarchy_level', 'desc')
+            ->orderByRaw('
+                        (SELECT MAX(r.hierarchy_level)
+                        FROM roles r
+                        INNER JOIN model_has_roles mhr ON r.id = mhr.role_id
+                        WHERE mhr.model_id = users.id
+                        AND mhr.model_type = ?)
+                        DESC
+                    ', ['App\\Models\\User'])
             ->orderBy('users.id', 'asc')
-            ->paginate(10)
-            ->withQueryString()
-            ->through(function ($user) {
+            ->get()
+            ->map(function ($user) {
                 return [
-                    // Todos los campos del usuario
                     ...$user->toArray(),
                     'rol' => $user->roles->first()?->name ?? 'sin rol',
                 ];
@@ -107,12 +111,18 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'nombre' => 'required|string|max:255',
-            'apellido' => 'required|string|max:255',
-            'rol' => 'required|string|max:255', // Se recibe como string desde el frontend
-            'cargo' => 'required|string|max:255',
-            'email' => 'required|string|max:255|unique:' . User::class,
+            'nombre'    => 'required|string|max:255',
+            'apellido'  => 'required|string|max:255',
+            'rol'       => 'required|string|max:255',
+            'cargo'     => 'required|string|max:255',
+            'email'     => 'required|string|max:255|unique:' . User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+        ], [
+            'password.required'  => 'La contraseña es obligatoria.',
+            'password.confirmed' => 'Las contraseñas no coinciden.',
+            'password.min'       => 'La contraseña debe tener al menos 6 caracteres.',
+            'email.unique'       => 'Este correo ya está registrado.',
+            'email.required'     => 'El correo es obligatorio.',
         ]);
 
         $user = User::create([
@@ -128,7 +138,21 @@ class UserController extends Controller
         $user->assignRole($request->rol);
 
         $nombre = ucwords(strtolower("{$user->nombre} {$user->apellido}"));
-        $this->logService->logCreation('Usuario', $user, "Usuario creado: {$nombre}");
+        $rol = ucwords(strtolower("{$request->rol}"));
+        $cargo = strtoupper($user->cargo);
+
+        $this->logService->logCreation(
+            'Usuario',
+            $user,
+            "Se registró al usuario {$nombre} en el sistema.",
+            null,
+            [
+                'nombre'  => $nombre,
+                'rol'     => $rol,
+                'cargo'   => $cargo,
+                'usuario' => $user->email,
+            ]
+        );
     }
 
     public function resetPassword(User $user)
@@ -140,15 +164,11 @@ class UserController extends Controller
             'password_reset_required' => true,
         ]);
 
-        $admin = Auth::user();
-        $adminName = ucwords(strtolower($admin->nombre . ' ' . $admin->apellido));
         $userName = ucwords(strtolower("{$user->nombre} {$user->apellido}"));
 
-        $this->logService->logUpdate(
-            'Usuario',
+        $this->logService->logPasswordReset(
             $user,
-            null,
-            "Contraseña reseteada por admin: {$adminName} para el usuario: {$userName}"
+            "Se restableció la contraseña del usuario {$userName}."
         );
 
         // ✅ AGREGAR ESTA LÍNEA - Retornar la contraseña temporal al frontend
@@ -177,43 +197,65 @@ class UserController extends Controller
     public function update(Request $request, string $id)
     {
         $usuario = User::findOrFail($id);
-        $oldData = $usuario->getOriginal();
 
-        $camposPermitidos = [
-            'nombre',
-            'apellido',
-            'cargo',
-            'habilitado'
+        $oldData        = $usuario->getOriginal();
+        $fieldsToUpdate = $request->only(['nombre', 'apellido', 'cargo', 'habilitado']);
+
+        $mapaLabels = [
+            'nombre'     => 'nombre',
+            'apellido'   => 'apellido',
+            'cargo'      => 'cargo'  ,
+            'habilitado' => 'habilitado',
         ];
 
-        $datosActualizacion = $request->only($camposPermitidos);
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
 
-        $changes = [
-            'campos_modificados' => [],
-            'valores_anteriores' => [],
-            'valores_nuevos' => []
-        ];
+        foreach ($fieldsToUpdate as $campo => $nuevoValor) {
+            if (!array_key_exists($campo, $mapaLabels)) continue;
 
-        foreach ($datosActualizacion as $field => $newValue) {
-            if (isset($oldData[$field]) && $oldData[$field] !== $newValue) {
-                $changes['campos_modificados'][$field] = $field;
-                $changes['valores_anteriores'][$field] = $oldData[$field];
-                $changes['valores_nuevos'][$field] = $newValue;
+            $valorAnterior = $oldData[$campo] ?? null;
+            $label         = $mapaLabels[$campo];
+
+            if ($valorAnterior != $nuevoValor) {
+                $camposModificados[$label] = $nuevoValor;
+                $valoresAnteriores[$label] = $valorAnterior;
+                $valoresNuevos[$label]     = $nuevoValor;
             }
         }
 
-        $usuario->update($datosActualizacion);
-
+        // Detectar cambio de rol
         if ($request->has('rol')) {
-            $usuario->syncRoles([$request->rol]);
+            $rolAnterior = $usuario->getRoleNames()->first() ?? null;
+            $rolNuevo    = $request->rol;
+
+            if ($rolAnterior !== $rolNuevo) {
+                $camposModificados['rol'] = $rolNuevo;
+                $valoresAnteriores['rol'] = $rolAnterior;
+                $valoresNuevos['rol']     = $rolNuevo;
+            }
+
+            $usuario->syncRoles([$rolNuevo]);
         }
 
+        if (empty($camposModificados)) {
+            return;
+        }
+
+        $usuario->update($fieldsToUpdate);
+
         $nombre = ucwords(strtolower("{$usuario->nombre} {$usuario->apellido}"));
+
         $this->logService->logUpdate(
-            'usuarios',
+            'Usuario',
             $usuario,
-            $changes,
-            'Registro Actualizado: ' . $nombre
+            [
+                'campos_modificados' => $camposModificados,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos'     => $valoresNuevos,
+            ],
+            "Se actualizó el registro del usuario {$nombre} en el sistema."
         );
     }
 

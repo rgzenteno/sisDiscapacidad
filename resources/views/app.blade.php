@@ -14,8 +14,9 @@
         <link rel="icon" type="image/png" href="{{ asset('logo.png') }}">
 
         <!-- Scripts -->
-        <!-- Agregar en tu app.blade.php o layout principal -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+        <!-- XLSX para Excel -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
         @routes
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
         @inertiaHead

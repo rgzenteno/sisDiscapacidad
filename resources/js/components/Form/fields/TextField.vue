@@ -33,30 +33,21 @@ const emit = defineEmits(['update:modelValue']);
     <div class="w-full">
         <!-- Label -->
         <div class="flex" v-show="field.label !== ''">
-            <InputLabel
-                :for="field.name"
-                :value="field.label"
-                class="block text-sm font-medium text-gray-900 dark:text-white"
-            />
-            <span
-                :style="{ visibility: field.required === true ? 'visible' : 'hidden' }"
-                class="ms-1 text-red-600"
-            >
+            <InputLabel :for="field.name" :value="field.label"
+                class="block text-sm font-medium text-gray-900 dark:text-white" />
+            <span :style="{ visibility: field.required === true ? 'visible' : 'hidden' }" class="ms-1 text-red-600">
                 *
             </span>
         </div>
 
         <!-- Input -->
-        <Input
-            :input-type="field.type || field.typeInput"
-            :model-value="modelValue"
-            :customClass="field.nameStyle"
-            :maxlength="field.range"
-            :placeholder="'Ingrese ' + field.placeholder"
-            :readonly="field.readonly"
-            :errors="error"
-            :autofocus="field.autofocus || false"
-            @update:model-value="emit('update:modelValue', $event)"
-        />
+        <Input :input-type="field.type || field.typeInput" :model-value="modelValue" :customClass="field.nameStyle"
+            :maxlength="field.range" :placeholder="'Ingrese ' + field.placeholder" :readonly="field.readonly"
+            :errors="error" :autofocus="field.autofocus || false"
+            @update:model-value="emit('update:modelValue', $event)" />
+        <!-- Mensaje de error -->
+        <p v-if="error" class="mt-1 text-xs text-red-600 dark:text-red-400">
+            {{ error }}
+        </p>
     </div>
 </template>

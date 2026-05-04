@@ -2,23 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\NombreIAService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
-use App\Imports\PostulantesImport;
 use App\Models\Distrito;
-use App\Models\HistorialEstados;
 use App\Models\Persona;
 use App\Models\Tutor;
 use App\Services\LogService;
-use Carbon\Carbon;
 use Inertia\Inertia;
-use App\Services\SeparadorSimple;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class RegistroGeneralController extends Controller
@@ -98,62 +90,123 @@ class RegistroGeneralController extends Controller
     {
         // 1. VALIDACIÓN
         $validated = $request->validate([
-            'nombre_persona' => 'required|string|max:255',
-            'apellido_persona' => 'required|string|max:255',
-            'ci_persona' => 'required|string|max:20',
-            'distrito' => 'nullable|string',
-            'complemento' => 'nullable|string|max:5',
-            'fecha_nacimiento' => 'nullable|date',
+            'nombre_persona'      => 'required|string|max:255',
+            'apellido_persona'    => 'required|string|max:255',
+            'ci_persona'          => 'required|string|max:20',
+            'distrito'            => 'nullable|string',
+            'complemento'         => 'nullable|string|max:5',
+            'fecha_nacimiento'    => 'nullable|date',
             'observacion_persona' => 'nullable|string',
-            'documento_respaldo' => 'nullable|string',
+            'documento_respaldo'  => 'nullable|string',
         ]);
 
         // 2. BUSCAR LA PERSONA
         $persona = Persona::findOrFail($id);
 
         // 3. PREPARAR DATOS PARA ACTUALIZAR
-        $dataToUpdate = $validated;
+        $dataToUpdate                  = $validated;
         $dataToUpdate['tipo_registro'] = 'beneficiario';
 
-        // ✅ Construir observación de forma dinámica
         $observaciones = [];
+        $tutor = null;
 
-        // Agregar tutor si existe en sesión
-        if (session()->has('selected_tutor_id')) {
+        $esPropioTutor = session('tutor_propio', false);
+
+        if ($esPropioTutor) {
+            $dataToUpdate['tutor_nombre'] = 'propio';
+        } elseif (session()->has('selected_tutor_id')) {
             $dataToUpdate['id_tutor'] = session('selected_tutor_id');
+            $tutor = Tutor::find(session('selected_tutor_id'));
         } else {
             $observaciones[] = 'Tutor no proporcionado';
         }
 
-        $observaciones[] = 'Carnet de discapacidad no proporcionado';
-
-        // Unir todas las observaciones con coma
+        $observaciones[]                     = 'Carnet de discapacidad no proporcionado';
         $dataToUpdate['observacion_persona'] = implode(', ', $observaciones);
 
-        // 4. ACTUALIZAR PERSONA
+        // 4. CAMPOS PARA EL LOG
+        $mapaLabels = [
+            'nombre_persona'      => 'nombre',
+            'apellido_persona'    => 'apellido',
+            'ci_persona'          => 'c.i.',
+            'fecha_nacimiento'    => 'fecha nacimiento',
+            'distrito'            => 'distrito',
+            'complemento'         => 'complemento',
+            'observacion_persona' => 'observación',
+            'documento_respaldo'  => 'documento respaldo',
+            'tipo_registro'       => 'tipo registro',
+        ];
+
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos     = [];
+
+        foreach ($dataToUpdate as $campo => $nuevoValor) {
+            if (!array_key_exists($campo, $mapaLabels)) continue;
+
+            $valorAnterior = $persona->$campo;
+            $label         = $mapaLabels[$campo];
+
+            if ($valorAnterior != $nuevoValor) {
+                $camposModificados[$label] = $nuevoValor;
+                $valoresAnteriores[$label] = $valorAnterior ?? '—';
+                $valoresNuevos[$label]     = $nuevoValor    ?? '—';
+            }
+        }
+
+        // Agregar tutor al log si fue asignado y cambió
+        if ($esPropioTutor && $persona->tutor_nombre !== 'propio') {
+            $camposModificados['tutor asignado'] = 'propio';
+            $valoresAnteriores['tutor asignado'] = $persona->tutor_nombre ?? '—';
+            $valoresNuevos['tutor asignado']     = 'propio';
+        } elseif ($tutor && $persona->id_tutor != $tutor->id_tutor) {
+            $nombreTutor = ucwords(strtolower("{$tutor->nombre_tutor} {$tutor->apellido_tutor}"));
+            $tutorAnterior = $persona->tutor;
+
+            $camposModificados['tutor asignado'] = "{$nombreTutor} (C.I. {$tutor->ci_tutor})";
+            $valoresAnteriores['tutor asignado'] = $tutorAnterior
+                ? ucwords(strtolower("{$tutorAnterior->nombre_tutor} {$tutorAnterior->apellido_tutor}")) . " (C.I. {$tutorAnterior->ci_tutor})"
+                : '—';
+            $valoresNuevos['tutor asignado'] = "{$nombreTutor} (C.I. {$tutor->ci_tutor})";
+        }
+
+        // 5. ACTUALIZAR PERSONA
         $persona->update($dataToUpdate);
 
-        // 5. ✅ VERIFICAR Y CREAR HISTORIAL DE ESTADO SOLO SI NO EXISTE
+        // 6. VERIFICAR Y CREAR HISTORIAL DE ESTADO SOLO SI NO EXISTE
         if (!$persona->historialEstados()->exists()) {
-            $user = Auth::user();
+            $user                  = Auth::user();
             $nombreCompletoUsuario = "{$user->nombre} {$user->apellido}";
 
             $persona->historialEstados()->create([
-                'estado' => 'activo',
-                'fecha_inicio' => now('America/La_Paz')->format('Y-m-d'),
-                'fecha_fin' => null,
-                'fecha_registro' => $persona->fecha_registro,
+                'estado'               => 'activo',
+                'fecha_inicio'         => now('America/La_Paz')->format('Y-m-d'),
+                'fecha_fin'            => null,
+                'fecha_registro'       => $persona->fecha_registro,
                 'usuario_modificacion' => $nombreCompletoUsuario,
-                'observaciones' => ''
+                'observaciones'        => '',
             ]);
         }
 
-        // 6. LOG DEL SISTEMA
-        $nombreCompleto = $persona->nombre_completo;
-        $this->logService->logCreation('Beneficiario', $persona, "Beneficiario creado: {$nombreCompleto}");
+        // 7. LOG DEL SISTEMA
+        $nombreCompleto = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
 
-        // 7. LIMPIAR SESIÓN
+        if (!empty($camposModificados)) {
+            $this->logService->logUpdate(
+                'Beneficiario',
+                $persona,
+                [
+                    'campos_modificados' => $camposModificados,
+                    'valores_anteriores' => $valoresAnteriores,
+                    'valores_nuevos'     => $valoresNuevos,
+                ],
+                "Se actualizó el registro del beneficiario {$nombreCompleto} en el sistema."
+            );
+        }
+
+        // 8. LIMPIAR SESIÓN
         session()->forget('selected_tutor_id');
+        session()->forget('tutor_propio');
     }
 
     public function importar(Request $request)

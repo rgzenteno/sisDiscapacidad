@@ -1,22 +1,29 @@
 <template>
     <main class="flex-1 overflow-x-hidden overflow-y-auto border-b-2 border-x-2 bg-white rounded-b-lg mr-1">
         <div v-if="data.length > 0" class="mx-0 py-2">
-            <div class="relative mx-4 overflow-x-auto border rounded-lg shadow-md sm:rounded-lg">
+            <div class="relative mx-1 sm:mx-4 overflow-x-auto border rounded-lg shadow-md sm:rounded-lg">
                 <table class="w-full rounded-lg text-xs text-left rtl:text-right text-gray-500 dark:text-gray-400">
                     <!-- Header -->
-                    <thead class="sticky top-0 z-10 text-xs bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400">
+                    <thead
+                        class="sticky top-0 z-10 text-xs bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400">
                         <tr class="border-b">
                             <th v-for="(column, index) in columns" :key="index" scope="col"
                                 :class="['tracking-wider px-3 py-2.5', column.headerClass]">
-                                {{ column.label }}
+                                <span class="hidden sm:inline">{{ column.label }}</span>
+<span class="sm:hidden">{{ column.mobileLabel ?? column.label }}</span>
                             </th>
                         </tr>
                     </thead>
 
                     <!-- Body -->
                     <tbody>
-                        <tr v-for="(item, index) in data" :key="item[rowKey]"
-                            class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                        <tr v-for="(item, index) in data" :key="item[rowKey]" @mouseenter="$emit('row-hover', item)"
+                            @mouseleave="$emit('row-hover', null)" @click="onRowClick ? onRowClick(item) : null"
+                            :style="rowHoverStyle ? rowHoverStyle(item) : {}" :class="[
+                                rowClass ? rowClass(item) : 'bg-white dark:bg-gray-800',
+                                'border-b dark:border-gray-700 transition-colors duration-150',
+                                onRowClick ? 'cursor-pointer' : ''
+                            ]">
                             <slot name="row" :item="item" :index="index">
                                 <!-- Contenido por defecto si no se proporciona slot -->
                                 <td v-for="(column, idx) in columns" :key="idx"
@@ -71,7 +78,14 @@ defineProps({
     emptyMessage: {
         type: String,
         default: 'No se encontraron datos. ¡Agregue registros para continuar!'
-    }
+    },
+
+    rowClass: {
+        type: Function,
+        default: null
+    },
+    onRowClick: { type: Function, default: null },
+    rowHoverStyle: { type: Function, default: null },
 });
 </script>
 

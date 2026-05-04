@@ -58,7 +58,7 @@ const widthClass = computed(() => ({
     48: 'w-48',
     60: 'w-60',
     full: 'w-full'
-} [props.width] || 'w-48'));
+}[props.width] || 'w-48'));
 
 // Expone la función closeDropdown para uso externo
 defineExpose({
@@ -67,21 +67,24 @@ defineExpose({
 </script>
 
 <template>
-<div class="relative" ref="triggerRef">
-    <div @click="toggleDropdown">
-        <slot name="trigger" />
-    </div>
-
-    <!-- Overlay para cerrar el dropdown -->
-    <div v-show="open" class="fixed inset-0 z-40" @click="open = false"></div>
-
-    <!-- Dropdown con posicionamiento fijo -->
-    <Transition enter-active-class="transition ease-out duration-100" enter-from-class="transform opacity-0 scale-95" enter-to-class="transform opacity-100 scale-100" leave-active-class="transition ease-in duration-75" leave-from-class="transform opacity-100 scale-100" leave-to-class="transform opacity-0 scale-95">
-        <div v-show="open" ref="dropdownRef" class="fixed z-50" :class="widthClass" @click="handleContentClick">
-            <div :class="contentClasses" class="shadow-lg border border-gray-200 dark:border-gray-600">
-                <slot name="content" />
-            </div>
+    <div class="relative" ref="triggerRef">
+        <div @click="toggleDropdown">
+            <slot name="trigger" :open="open" />
         </div>
-    </Transition>
-</div>
+
+        <!-- Overlay para cerrar el dropdown -->
+        <div v-show="open" class="fixed inset-0 z-40" @click="open = false"></div>
+
+        <!-- Dropdown con posicionamiento fijo -->
+        <Transition enter-active-class="transition ease-out duration-100"
+            enter-from-class="transform opacity-0 scale-95" enter-to-class="transform opacity-100 scale-100"
+            leave-active-class="transition ease-in duration-75" leave-from-class="transform opacity-100 scale-100"
+            leave-to-class="transform opacity-0 scale-95">
+            <div v-show="open" ref="dropdownRef" class="fixed z-50" :class="widthClass" @click="handleContentClick">
+                <div :class="contentClasses" class="shadow-lg border border-gray-200 dark:border-gray-600">
+                    <slot name="content" />
+                </div>
+            </div>
+        </Transition>
+    </div>
 </template>

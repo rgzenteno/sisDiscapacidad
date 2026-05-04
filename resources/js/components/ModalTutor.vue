@@ -11,11 +11,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['close']);
-
-const getTutor = () => {
-    return props.tutor.filter((t) => t.id_tutor === props.data);
-};
+const emit = defineEmits(['close', 'changeTutor']);
 
 const openWhatsApp = (whatsapp) => {
     const phoneNumber = whatsapp;
@@ -36,10 +32,6 @@ const openGoogleMaps = (direccion) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${address}`;
     window.open(url, '_blank');
 };
-
-const getCarnetUrl = (ruta, id) => {
-    return route(ruta, window.btoa(id));
-}
 
 const closeOnEscape = (e) => {
     if (e.key === 'Escape') {
@@ -205,7 +197,7 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                                         <span class="truncate">
                                             <span v-if="props.data.tutor?.direccion"
                                                 class="text-gray-600 dark:text-gray-400 capitalize">{{
-                                                props.data.tutor?.direccion }}</span>
+                                                    props.data.tutor?.direccion }}</span>
                                             <span v-else class="text-red-500 dark:text-red-400 italic">No
                                                 disponible</span>
                                         </span>
@@ -232,10 +224,10 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
             <!-- Modal Footer -->
             <div
                 class="flex justify-end px-6 py-4 border-t dark:border-gray-600/50 rounded-b-3xl bg-gray-50 dark:bg-gray-700/50">
-                <Link v-if="can('tutorados-tutor')" :href="getCarnetUrl('tutor.tutorados', props.data.id_tutor)"
-                    class="px-4 py-2 border  text-white bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors duration-200 focus:ring-4 focus:ring-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800">
-                    Ver Tutorados
-                </Link>
+                <button v-if="can('tutorados-tutor')" @click="$emit('changeTutor')"
+                    class="px-4 py-2 border text-white bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors duration-200 focus:ring-4 focus:ring-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800">
+                    Cambiar de Tutor
+                </button>
                 <button @click="$emit('close')"
                     class="ms-2 px-6 py-2 border border-gray-400 text-gray-600 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium transition-colors duration-200 focus:ring-4 focus:ring-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800">
                     Cerrar
