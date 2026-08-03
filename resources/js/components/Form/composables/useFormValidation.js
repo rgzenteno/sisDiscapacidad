@@ -156,3 +156,36 @@ export function useFormValidation(form, props, emit) {
         validarFechaMinima,
     };
 }
+
+/**
+ * Versión reactiva (no de un solo disparo) del chequeo de campos requeridos
+ * de `validateForm` — para deshabilitar el botón de enviar mientras falten
+ * campos, en vez de recién avisar después de hacer clic. Es opt-in (ver
+ * prop `disableUntilValid` de Form.vue) para no cambiar el comportamiento
+ * de los formularios que no lo pidan.
+ * @param {Array} fields - `props.fields` del formulario
+ * @param {Object} form - Formulario de Inertia
+ * @returns {boolean}
+ */
+export function tieneCamposRequeridosCompletos(fields, form) {
+    return (fields || []).every((field) => {
+        // Un campo requerido pero oculto (ej. fecha_emision cuando el carnet
+        // es indefinido) no debe bloquear el botón — el usuario ni siquiera
+        // lo ve. Mismo criterio que Form.vue usa para decidir qué renderizar
+        // (visibleFields = fields.filter(f => !f.hidden)).
+        if (!field.name || !field.required || field.hidden) return true;
+
+        const fieldValue = form[field.name];
+
+        if (field.typeInput === "checkbox_permissions") {
+            return Array.isArray(fieldValue) && fieldValue.length > 0;
+        }
+
+        const isEmpty =
+            fieldValue === null ||
+            fieldValue === undefined ||
+            (typeof fieldValue === "string" && !fieldValue.trim());
+
+        return !isEmpty;
+    });
+}

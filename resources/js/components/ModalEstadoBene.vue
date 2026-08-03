@@ -1,120 +1,227 @@
 <script setup>
-import { router, useForm } from '@inertiajs/vue3';
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { can } from '@/lib/can';
+
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import Icon from '@/components/Icon.vue';
+import Button from '@/components/Button.vue';
+import { can, hasRole } from '@/lib/can';
+
+import Modal from "@/components/Modal.vue";
 
 const props = defineProps({
     data: {
         type: Object,
         default: () => ({})
     },
+    mesesDisponibles: {
+        type: Array,
+        default: () => []
+    },
 });
 
-//console.log(props.data);
+console.log('datos:', props.data);
+
 // Emits
-const emit = defineEmits(['add', 'close', 'cambioEstado', 'addEstado', 'delete']);
+const emit = defineEmits(['add', 'close', 'cambioEstado', 'addEstado', 'delete', 'editEstado', 'editObservacion', 'insertarIntermedio', 'agregarMesExtra']);
 
 // Computed para obtener el historial completo desde props.data
 const historialEstados = computed(() => {
     if (props.data.historial_completo && Array.isArray(props.data.historial_completo)) {
-        const historial = props.data.historial_completo.map(registro => ({
-            ...registro,
-            desde: registro.fecha_inicio,
-            hasta: registro.fecha_fin || 'Actual',
-            usuario: registro.usuario_modificacion || 'Sistema',
-            observacion: registro.observaciones
-        }));
-        return historial;
+        return props.data.historial_completo.map((registro, index) => {
+
+            const hasta = index === 0
+                ? 'Actual'
+                : registro.fecha_fin;
+
+            return {
+                ...registro,
+                desde: registro.fecha_inicio,
+                hasta,
+                usuario: registro.usuario_modificacion || 'Sistema',
+                observacion: registro.observaciones
+            };
+        });
     }
     return [];
 });
 
-// Computed para obtener el último registro (estado actual)
-const estadoActual = computed(() => {
-    if (historialEstados.value.length > 0) {
-        const ultimo = historialEstados.value[0]; // El primero porque viene ordenado DESC
-        return {
-            estado: ultimo.estado,
-            desde: ultimo.fecha_inicio,
-        };
-    }
-    return {
-        estado: props.data.estado,
-        desde: props.data.fecha_inicio,
-    };
+
+/**
+ * Meses registrados en el sistema (tabla mes) que quedan estrictamente
+ * entre dos cards consecutivos de la línea de tiempo — son los meses
+ * "disponibles" para insertar un estado intermedio ahí.
+ * @param {Object} registroNuevo - card más reciente (menor índice)
+ * @param {Object} registroViejo - card más antiguo (mayor índice)
+ */
+const mesesEntreCards = (registroNuevo, registroViejo) => {
+    if (!registroNuevo || !registroViejo) return [];
+
+    const [anioNuevo, mesNuevo] = String(registroNuevo.fecha_inicio).split('T')[0].split('-').map(Number);
+    const [anioViejo, mesViejo] = String(registroViejo.fecha_inicio).split('T')[0].split('-').map(Number);
+
+    return props.mesesDisponibles.filter(m => {
+        const anio = Number(m.gestion);
+        const mes = Number(m.mes);
+        const despuesDelViejo = anio > anioViejo || (anio === anioViejo && mes > mesViejo);
+        const antesDelNuevo = anio < anioNuevo || (anio === anioNuevo && mes < mesNuevo);
+        // Un mes ya pagado siempre queda como "activo": no cuenta como hueco
+        // disponible para insertar otro estado.
+        const yaPagado = (props.data.meses_pagados ?? []).some(
+            p => String(p.gestion) === String(anio) && Number(p.mes) === mes && !p.anulado
+        );
+        return despuesDelViejo && antesDelNuevo && !yaPagado;
+    });
+};
+
+/**
+ * Mes siguiente al último registrado en la tabla `mes` (aún no tiene fila
+ * propia, todavía no se cargó su PDF). Es el único mes que un no-superusuario
+ * puede gestionar.
+ */
+const mesExtra = computed(() => {
+    if (!props.mesesDisponibles.length) return null;
+
+    const ultimo = [...props.mesesDisponibles].sort((a, b) => {
+        const av = Number(a.gestion) * 100 + Number(a.mes);
+        const bv = Number(b.gestion) * 100 + Number(b.mes);
+        return av - bv;
+    }).pop();
+
+    let mes = Number(ultimo.mes) + 1;
+    let gestion = Number(ultimo.gestion);
+    if (mes > 12) { mes = 1; gestion++; }
+
+    return { gestion, mes };
 });
 
-// Computed para formatear la fecha de updated_at
-const ultimoCambio = computed(() => {
-    if (props.data.updated_at) {
-        return new Date(props.data.updated_at).toLocaleDateString('es-ES', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        })
+/**
+ * Si el estado más reciente del beneficiario ya empieza en el mes extra
+ * (o después), ya está cubierto y no hace falta ofrecer el botón.
+ */
+const mesExtraDisponible = computed(() => {
+    if (!mesExtra.value || !historialEstados.value.length) return false;
+
+    const actual = historialEstados.value[0];
+    const [anioActual, mesActual] = String(actual.fecha_inicio).split('T')[0].split('-').map(Number);
+
+    if (anioActual > mesExtra.value.gestion) return false;
+    if (anioActual === mesExtra.value.gestion && mesActual >= mesExtra.value.mes) return false;
+
+    return true;
+});
+
+const formatDateTime = (dateTimeString) => {
+    if (!dateTimeString) return 'N/A';
+
+    const parts = dateTimeString.split(' ');
+    const datePart = parts[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+
+    const fecha = new Date(year, month - 1, day);
+    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+    let dateStr = fecha.toLocaleDateString('es-ES', options);
+    dateStr = dateStr.replace(/\b\w/g, char => char.toUpperCase());
+
+    if (parts.length > 1 && parts[1]) {
+        const [hour, minute] = parts[1].split(':');
+        return `${dateStr} - ${hour}:${minute}`;
     }
-    return 'Sin fecha'
-})
 
-// Métodos
-const cerrarModal = () => {
-    emit('close')
-}
+    return dateStr;
+};
 
-const formatearFecha = (fecha) => {
-    if (fecha === 'Actual' || !fecha) return 'Actual'
-    return new Date(fecha).toLocaleDateString('es-ES', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    })
-}
 
-const getIconoEstado = (estado) => {
-    if (!estado) return '●'
-    switch (estado.toLowerCase()) {
-        case 'activo':
-            return 'h-2.5 w-2.5 rounded-full ring-2 ring-green-300 bg-green-500'
-        case 'baja_temporal':
-            return 'h-2.5 w-2.5 rounded-full ring-2 ring-yellow-300 bg-yellow-500'
-        case 'baja_definitiva':
-            return 'h-2.5 w-2.5 rounded-full ring-2 ring-red-300 bg-red-500'
-        default:
-            return '●'
+// Helpers de fecha por mes
+const formatearMes = (fecha) => {
+    if (!fecha || fecha === 'Actual') return 'En curso'
+
+    let d
+
+    if (fecha instanceof Date) {
+        d = fecha
+    } else {
+        const limpio = fecha.split(' ')[0]
+        d = new Date(limpio + 'T00:00:00')
     }
+
+    const mes = d.toLocaleDateString('es-ES', { month: 'long' })
+    const anio = d.getFullYear()
+
+    return `${mes.charAt(0).toUpperCase() + mes.slice(1)} - ${anio}`
 }
 
-const getNombreEstado = (estado) => {
-    if (!estado) return '●'
-    switch (estado.toLowerCase()) {
-        case 'activo':
-            return 'Activo'
-        case 'baja_temporal':
-            return 'Baja Temporal'
-        case 'baja_definitiva':
-            return 'Baja Definitiva'
-        default:
-            return '●'
-    }
-}
+// Configuración visual centralizada por estado: evita mantener el mismo
+// switch/case de colores duplicado en el badge del header, el punto del
+// timeline y el card (antes vivían por separado y se desincronizaban).
+const ESTADOS_CONFIG = {
+    activo: {
+        label: 'Activo',
+        icon: 'checkCircle',
+        iconText: 'text-emerald-600',
+        badge: 'bg-emerald-50 text-emerald-700',
+        dot: 'bg-emerald-400',
+        iconBg: 'bg-emerald-100',
+        cardBg: 'bg-emerald-50/40',
+        cardBorder: 'border-emerald-100',
+    },
+    baja_temporal: {
+        label: 'Baja Temporal',
+        icon: 'timeCircle',
+        iconText: 'text-amber-600',
+        badge: 'bg-amber-50 text-amber-700',
+        dot: 'bg-amber-400',
+        iconBg: 'bg-amber-100',
+        cardBg: 'bg-amber-50/40',
+        cardBorder: 'border-amber-100',
+    },
+    baja_definitiva: {
+        label: 'Baja Definitiva',
+        icon: 'circleMinus',
+        iconText: 'text-rose-600',
+        badge: 'bg-rose-50 text-rose-700',
+        dot: 'bg-rose-400',
+        iconBg: 'bg-rose-100',
+        cardBg: 'bg-rose-50/40',
+        cardBorder: 'border-rose-100',
+    },
+    depurado: {
+        label: 'Depurado',
+        icon: 'depurado',
+        iconText: 'text-slate-500',
+        badge: 'bg-slate-100 text-slate-600',
+        dot: 'bg-slate-400',
+        iconBg: 'bg-slate-200',
+        cardBg: 'bg-slate-50',
+        cardBorder: 'border-slate-200',
+    },
+    pagos_suspendidos: {
+        label: 'Pagos Suspendidos',
+        icon: 'cash',
+        iconText: 'text-violet-600',
+        badge: 'bg-violet-50 text-violet-700',
+        dot: 'bg-violet-400',
+        iconBg: 'bg-violet-100',
+        cardBg: 'bg-violet-50/40',
+        cardBorder: 'border-violet-100',
+    },
+};
 
-const getEstadoBadgeClass = (estado) => {
-    const baseClass = 'py-1 rounded-full font-medium '
-    if (!estado) return baseClass + 'bg-gray-100 text-gray-800'
+const ESTADO_DEFAULT = {
+    label: 'Sin estado',
+    icon: 'exclamationCircle',
+    iconText: 'text-slate-400',
+    badge: 'bg-slate-100 text-slate-600',
+    dot: 'bg-slate-300',
+    iconBg: 'bg-slate-200',
+    cardBg: 'bg-white',
+    cardBorder: 'border-slate-100',
+};
 
-    switch (estado.toLowerCase()) {
-        case 'activo':
-            return baseClass + 'bg-green-100 text-green-800'
-        case 'baja_temporal':
-            return baseClass + 'bg-yellow-100 text-yellow-800'
-        case 'baja_definitiva':
-            return baseClass + 'bg-red-100 text-red-800'
-        default:
-            return baseClass + 'bg-gray-100 text-gray-800'
-    }
-}
+const getEstadoConfig = (estado) => (estado && ESTADOS_CONFIG[estado.toLowerCase()]) || ESTADO_DEFAULT;
+
+const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.toLowerCase().replace(/(?:^|\s)\S/g, c => c.toUpperCase());
+};
 
 const nombreDisplay = computed(() => {
     if (props.data.nombre_persona && props.data.apellido_persona) {
@@ -131,54 +238,9 @@ const ciCompleto = computed(() => {
     return ci;
 });
 
-const cambiarEstadoRapido = (estado) => {
-    form.estado = estado
-    setTimeout(() => {
-        const textarea = document.querySelector('textarea')
-        if (textarea) textarea.focus()
-    }, 100)
-}
-
-// Formulario con useForm de Inertia
-const form = useForm({
-    id: props.data.id_estado || null,
-    id_persona: props.data.id_persona || null,
-    estado: '',
-    fechaEfectiva: new Date().toISOString().split('T')[0],
-    observacion: ''
-});
-
-// Submit principal que usa el form de Inertia
-const submit = () => {
-    // Validaciones...
-    if (!form.estado) {
-        alert('Por favor, seleccione un estado');
-        return;
-    }
-    if (form.estado === estadoActual.value.estado) {
-        alert('El estado seleccionado es el mismo que el actual.');
-        return;
-    }
-
-    form.post(route('persona.estado'), {
-        onSuccess: () => {
-            form.reset();
-            form.fechaEfectiva = new Date().toISOString().split('T')[0];
-
-            // Emitir evento al padre para que maneje la actualización
-            emit('cambioEstado', {
-                success: true,
-                mensaje: 'El estado se modifico correctamente.'
-            });
-        },
-        onError: (errors) => {
-            console.error('Error al guardar:', errors);
-            emit('cambioEstado', {
-                success: false,
-                errors: errors
-            });
-        }
-    });
+// Métodos
+const cerrarModal = () => {
+    emit('close')
 }
 
 const closeOnEscape = (e) => {
@@ -187,295 +249,236 @@ const closeOnEscape = (e) => {
     }
 };
 
+// Motivo expandible: solo uno a la vez, y se contrae al hacer clic en
+// cualquier lugar que no sea el propio bloque expandible.
+const motivoExpandidoId = ref(null);
+
+const toggleMotivo = (id) => {
+    motivoExpandidoId.value = motivoExpandidoId.value === id ? null : id;
+};
+
+const handleClickFueraDeMotivo = (e) => {
+    if (!e.target.closest('.motivo-expandible')) {
+        motivoExpandidoId.value = null;
+    }
+};
+
 onMounted(() => document.addEventListener('keydown', closeOnEscape));
 onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
+
+onMounted(() => document.addEventListener('mousedown', handleClickFueraDeMotivo));
+onUnmounted(() => document.removeEventListener('mousedown', handleClickFueraDeMotivo));
 </script>
 
-<style scoped>
-/* Scroll personalizado para el historial y aside */
-.scroll-custom::-webkit-scrollbar {
-    width: 6px;
-}
-
-.scroll-custom::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 3px;
-}
-
-.scroll-custom::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-}
-
-.scroll-custom::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-</style>
-
 <template>
-
-    <!-- Overlay del modal -->
-    <div class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center z-40 p-4"
-        @click="cerrarModal">
-        <!-- Modal container -->
-        <div class="relative w-full max-w-2xl max-h-[95vh] bg-gradient-to-br from-white to-slate-50 rounded-3xl shadow-[0_10px_40px_rgba(15,23,42,0.06)] border border-gray-100 flex flex-col overflow-hidden"
-            @click.stop>
-            <!-- Header -->
-            <div class="grid grid-cols-[1fr_auto] gap-6 px-6 py-4 border-b border-gray-100">
-                <!-- Contenido principal -->
-                <div class="min-w-0">
-                    <!-- Fila 1: Avatar, título y estado -->
-                    <div class="grid grid-cols-[auto_1fr_auto] gap-4 items-start mb-3">
-                        <!-- Avatar -->
-                        <div
-                            class="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-md ring-1 ring-indigo-100 flex-shrink-0">
-                            <svg class="w-6 h-6 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
-                                width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                <path fill-rule="evenodd"
-                                    d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2 9a4 4 0 0 0-4 4v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1a4 4 0 0 0-4-4h-4Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </div>
-
-                        <!-- Título y subtítulo -->
-                        <div class="min-w-0">
-                            <h2 class="text-2xl font-semibold text-slate-800 tracking-tight truncate">Gestión de
-                                Estados
-                            </h2>
-                            <p class="text-sm text-slate-500 capitalize truncate">
-                                {{ nombreDisplay }} • {{ ciCompleto }}
-                            </p>
-                        </div>
-
-                        <!-- Estado actual -->
-                        <div class="flex-shrink-0">
-                            <span
-                                :class="getEstadoBadgeClass(estadoActual.estado) + ' inline-flex items-center gap-2 px-2 py-1 rounded-full text-sm font-medium shadow-sm whitespace-nowrap'">
-                                <svg v-if="estadoActual.estado === 'activo'"
-                                    class="w-4 h-4 text-green-500 dark:text-white" aria-hidden="true"
-                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path fill-rule="evenodd"
-                                        d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm13.707-1.293a1 1 0 0 0-1.414-1.414L11 12.586l-1.793-1.793a1 1 0 0 0-1.414 1.414l2.5 2.5a1 1 0 0 0 1.414 0l4-4Z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <svg v-if="estadoActual.estado === 'baja_temporal'"
-                                    class="w-4 h-4 text-orange-500 dark:text-white" aria-hidden="true"
-                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path fill-rule="evenodd"
-                                        d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm11-4a1 1 0 1 0-2 0v4a1 1 0 0 0 .293.707l3 3a1 1 0 0 0 1.414-1.414L13 11.586V8Z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <svg v-if="estadoActual.estado === 'baja_definitiva'"
-                                    class="w-4 h-4 text-red-600 dark:text-white" aria-hidden="true"
-                                    xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path fill-rule="evenodd"
-                                        d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10S2 17.523 2 12Zm5.757-1a1 1 0 1 0 0 2h8.486a1 1 0 1 0 0-2H7.757Z"
-                                        clip-rule="evenodd" />
-                                </svg>
-                                <span class="capitalize">{{ getNombreEstado(estadoActual.estado) || 'Sin estado'
-                                    }}</span>
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Fila 2: Información adicional -->
-                    <div class="flex flex-wrap gap-2 text-xs ms-2 text-slate-500">
-                        <!-- Último cambio -->
-                        <div
-                            class="inline-flex items-center gap-1 bg-white/60 px-2 py-1.5 rounded-full border border-gray-100">
-                            <svg class="w-3 h-3 text-slate-400 dark:text-white" aria-hidden="true"
-                                xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none"
-                                viewBox="0 0 24 24">
-                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="m14.304 4.844 2.852 2.852M7 7H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4.5m2.409-9.91a2.017 2.017 0 0 1 0 2.853l-6.844 6.844L8 14l.713-3.565 6.844-6.844a2.015 2.015 0 0 1 2.852 0Z" />
-                            </svg>
-                            <span>Último cambio: <strong class="text-slate-700">{{ ultimoCambio }}</strong></span>
-                        </div>
-
-                        <!-- Distrito -->
-                        <div
-                            class="inline-flex items-center gap-2 bg-white/60 px-2 py-1.5 rounded-full border border-gray-100 shadow-sm">
-                            <svg class="w-3 h-3 text-slate-400 flex-shrink-0" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <span>Distrito: <strong class="text-slate-700">{{ props.data.distrito || 'Sin distrito'
-                            }}</strong></span>
-                        </div>
-
-                        <!-- Estado del carnet -->
-                        <div v-if="props.data.id_carnet"
-                            class="inline-flex items-center gap-2 bg-white/60 px-2 py-1.5 rounded-full border border-gray-100 shadow-sm">
-                            <svg class="w-3 h-3 flex-shrink-0"
-                                :class="props.data.carnet_vigente ? 'text-green-500' : 'text-yellow-700'"
-                                viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9 12l2 2 4-4M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9c0 .5-.04 1-.1 1.5" />
-                            </svg>
-                            <span>Carnet: <strong
-                                    :class="props.data.carnet_vigente ? 'text-green-700' : 'text-yellow-700'">{{
-                                        props.data.carnet_vigente ? 'Vigente' : 'Vencido' }}</strong></span>
-                        </div>
-                        <div v-else
-                            class="inline-flex items-center gap-2 bg-white/60 px-2 py-1.5 rounded-full border border-gray-100 shadow-sm">
-                            <svg class="w-3 h-3 text-red-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
-                                width="24" height="24" fill="none" viewBox="0 0 24 24">
-                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-                                    stroke-width="2" d="m15 9-6 6m0-6 6 6m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                            <span>Carnet: <strong class="text-red-500">Sin carnet</strong></span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Acciones -->
-                <div class="flex items-start gap-3 flex-shrink-0 ms-3">
-                    <button type="button" @click="cerrarModal"
-                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
-                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 6l12 12M6 18L18 6" />
-                        </svg>
-                    </button>
-                </div>
+    <Modal :showHeader="true" :showFooter="false" maxWidth="max-w-xl" @close="$emit('close')">
+        <template #icon>
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center">
+                <Icon :icon-button="true" name="user" class-name="text-white" :size="20" />
             </div>
+        </template>
+        <template #label1>
+            Gestión de Estados
+        </template>
+        <template #label2> {{ toTitleCase(nombreDisplay) }} • {{ ciCompleto }}</template>
 
-            <!-- Body con scroll individual -->
-            <div class="flex-1 p-6 py-4 min-h-0">
-                <div class=" h-full">
+        <template #badge>
+            <div class="hidden sm:block">
+                <span
+                    :class="[getEstadoConfig(props.data.estado_actual.estado).badge, 'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold shadow-sm whitespace-nowrap']">
+                    <Icon :icon-button="true" :name="getEstadoConfig(props.data.estado_actual.estado).icon"
+                        :class-name="getEstadoConfig(props.data.estado_actual.estado).iconText" :size="16" />
+                    {{ getEstadoConfig(props.data.estado_actual.estado).label }}
+                </span>
+            </div>
+        </template>
 
-                    <!-- Left: Timeline / historial -->
-                    <div class="xl:col-span-1">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="text-lg font-semibold text-slate-800">Historial de Estados</h3>
-                            <p class="text-sm text-slate-500">{{ historialEstados.length }} registros</p>
+        <!-- Body -->
+        <div>
+
+            <!-- Timeline / historial -->
+            <div class="">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="sm:text-lg font-semibold text-slate-800">Historial de Estados</h3>
+                    <p class="text-sm text-slate-500">{{ historialEstados.length }} estados</p>
+                </div>
+
+                <div class="relative pl-2 sm:pl-6 flex flex-col items flex-1 ">
+                    <!-- línea vertical del timeline -->
+                    <div
+                        class="absolute left-0 sm:left-3 top-2 bottom-2 w-px bg-gradient-to-b from-cyan-300 to-indigo-200">
+                    </div>
+
+                    <!-- Historial con scroll -->
+                    <div class="max-h-[50vh] space-y-1 overflow-y-auto sm:pr-2 text-sm ">
+                        <!-- Botón "+": mes siguiente al último registrado en el sistema (aún no tiene fila en `mes`) -->
+                        <div v-if="mesExtraDisponible && can('agregar-estado')" class="relative flex items-start gap-4">
+                            <div class="absolute left-[-6px] top-1/2 -translate-y-1/2">
+                                <span class="block w-3 h-3 rounded-full ring-2 ring-white bg-emerald-400"></span>
+                            </div>
+                            <div class="w-full">
+                                <button @click="emit('agregarMesExtra', mesExtra)"
+                                    title="Agregar estado para el mes siguiente al último registrado"
+                                    class="w-full flex items-center justify-center py-2 rounded-xl border border-dashed border-emerald-300 text-emerald-500 hover:bg-emerald-50 hover:border-emerald-400 transition-colors">
+                                    <Icon :icon-button="true" name="circlePlus" class-name="" :size="18" />
+                                </button>
+                            </div>
                         </div>
 
-                        <div class="relative pl-6 flex flex-col flex-1 mx-auto w-10/12">
-                            <!-- línea vertical del timeline -->
-                            <div
-                                class="absolute left-3 top-2 bottom-2 w-px bg-gradient-to-b from-cyan-300 to-indigo-200">
-                            </div>
+                        <template v-for="(registro, index) in historialEstados" :key="registro.id || index">
+                            <div class="relative flex items-start gap-4">
+                                <!-- punto del timeline -->
+                                <div class="absolute left-[-6px] top-4">
+                                    <span class="block w-3 h-3 rounded-full ring-2 ring-white"
+                                        :class="getEstadoConfig(registro.estado).dot"></span>
+                                </div>
 
-                            <!-- Historial con scroll -->
-                            <div class="max-h-[50vh] space-y-1 overflow-y-auto pr-2 text-sm">
-                                <template v-for="(registro, index) in historialEstados" :key="registro.id || index">
-                                    <div class="relative flex items-start gap-4">
-                                        <!-- punto del timeline -->
-                                        <div class="absolute left-[-6px] top-2">
-                                            <span class="block w-3 h-3 rounded-full ring-2 ring-white shadow-sm" :class="{
-                                                'bg-emerald-500': registro.estado === 'activo',
-                                                'bg-yellow-400': registro.estado === 'baja_temporal',
-                                                'bg-red-500': registro.estado === 'baja_definitiva',
-                                                'bg-slate-300': !['activo', 'baja_temporal', 'bajatemporal', 'baja_definitiva', 'bajadefinitiva'].includes(registro.estado)
-                                            }"></span>
-                                        </div>
+                                <div class="w-full">
+                                    <div class="rounded-xl border px-3.5 py-2.5 transition-colors duration-200"
+                                        :class="[getEstadoConfig(registro.estado).cardBg, getEstadoConfig(registro.estado).cardBorder]">
 
-                                        <div class="w-full">
-                                            <div
-                                                class="bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition">
-                                                <div class="flex items-center justify-between gap-4">
-                                                    <div class="flex items-center gap-3">
-                                                        <div class="flex flex-col">
-                                                            <span
-                                                                class="text-sm font-semibold text-slate-800 capitalize">{{
-                                                                    getNombreEstado(registro.estado) }}</span>
-                                                            <span class="text-xs text-slate-400">
-                                                                {{ formatearFecha(registro.desde) }}
-                                                                <span
-                                                                    v-if="registro.hasta !== 'Actual' && registro.hasta">→
-                                                                    {{ formatearFecha(registro.hasta) }}</span>
-                                                                <span v-else class="text-emerald-600 font-medium">→
-                                                                    En
-                                                                    curso</span>
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- badge con color -->
-                                                    <div class="text-right">
-                                                        <span
-                                                            :class="getEstadoBadgeClass(registro.estado) + ' inline-block text-xs font-semibold px-3 py-1 rounded-full'">
-                                                            {{ getNombreEstado(registro.estado) }}
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                <div class="mt-2 text-xs text-slate-600">
-                                                    <p v-if="registro.observacion" class="line-clamp-2"
-                                                        :title="registro.observacion">
-                                                        {{ registro.observacion }}
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div class="flex items-center gap-2.5 min-w-0">
+                                                <span class="flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0"
+                                                    :class="getEstadoConfig(registro.estado).iconBg">
+                                                    <Icon :icon-button="true" :name="getEstadoConfig(registro.estado).icon"
+                                                        :class-name="getEstadoConfig(registro.estado).iconText" :size="14" />
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p class="text-sm font-semibold text-slate-700 leading-tight truncate">
+                                                        {{ getEstadoConfig(registro.estado).label }}
                                                     </p>
-                                                    <p v-else class="text-slate-400">Sin observación</p>
-                                                </div>
-
-                                                <div
-                                                    class="flex items-center justify-between mt-2 pt-2 border-t border-gray-50">
-                                                    <div class="flex items-center gap-3 text-xs flex-1">
-                                                        <span class="text-slate-400">
-                                                            Registrado: {{ formatearFecha(registro.fecha_registro)
-                                                            }}
-                                                        </span>
-                                                        <span class="text-slate-500">
-                                                            por <strong class="text-slate-700 capitalize">{{
-                                                                (registro.usuario || 'Sistema').split(' ').slice(0,
-                                                                    2).join(' ') }}</strong>
-                                                        </span>
-                                                    </div>
-
-                                                    <!-- Contenedor del botón - mantiene el layout consistente -->
-                                                    <div class="min-w-[90px] text-right">
-                                                        <!--  -->
-                                                        <!-- Botón eliminar - NO aparece en el último registro del array (primer registro creado) -->
-                                                        <button
-                                                            v-if="index !== historialEstados.length - 1 && can('eliminar-estado')"
-                                                            @click="emit('delete', registro.id)"
-                                                            title="Eliminar registro"
-                                                            class="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                                                            <svg class="w-4 h-4" aria-hidden="true"
-                                                                xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                                                viewBox="0 0 24 24">
-                                                                <path fill-rule="evenodd"
-                                                                    d="M8.586 2.586A2 2 0 0 1 10 2h4a2 2 0 0 1 2 2v2h3a1 1 0 1 1 0 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a1 1 0 0 1 0-2h3V4a2 2 0 0 1 .586-1.414ZM10 6h4V4h-4v2Zm1 4a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0v-8Zm4 0a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0v-8Z"
-                                                                    clip-rule="evenodd" />
-                                                            </svg>
-                                                            <span>Eliminar</span>
-                                                        </button>
-                                                    </div>
+                                                    <p class="text-[11px] text-slate-400 truncate">
+                                                        {{ formatearMes(registro.desde) }}
+                                                        <span v-if="registro.hasta === 'Actual'"
+                                                            class="text-emerald-600 font-medium">→ En curso</span>
+                                                        <span v-else-if="registro.hasta && formatearMes(registro.hasta) !== formatearMes(registro.desde)">→ {{ formatearMes(registro.hasta) }}</span>
+                                                    </p>
                                                 </div>
                                             </div>
+
+                                            <!-- Acciones MOBILE -->
+                                            <div class="flex items-center gap-0.5 flex-shrink-0 sm:hidden">
+                                                <button
+                                                    v-if="registro.puede_gestionar && index < historialEstados.length - 1 && can('eliminar-estado')"
+                                                    @click="emit('delete', registro.id)" title="Eliminar registro"
+                                                    class="flex items-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                                                    <Icon :icon-button="true" name="depurado" class-name=""
+                                                        :size="15" />
+                                                </button>
+                                                <button
+                                                    v-if="registro.puede_gestionar && can('agregar-estado') && !props.data.meses_pagados?.length"
+                                                    @click="emit('editEstado', { ...registro, estado_anterior: historialEstados[index + 1]?.estado, es_primer_estado: index === historialEstados.length - 1 })"
+                                                    title="Editar estado"
+                                                    class="flex items-center p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                                    <Icon :icon-button="true" name="edit" class-name=""
+                                                        :size="15" />
+                                                </button>
+                                                <!-- Estado no gestionable (histórico/cerrado): solo se permite
+                                                     corregir el texto de la observación, nada más. -->
+                                                <button
+                                                    v-if="!registro.puede_gestionar && can('agregar-estado')"
+                                                    @click="emit('editObservacion', registro)"
+                                                    title="Editar solo la observación"
+                                                    class="flex items-center p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                                    <Icon :icon-button="true" name="clipboard" class-name=""
+                                                        :size="15" />
+                                                </button>
+                                            </div>
+
+                                            <!-- Acciones DESKTOP -->
+                                            <div class="hidden sm:flex items-center gap-0.5 flex-shrink-0">
+                                                <button
+                                                    v-if="registro.puede_gestionar && index < historialEstados.length - 1 && can('eliminar-estado')"
+                                                    @click="emit('delete', registro.id)" title="Eliminar registro"
+                                                    class="flex items-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                                                    <Icon :icon-button="true" name="depurado" class-name=""
+                                                        :size="15" />
+                                                </button>
+                                                <button v-if="registro.puede_gestionar && can('agregar-estado')"
+                                                    @click="emit('editEstado', { ...registro, estado_anterior: historialEstados[index + 1]?.estado, es_primer_estado: index === historialEstados.length - 1 })"
+                                                    title="Editar estado"
+                                                    class="flex items-center p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                                    <Icon :icon-button="true" name="edit" class-name=""
+                                                        :size="15" />
+                                                </button>
+                                                <!-- Estado no gestionable (histórico/cerrado): solo se permite
+                                                     corregir el texto de la observación, nada más. -->
+                                                <button
+                                                    v-if="!registro.puede_gestionar && can('agregar-estado')"
+                                                    @click="emit('editObservacion', registro)"
+                                                    title="Editar solo la observación"
+                                                    class="flex items-center p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                                    <Icon :icon-button="true" name="clipboard" class-name=""
+                                                        :size="15" />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Meta + toggle de motivo: el motivo permanece oculto hasta
+                                             que se presiona "ver más", para que el card no crezca de
+                                             entrada. -->
+                                        <div class="mt-1.5 flex items-center justify-between gap-2 motivo-expandible">
+                                            <span class="text-[11px] text-slate-400 truncate">
+                                                {{ formatDateTime(registro.fecha_registro) }} · <span
+                                                    class="capitalize">{{ toTitleCase((registro.usuario ||
+                                                        'Sistema').split(' ').slice(0, 2).join(' ')) }}</span>
+                                            </span>
+                                            <button @click="toggleMotivo(registro.id)"
+                                                class="text-[11px] text-[rgb(var(--brand-600))] hover:text-[rgb(var(--brand-700))] hover:underline font-medium whitespace-nowrap flex-shrink-0">
+                                                {{ motivoExpandidoId === registro.id ? 'ver menos' : 'ver más' }}
+                                            </button>
+                                        </div>
+
+                                        <div v-if="motivoExpandidoId === registro.id"
+                                            class="mt-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-2.5 py-2 motivo-expandible">
+                                            <span v-if="registro.observacion" class="block mb-1 text-slate-400">
+                                                {{ registro.observacion }}
+                                            </span>
+                                            <span class="font-medium text-slate-500">Motivo: </span>{{ registro.motivo || 'Sin motivo' }}
                                         </div>
                                     </div>
-                                </template>
-
-                                <!-- fallback si no hay registros -->
-                                <div v-if="!historialEstados.length" class="text-center text-slate-400 py-6 text-sm">
-                                    No hay historial para mostrar.
                                 </div>
                             </div>
+
+                            <!-- Botón "+": aparece si hay meses de la tabla `mes` sin card propio entre este registro y el siguiente (más antiguo). Insertar intermedio es exclusivo de superusuario. -->
+                            <div v-if="index < historialEstados.length - 1
+                                && hasRole('superUsuario')
+                                && mesesEntreCards(registro, historialEstados[index + 1]).length"
+                                class="relative flex items-start gap-4">
+                                <div class="absolute left-[-6px] top-1/2 -translate-y-1/2">
+                                    <span class="block w-3 h-3 rounded-full ring-2 ring-white bg-slate-300"></span>
+                                </div>
+                                <div class="w-full">
+                                    <button
+                                        @click="emit('insertarIntermedio', { base: historialEstados[index + 1], siguiente: registro })"
+                                        title="Insertar estado en un mes disponible entre estos dos"
+                                        class="w-full flex items-center justify-center py-2 rounded-xl border border-dashed border-slate-300 text-slate-400 hover:bg-slate-50 hover:border-slate-400 transition-colors">
+                                        <Icon :icon-button="true" name="circlePlus" class-name="" :size="18" />
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- fallback si no hay registros -->
+                        <div v-if="!historialEstados.length" class="text-center text-slate-400 py-6 text-sm">
+                            No hay historial para mostrar.
                         </div>
                     </div>
                 </div>
             </div>
-            <!-- Footer -->
-            <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-white">
-                <button v-if="can('agregar-estado')" @click="emit('addEstado', props.data)"
-                    class="px-5 py-2 rounded-lg text-sm text-white bg-blue-700 border border-gray-100 hover:bg-blue-600 transition">
-                    Cambiar Estado
-                </button>
-                <button @click="cerrarModal"
-                    class="px-5 py-2 rounded-lg text-sm text-slate-600 bg-white border border-gray-400 hover:bg-gray-50 transition">
-                    Cerrar
-                </button>
-            </div>
         </div>
-    </div>
+
+        <!-- Footer -->
+        <template #footer>
+            <div class="sm:px-6 border-t border-gray-100 dark:border-gray-700/50 py-5">
+                <div class="flex justify-center sm:justify-end gap-3">
+                    <Button @click="$emit('close')" :style="'py-2.5 px-8 rounded-xl'"
+                        class="bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))] text-white text-sm font-medium transition-colors">
+                        Cerrar
+                    </Button>
+                </div>
+            </div>
+        </template>
+    </Modal>
 </template>

@@ -1,11 +1,17 @@
 <script setup>
-// ============ INICIO IMPORTS ============ //
+// ============================================================================
+// IMPORTS
+// ============================================================================
 import { computed } from 'vue';
-import InputLabel from '@/components/InputLabel.vue';
-import Input from '@/components/Input.vue';
-// ============ FIN IMPORTS ============ //
 
-// ============ INICIO PROPS ============ //
+/**
+ * Componentes
+ */
+import Input from '@/components/Input.vue';
+
+// ============================================================================
+// PROPS
+// ============================================================================
 const props = defineProps({
     field: {
         type: Object,
@@ -28,38 +34,25 @@ const props = defineProps({
         required: true
     }
 });
-// ============ FIN PROPS ============ //
 
-// ============ INICIO EMITS ============ //
+// ============================================================================
+// EMITS
+// ============================================================================
 const emit = defineEmits(['update:modelValue']);
-// ============ FIN EMITS ============ //
 
-// ============ INICIO COMPUTED ============ //
-// Buscar el campo complemento
+// ============================================================================
+// COMPUTED - CAMPO COMPLEMENTO CARNET
+// ============================================================================
 const complementField = computed(() => {
     return props.props.fields.find(field =>
         field.typeInput === 'comple' && field.typeCi === 'ci'
     );
 });
-// ============ FIN COMPUTED ============ //
+
 </script>
 
 <template>
     <div class="w-full">
-        <!-- Label -->
-        <div class="flex" v-show="field.label !== ''">
-            <InputLabel
-                :for="field.name"
-                :value="field.label"
-                class="block text-sm font-medium text-gray-900 dark:text-white"
-            />
-            <span
-                :style="{ visibility: field.required === true ? 'visible' : 'hidden' }"
-                class="ms-1 text-red-600"
-            >
-                *
-            </span>
-        </div>
 
         <!-- Cédula + Complemento -->
         <div class="relative">

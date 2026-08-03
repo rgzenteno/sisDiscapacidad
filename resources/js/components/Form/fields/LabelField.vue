@@ -1,17 +1,17 @@
 <script setup>
-// ============ INICIO PROPS ============ //
+// ============================================================================
+// PROPS
+// ============================================================================
 const props = defineProps({
     field: {
         type: Object,
         required: true
     }
 });
-// ============ FIN PROPS ============ //
 </script>
 
 <template>
     <div class="w-full">
-        <!-- Textos informativos -->
         <p
             v-for="(texto, index) in field.textos"
             :key="index"

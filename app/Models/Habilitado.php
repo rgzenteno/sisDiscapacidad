@@ -2,16 +2,16 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
-class Habilitado extends Model
+class Habilitado extends BaseModel
 {
-    // Nombre de la tabla asociada
     protected $table = 'habilitado';
-    // Clave primaria personalizada
     protected $primaryKey = 'id_habilitado';
 
-    // Campos asignables masivamente
     protected $fillable = [
         'habilitado',
         'observaciones_habilitado',
@@ -23,86 +23,84 @@ class Habilitado extends Model
     ];
 
     protected $casts = [
-        'habilitado' => 'boolean'
+        'habilitado'       => 'boolean',
     ];
 
-    // ============ RELACIONES ============//
+    // ============ RELACIONES ============ //
 
-    // Relación con Persona
-    public function persona()
+    public function persona(): BelongsTo
     {
         return $this->belongsTo(Persona::class, 'id_persona');
     }
 
-    // Relación con Gestion
-    public function gestion()
+    public function gestion(): BelongsTo
     {
         return $this->belongsTo(Gestion::class, 'id_gestion');
     }
 
-    // Relación con Mes
-    public function mes()
+    public function mes(): BelongsTo
     {
         return $this->belongsTo(Mes::class, 'id_mes');
     }
 
-    // Relación con Pago
-    public function pago()
+    public function pago(): HasOne
     {
-        return $this->hasOne(Pago::class, 'id_habilitado');
+        // ofMany en vez de hasOne simple: normalmente hay un solo pago por
+        // habilitado, pero si alguna vez llega a haber más de uno (ver caso
+        // histórico de pago duplicado sin bloqueo de botón), esto garantiza
+        // que siempre se resuelva al pago VIGENTE (pago=1) antes que a uno
+        // anulado, y entre iguales al más reciente — sin esto, un hasOne
+        // simple puede devolver cualquiera de los dos de forma arbitraria.
+        return $this->hasOne(Pago::class, 'id_habilitado', 'id_habilitado')
+            ->ofMany(['pago' => 'max', 'id_pago' => 'max']);
     }
 
-
-    public function user()
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'id', 'id');
+        return $this->belongsTo(User::class, 'id');
     }
 
-    // ============ SCOPES ============//
+    // ============ SCOPES ============ //
 
-    // En el modelo Habilitado
-public function scopeActivo($query)
-{
-    return $query->where('habilitado', 1); // o true
-}
+    public function scopeActivo(Builder $query): Builder
+    {
+        return $query->where('habilitado', 1);
+    }
 
-    public function scopeDesdeFechaRegistro($query, $fecha)
+    public function scopeDesdeFechaRegistro(Builder $query, Carbon $fecha): Builder
     {
         $año = $fecha->year;
         $mes = $fecha->month;
 
-        return $query->where(function ($q) use ($año, $mes) {
-            // Años posteriores (sin importar el mes)
-            $q->whereHas('gestion', function ($gq) use ($año) {
+        return $query->where(function (Builder $q) use ($año, $mes): void {
+            $q->whereHas('gestion', function (Builder $gq) use ($año): void {
                 $gq->where('gestion', '>', $año);
-            })
-                // O mismo año pero mes mayor o igual
-                ->orWhere(function ($q2) use ($año, $mes) {
-                    $q2->whereHas('gestion', function ($gq) use ($año) {
-                        $gq->where('gestion', '=', $año);
-                    })->whereHas('mes', function ($mq) use ($mes) {
-                        $mq->where('mes', '>=', $mes);
-                    });
+            })->orWhere(function (Builder $q2) use ($año, $mes): void {
+                $q2->whereHas('gestion', function (Builder $gq) use ($año): void {
+                    $gq->where('gestion', '=', $año);
+                })->whereHas('mes', function (Builder $mq) use ($mes): void {
+                    $mq->where('mes', '>=', $mes);
                 });
+            });
         });
     }
 
-    public function scopeOrdenadoPorGestionYMes($query)
+    public function scopeOrdenadoPorGestionYMes(Builder $query): Builder
     {
         return $query->orderByDesc('id_gestion')
             ->orderByDesc('id_mes');
     }
 
-    public function scopeConPago($query)
+    public function scopeConPago(Builder $query): Builder
     {
         return $query->has('pago');
     }
 
-    public function scopeDelMes($query, $gestion, $mes)
+    public function scopeDelMes(Builder $query, string $gestion, Carbon $mes): Builder
     {
-        return $query->whereHas('gestion', function ($q) use ($gestion) {
+        return $query->whereHas('gestion', function (Builder $q) use ($gestion): void {
             $q->where('gestion', $gestion);
-        })->whereHas('mes', function ($q) use ($mes) {
+        })->whereHas('mes', function (Builder $q) use ($mes): void {
             $q->where('mes', $mes);
         });
     }

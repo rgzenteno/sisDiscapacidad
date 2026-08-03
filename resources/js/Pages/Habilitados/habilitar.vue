@@ -1,176 +1,84 @@
 <script setup>
-import Sidebar from '@/components/Sidebar.vue';
-import Header from '@/components/Header.vue';
-import Footer from '@/components/Footer.vue';
-import Mensajes from '@/components/Mensajes.vue';
-import Rutas from '@/components/Rutas.vue';
-import { computed, onMounted, ref } from 'vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
-import Dropdown from '@/components/Dropdown.vue';
-import { router } from '@inertiajs/vue3';
+// ============================================================================
+// IMPORTS
+// ============================================================================
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useForm, usePage, router } from '@inertiajs/vue3';
+
+/**
+ * Componentes
+ */
 import ModalHabilitar from '@/components/ModalHabilitar.vue';
-import { onUnmounted } from 'vue'; // Agregar este import
+import Dropdown from '@/components/Dropdown.vue';
+import Footer from '@/components/Footer.vue';
+import Rutas from '@/components/Rutas.vue';
 import Icon from '@/components/Icon.vue';
 
-// Obtener las props de la página
+/**
+ * Utilidades
+ */
+import { can } from '@/lib/can';
+import AppLayout from '@/Layouts/AppLayout.vue';
+
+// ============================================================================
+// PROPS Y COMPUTED - DATOS DE LA PÁGINA
+// ============================================================================
 const page = usePage();
-const persona = ref(page.props.persona);
-const datosPersona = computed(() => page.props.datosPersona);
-const habilited = computed(() => page.props.habilited);
-const datosHabilitado = computed(() => page.props.datosHabilitado);
-const año_actual = computed(() => page.props.año_actual);
-const existe_gestion = computed(() => page.props.existe_gestion);
-const añoSeleccionado = computed(() => page.props.añoSeleccionado);
-const gestiones = computed(() => page.props.gestiones);
+
+// Props principales
 const filters = computed(() => page.props.filters);
+const gestiones = computed(() => page.props.gestiones);
 const tiene_meses = computed(() => page.props.tiene_meses);
+const datosPersona = computed(() => page.props.datosPersona);
+const existe_gestion = computed(() => page.props.existe_gestion);
+const datosHabilitado = computed(() => page.props.datosHabilitado);
 
-//console.log('datos:', datosPersona.value);
+const resumenMeses = computed(() => {
+    const meses = datosHabilitado.value ?? [];
+    return {
+        habilitados: meses.filter(m => m.habilitado === true).length,
+        deshabilitados: meses.filter(m => m.habilitado === false).length,
+        bajaTemp: meses.filter(m => m.estado_mes === 'baja_temporal').length,
+        sinHabilitar: meses.filter(m => m.habilitado === null).length,
+        retro: meses.filter(m => m.es_retroactivo).length,
+    };
+});
 
-const observationsMap = ref({});
-const openModalHabilitar = ref(false);
-const selectedItem = ref(null);
+/**
+ * Vigencia del carnet del beneficiario (vigente/vencido/indefinido), tomada
+ * de cualquier mes ya que el carnet no cambia entre meses — evita repetirla
+ * en cada modal de habilitar y mostrarla una sola vez acá.
+ */
+const carnetEstadoPersona = computed(() => {
+    const item = datosHabilitado.value?.[0];
+    if (!item?.fecha_emision) return 'indefinido';
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const vencimiento = new Date(item.fecha_vencimiento);
+    return vencimiento < hoy ? 'vencido' : 'vigente';
+});
+
+// ============================================================================
+// REFS - ESTADO DE MODALES
+// ============================================================================
 const showPersonaModal = ref(false);
+const openModalHabilitar = ref(false);
 
-// Lista de mensajes
+// ============================================================================
+// REFS - DATOS TEMPORALES
+// ============================================================================
 const mensajes = ref([]);
+const selectedItem = ref(null);
+const unhabilitatedObservations = ref({});
+const selectedYear = ref(getYearValue(filters.value?.año));
 
-// Mostrar mensaje
-const mostrarMensaje = (tipo, titulo, texto) => {
-    mensajes.value.push({
-        id: Date.now() + Math.random(), // ID único
-        tipo,
-        contenido: [{ header: titulo, text: texto }],
-    });
-};
+// ============================================================================
+// REFS - FORMULARIOS
+// ============================================================================
 
-// Eliminar mensaje cuando hijo emite @close
-const cerrarMensaje = (id) => {
-    mensajes.value = mensajes.value.filter((m) => m.id !== id);
-};
-
-//Fin Mensajes
-
-//Funciones Extras
-function getMonthNameFromDate(monthNumber) {
-    const months = [
-        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-    ];
-
-    // Convertir a número entero
-    const index = parseInt(monthNumber, 10) - 1;
-
-    // Validar que esté en rango 0–11
-    if (index >= 0 && index < 12) {
-        return months[index];
-    }
-    return 'Mes inválido';
-}
-
-// Opción 2: Formato más personalizado
-const formatDateTime = (dateTimeString) => {
-    if (!dateTimeString) return 'N/A';
-
-    const [datePart, timePart] = dateTimeString.split(' ');
-    const [year, month, day] = datePart.split('-').map(Number);
-    const [hour, minute] = timePart.split(':');
-
-    const fecha = new Date(year, month - 1, day);
-
-    const options = { year: 'numeric', month: 'short', day: 'numeric' };
-    let dateStr = fecha.toLocaleDateString('es-ES', options);
-
-    // Capitalizar la primera letra del mes
-    dateStr = dateStr.replace(/\b\w/g, char => char.toUpperCase());
-
-    return `${dateStr} ${hour}:${minute}`;
-};
-
-const getCurrentDate = (data) => {
-    if (!data) return 'N/A';
-
-    // Parsear la fecha manualmente para evitar problemas de zona horaria
-    const [year, month, day] = data.split('-').map(Number);
-    const fecha = new Date(year, month - 1, day);
-
-    const options = { year: 'numeric', month: 'short', day: 'numeric' };
-    let dateStr = fecha.toLocaleDateString('es-ES', options);
-
-    // Capitalizar la primera letra del mes
-    dateStr = dateStr.replace(/\b\w/g, char => char.toUpperCase());
-
-    return dateStr;
-};
-
-// Función para abrir el modal
-const openPersonaModal = () => {
-    showPersonaModal.value = true;
-};
-
-// Función para cerrar el modal
-const closePersonaModal = () => {
-    showPersonaModal.value = false;
-};
-
-// Cerrar con tecla ESC
-const handleEscape = (e) => {
-    if (e.key === 'Escape' && showPersonaModal.value) {
-        closePersonaModal();
-    }
-};
-
-// Agregar listener cuando se monta el componente
-onMounted(() => {
-    document.addEventListener('keydown', handleEscape);
-});
-
-// Limpiar el listener cuando se desmonta
-onUnmounted(() => {
-    document.removeEventListener('keydown', handleEscape);
-});
-
-const getYearValue = (yearData) => {
-    if (typeof yearData === 'object' && yearData?.gestion) {
-        return yearData.gestion;
-    }
-    return yearData;
-}
-
-const getNombreEstado = (estado) => {
-    if (!estado) return '●'
-    switch (estado.toLowerCase()) {
-        case 'activo':
-            return 'Activo'
-        case 'baja_temporal':
-            return 'Baja Temporal'
-        case 'baja_definitiva':
-            return 'Baja Definitiva'
-        default:
-            return '●'
-    }
-}
-
-// ✅ Actualizar la función para obtener el año seleccionado
-const selectedYear = ref(getYearValue(filters.value?.año))
-
-// Función para seleccionar un año del dropdown
-const selectGestion = (year) => {
-    const yearValue = getYearValue(year);
-    selectedYear.value = yearValue;
-    router.get(route('habilitado.show'), {
-        año: yearValue, // 🔑 siempre será un número
-        buscador: filters.value?.buscador || ''
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-    })
-}
-//Fin Funciones Extras
-
-//Habilitar Nuevo mes
-
-// Inicializar el formulario con un objeto para almacenar las observaciones por `id_habilitado`
+/**
+ * Formulario principal para habilitar y editar estados de habilitación
+ */
 const form = useForm({
     id_habilitado: '',
     habilitado: 0,
@@ -180,581 +88,838 @@ const form = useForm({
     id_mes: '',
 });
 
-const unhabilitatedObservations = ref({});
-
-// En el onMounted o cuando recibas los datos
+// ============================================================================
+// WATCHERS / LIFECYCLE
+// ============================================================================
 onMounted(() => {
-    // Inicializar las observaciones
+    // Inicializar observaciones de ítems no habilitados
     datosHabilitado.value.forEach(item => {
         if (!item.habilitado) {
             unhabilitatedObservations.value[item.id_gestion] = '';
         }
     });
+
+    // Cerrar modal de persona con tecla ESC
+    document.addEventListener('keydown', handleEscape);
 });
 
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleEscape);
+});
+
+// ============================================================================
+// FUNCIONES - UTILIDADES
+// ============================================================================
+
+/**
+ * Obtiene el nombre del mes desde su número
+ * @param {number|string} monthNumber - Número del mes (1-12)
+ * @returns {string} Nombre del mes en español
+ */
+function getMonthNameFromDate(monthNumber) {
+    const months = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    const index = parseInt(monthNumber, 10) - 1;
+    if (index >= 0 && index < 12) {
+        return months[index];
+    }
+    return 'Mes inválido';
+}
+
+/**
+ * Formatea una cadena de fecha y hora en formato legible
+ * @param {string} dateTimeString - Fecha en formato 'YYYY-MM-DD HH:MM:SS'
+ * @returns {string} Fecha formateada con hora o 'N/A' si no hay valor
+ */
+const formatDateTime = (dateTimeString) => {
+    if (!dateTimeString) return 'N/A';
+
+    const [datePart, timePart] = dateTimeString.split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':');
+    const fecha = new Date(year, month - 1, day);
+
+    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+    let dateStr = fecha.toLocaleDateString('es-ES', options);
+    dateStr = dateStr.replace(/\b\w/g, char => char.toUpperCase());
+
+    return `${dateStr} ${hour}:${minute}`;
+};
+
+/**
+ * Formatea una fecha en formato legible o retorna 'Indefinido'
+ * @param {string} data - Fecha en formato 'YYYY-MM-DD'
+ * @returns {string} Fecha formateada o 'Indefinido' si no hay valor
+ */
+const getCurrentDate = (data) => {
+    if (!data) return 'Indefinido';
+    const [year, month, day] = data.split('-').map(Number);
+    const fecha = new Date(year, month - 1, day);
+    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+    let dateStr = fecha.toLocaleDateString('es-ES', options);
+    dateStr = dateStr.replace(/\b\w/g, char => char.toUpperCase());
+    return dateStr;
+};
+
+/**
+ * Obtiene el valor numérico del año desde diferentes formatos
+ * @param {number|Object} yearData - Año como número u objeto con propiedad 'gestion'
+ * @returns {number} Año como número
+ */
+function getYearValue(yearData) {
+    if (typeof yearData === 'object' && yearData?.gestion) {
+        return yearData.gestion;
+    }
+    return yearData;
+}
+
+/**
+ * Retorna el nombre legible del estado del beneficiario
+ * @param {string} estado - Clave del estado
+ * @returns {string} Nombre del estado en español
+ */
+const getNombreEstado = (estado) => {
+    if (!estado) return '●';
+    switch (estado.toLowerCase()) {
+        case 'activo': return 'Activo';
+        case 'baja_temporal': return 'Baja Temporal';
+        case 'baja_definitiva': return 'Baja Definitiva';
+        case 'depurado': return 'Depurado';
+        case 'pagos_suspendidos': return 'Pago Suspendido';
+        default: return '●';
+    }
+};
+
+/**
+ * Retorna las clases CSS de badge según el estado del beneficiario
+ * @param {string} estado - Clave del estado
+ * @returns {string} Clases Tailwind para el badge
+ */
+const getColorEstado = (estado) => {
+    if (!estado) return '●';
+    switch (estado.toLowerCase()) {
+        case 'activo': return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+        case 'baja_temporal': return 'bg-amber-100 text-amber-700 border border-amber-200';
+        case 'baja_definitiva': return 'bg-red-100 text-red-700 border border-red-200';
+        case 'depurado': return 'bg-gray-100 text-gray-700 border border-gray-200';
+        case 'pagos_suspendidos': return 'bg-purple-100 text-purple-700 border border-purple-200';
+        default: return '●';
+    }
+};
+
+/**
+ * Retorna la clase CSS del círculo indicador según el estado del beneficiario
+ * @param {string} estado - Clave del estado
+ * @returns {string} Clase Tailwind para el color del círculo
+ */
+const getCircleEstado = (estado) => {
+    if (!estado) return '●';
+    switch (estado.toLowerCase()) {
+        case 'activo': return 'bg-emerald-500';
+        case 'baja_temporal': return 'bg-amber-500';
+        case 'baja_definitiva': return 'bg-red-500';
+        case 'depurado': return 'bg-gray-500';
+        case 'pagos_suspendidos': return 'bg-purple-500';
+        default: return '●';
+    }
+};
+
+/**
+ * Genera las iniciales de un nombre y apellido
+ * @param {string} nombre - Nombre de la persona
+ * @param {string} apellido - Apellido de la persona
+ * @returns {string} Iniciales en mayúsculas
+ */
+const getInitials = (nombre, apellido) =>
+    `${(nombre || '')[0] ?? ''}${(apellido || '')[0] ?? ''}`.toUpperCase() || '?';
+
+// ============================================================================
+// FUNCIONES - MENSAJES
+// ============================================================================
+
+/**
+ * Muestra un mensaje en la interfaz
+ * @param {string} tipo - Tipo de mensaje (error, correcto, info, advertencia)
+ * @param {string} titulo - Título del mensaje
+ * @param {string} texto - Contenido del mensaje
+ */
+const mostrarMensaje = (tipo, titulo, texto) => {
+    mensajes.value.push({
+        id: Date.now() + Math.random(),
+        tipo,
+        contenido: [{ header: titulo, text: texto }],
+    });
+};
+
+/**
+ * Cierra un mensaje específico por su ID
+ * @param {number} id - ID del mensaje a cerrar
+ */
+const cerrarMensaje = (id) => {
+    mensajes.value = mensajes.value.filter((m) => m.id !== id);
+};
+
+// ============================================================================
+// FUNCIONES - NAVEGACIÓN Y FILTRADO
+// ============================================================================
+
+/**
+ * Selecciona una gestión y recarga la vista con el año indicado
+ * @param {number|Object} year - Año a seleccionar
+ */
+const selectGestion = (year) => {
+    const yearValue = getYearValue(year);
+    selectedYear.value = yearValue;
+    router.get(route('habilitado.show', { id: page.props.idPersona }), {
+        año: yearValue,
+        buscador: filters.value?.buscador || ''
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+    });
+};
+
+// ============================================================================
+// FUNCIONES - HABILITADOS
+// ============================================================================
+
+/**
+ * Envía el formulario para habilitar un mes al beneficiario
+ * @param {Object} item - Datos del mes a habilitar
+ */
 const submit = (item) => {
-
-    console.log('Datos a enviar para habilitar:', item);
-
-    // Preparar el formulario
+    form.id_habilitado = '';
     form.id_persona = item.id_persona;
     form.id_gestion = item.id_gestion;
     form.id_mes = item.id_mes;
+    form.observaciones_habilitado = item.observaciones_habilitado || '';
 
     form.post(route('habilitado.store'), {
         onSuccess: () => {
             openModalHabilitar.value = false;
-            console.log('Habilitación exitosa');
             mostrarMensaje('correcto', 'Habilitación exitosa', 'Se ha habilitado correctamente.');
             form.reset();
         },
-        onError: (error) => {
-            console.log('Error al registrar:', error);
-            mostrarMensaje('advertencia', 'Algo inesperado ocurrió', 'Ha ocurrido un error inesperado. Intente nuevamente.');
-        }
-    });
-};
-//Fin Mes habiliado
-
-//Inicio Editar Habilitado
-const inputErrors = ref({});
-
-// Función para validar la observación
-const validateObservation = (idHabilitado, observation, habilitado) => {
-    // Solo valida si el elemento está deshabilitado (habilitado = 1)
-    if (habilitado === 1) {
-        if (!observation || observation.trim() === '' || observation === 'ninguna') {
-            inputErrors.value[idHabilitado] = true;
-            return false;
-        }
-    }
-
-    inputErrors.value[idHabilitado] = false;
-    return true;
-};
-
-const getHabilitadosFiltrados = (idHabilitado) => {
-    return habilited.value.filter(h => h.id_habilitado === idHabilitado);
-}
-
-const getObservationForItem = (itemId) => {
-
-    // Primero, verifica el mapa de observaciones
-    if (observationsMap.value[itemId] !== undefined) {
-        /* console.log('Observación encontrada en el mapa:', observationsMap.value[itemId]); */
-        return observationsMap.value[itemId];
-    }
-
-    // Si no está en el mapa, obtén los datos filtrados
-    const habilitados = getHabilitadosFiltrados(itemId);
-    /* console.log('Habilitados filtrados:', habilitados); */
-
-    if (habilitados.length > 0) {
-        // Guarda la observación en el mapa
-        observationsMap.value[itemId] = habilitados[0].observaciones_habilitado || '';
-        /* console.log('Nueva observación guardada en el mapa:', observationsMap.value[itemId]); */
-        return observationsMap.value[itemId];
-    }
-
-    /* console.log('No se encontró observación, retornando vacío'); */
-    return '';
-};
-
-const setObservationForItem = (itemId, observation) => {
-    /* console.log('Estableciendo observación:', {
-        itemId,
-        observation,
-        previousValue: observationsMap.value[itemId]
-    }); */
-
-    observationsMap.value[itemId] = observation;
-    /* console.log('Mapa de observaciones actualizado:', observationsMap.value); */
-
-    // Validar la observación mientras se escribe
-    const isValid = validateObservation(itemId, observation);
-    /* console.log('Resultado de validación:', isValid); */
-};
-
-const toggleHabilitado = (habilitado, idHabilitado) => {
-    /* console.log('Toggle Habilitado iniciado:', {
-        habilitado,
-        idHabilitado,
-        currentObservation: observationsMap.value[idHabilitado]
-    }); */
-    let currentObservation = null;
-    // Si está habilitado (1) y queremos deshabilitar (0)
-    if (habilitado === 1) {
-        const newObservation = observationsMap.value[idHabilitado] || '';
-
-        // Validar la observación solo cuando vamos a deshabilitar
-        if (!validateObservation(idHabilitado, newObservation, habilitado)) {
-            mostrarMensaje('error', 'Error al Deshabilitar', 'Debe agregar una observación válida para deshabilitar.');
-            return;
-        }
-
-        form.id_habilitado = idHabilitado;
-        form.habilitado = 0;
-        form.observaciones_habilitado = newObservation; // Usar la nueva observación
-
-    } else {
-        // Obtener la observación actual del mapa o del elemento
-        const currentObservation = observationsMap.value[idHabilitado] || getObservationForItem(idHabilitado);
-        // Al habilitar, mantener la observación anterior si no se ha modificado
-        form.id_habilitado = idHabilitado;
-        form.habilitado = 1;
-        form.observaciones_habilitado = currentObservation;
-        //alert(idHabilitado, currentObservation);
-    }
-
-    console.log(idHabilitado, form.habilitado, form.observaciones_habilitado);
-
-    form.post(route('habilitado.edit', idHabilitado), {
-        onSuccess: () => {
-            // Actualizar el mapa de observaciones con el valor correcto
-            if (form.habilitado === 1) {
-                // Si estamos habilitando, mantener la observación anterior
-                observationsMap.value[idHabilitado] = currentObservation;
-                mostrarMensaje('correcto', 'Modificación exitosa', 'Se ha habilitado correctamente.');
-            } else {
-                // Si estamos deshabilitando, usar la nueva observación
-                observationsMap.value[idHabilitado] = form.observaciones_habilitado;
-                mostrarMensaje('correcto', 'Modificación exitosa', 'Se ha deshabilitado correctamente.');
-            }
-
-            inputErrors.value[idHabilitado] = false;
-        },
-        onError: (error) => {
-            mostrarMensaje('advertencia', 'Algo inesperado ocurrió', 'Ha ocurrido un error inesperado. Intente nuevamente.');
+        onError: (errors) => {
+            mostrarMensaje(
+                errors.habilitado ? 'error' : 'advertencia',
+                errors.habilitado ? 'No se pudo habilitar' : 'Algo inesperado ocurrió',
+                errors.habilitado || 'Ha ocurrido un error inesperado. Intente nuevamente.'
+            );
         }
     });
 };
 
-const openModal = (item) => {
-    selectedItem.value = {
-        ...item,
-    };
-    openModalHabilitar.value = true;
-};
-
+/**
+ * Maneja el cambio de estado de habilitación desde el modal
+ * @param {Object} data - Datos del cambio (id_habilitado, habilitado, observacion)
+ */
 const handleCambioEstado = (data) => {
-    form.id_habilitado = data.id_habilitado
-    form.habilitado = data.habilitado
-    form.observaciones_habilitado = data.observacion
+    form.id_habilitado = data.id_habilitado;
+    form.habilitado = data.habilitado;
+    form.observaciones_habilitado = data.observacion;
 
     form.post(route('habilitado.edit', data.id_habilitado), {
         onSuccess: () => {
-            openModalHabilitar.value = false
-            mostrarMensaje('correcto', 'Modificación exitosa',
-                data.habilitado === 1 ? 'Se ha habilitado correctamente.' : 'Se ha deshabilitado correctamente.')
-            form.reset()
+            openModalHabilitar.value = false;
+            mostrarMensaje(
+                'correcto',
+                'Modificación exitosa',
+                data.habilitado === 1 ? 'Se ha habilitado correctamente.' : 'Se ha deshabilitado correctamente.'
+            );
+            form.reset();
         },
-        onError: (error) => {
-            console.log('Error al modificar:', error)
-            mostrarMensaje('advertencia', 'Algo inesperado ocurrió', 'Ha ocurrido un error inesperado. Intente nuevamente.')
+        onError: (errors) => {
+            mostrarMensaje(
+                errors.habilitado ? 'error' : 'advertencia',
+                errors.habilitado ? 'No se pudo procesar' : 'Algo inesperado ocurrió',
+                errors.habilitado || 'Ha ocurrido un error inesperado. Intente nuevamente.'
+            );
         }
-    })
-}
+    });
+};
 
-//Fin Editar Habiltiado
+// ============================================================================
+// FUNCIONES - MODALES
+// ============================================================================
+
+/**
+ * Abre el modal de datos del beneficiario
+ */
+const openPersonaModal = () => {
+    showPersonaModal.value = true;
+};
+
+/**
+ * Cierra el modal de datos del beneficiario
+ */
+const closePersonaModal = () => {
+    showPersonaModal.value = false;
+};
+
+/**
+ * Abre el modal de habilitación con los datos del ítem seleccionado
+ * @param {Object} item - Datos del mes a habilitar
+ */
+const openModal = (item) => {
+    selectedItem.value = { ...item };
+    openModalHabilitar.value = true;
+};
+
+/**
+ * Cierra el modal de persona al presionar la tecla ESC
+ * @param {KeyboardEvent} e - Evento de teclado
+ */
+const handleEscape = (e) => {
+    if (e.key === 'Escape' && showPersonaModal.value) {
+        closePersonaModal();
+    }
+};
 </script>
 
-<style>
-@keyframes shimmer {
-
-    0%,
-    100% {
-        transform: translateX(-100%);
-    }
-
-    50% {
-        transform: translateX(100%);
-    }
-}
-</style>
 <template>
+    <AppLayout :mensajes="mensajes" @cerrarMensaje="cerrarMensaje">
 
-    <Head title="UMADIS" />
-    <div class="flex h-screen bg-gray-200 font-roboto">
-        <Sidebar />
-        <div class="flex-1 flex flex-col overflow-hidden">
-            <!-- Mensajes de notificación -->
-            <div class="fixed top-4 right-4 flex flex-col gap-2 z-50">
-                <Mensajes v-for="m in mensajes" :key="m.id" :id="m.id" :tipo="m.tipo" :contenido="m.contenido"
-                    @close="cerrarMensaje" />
-            </div>
-            <Header class="mb-0" />
+        <!-- ============================================================================ -->
+        <!-- ENCABEZADO DE PÁGINA -->
+        <!-- ============================================================================ -->
+        <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+            <h1 class="font-semibold text-xl sm:text-2xl">Habilitar Meses</h1>
+            <Rutas label1="Inicio" label2="Beneficiarios" label3="Habilitar Meses" class="sm:text-xs" />
+        </div>
 
-            <Transition name="fade">
-                <ModalHabilitar v-if="openModalHabilitar" :data="selectedItem || {}" @habilitar="submit"
-                    @cambioEstado="handleCambioEstado"
-                    @sinDatos="mostrarMensaje('error', 'Error al Deshabilitar', 'Debe agregar una observación válida para deshabilitar.')"
-                    @close="openModalHabilitar = false" />
-            </Transition>
+        <!-- ============================================================================ -->
+        <!-- HEADER PRINCIPAL -->
+        <!-- ============================================================================ -->
+        <div class="bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
+            <div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+                <div class="py-4">
+                    <!-- Título y Selector de Gestión -->
+                    <div class="flex items-center justify-between sm:gap-4 mb-0 ">
+                        <div class="flex items-center gap-3">
+                            <div v-if="selectedYear" class="flex items-center">
+                                <h1
+                                    class="text-xl sm:text-3xl font-bold text-slate-800 text-center tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 bg-clip-text text-transparent">
+                                    GESTIÓN
+                                </h1>
+                                <Dropdown align="left" width="60">
+                                    <template #trigger="{ open }">
+                                        <button
+                                            class="inline-flex ms-2 items-center gap-2 px-2 py-2 sm:px-4 sm:py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
+                                            type="button">
+                                            <span class="text-xl font-semibold text-slate-700">
+                                                {{ selectedYear }}
+                                            </span>
+                                            <Icon :icon-button="true" name="angleDown"
+                                                :class-name="`text-gray-400 transition-transform duration-300 ${open ? 'rotate-180' : 'rotate-0'}`"
+                                                fill="none" stroke="currentColor" stroke-width="2" :size="17"
+                                                @click="isOpen = !isOpen" />
+                                        </button>
+                                    </template>
 
-            <div class="py-2">
-                <div
-                    class="px-2 py-1 flex flex-col-reverse items-start justify-between sm:px-5 sm:flex-row sm:items-center sm:justify-between">
-                    <h1 class="font-semibold text-2xl">Habilitar Meses</h1>
-                    <Rutas label1="Inicio" label2="Beneficiarios" label3="Habilitar Meses" />
-                </div>
-            </div>
+                                    <template #content>
+                                        <div class="shadow-xl overflow-hidden">
+                                            <ul class="py-1.5 max-h-60 overflow-y-auto">
+                                                <li v-if="!gestiones || gestiones.length === 0" class="px-4 py-3">
+                                                    <div class="flex items-center gap-3 text-rose-400">
+                                                        <Icon :icon-button="true" name="alertTriangle"
+                                                            class-name="text-rose-400" fill="none" stroke="currentColor"
+                                                            stroke-width="2" :size="20" />
+                                                        <span class="text-sm">No hay datos disponibles</span>
+                                                    </div>
+                                                </li>
+                                                <li v-for="year in gestiones" :key="year.gestion">
+                                                    <a href="#" @click.prevent="selectGestion(year)"
+                                                        class="flex items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-[rgb(var(--brand-50))] duration-150 group"
+                                                        :class="selectedYear && selectedYear.toString() === year.gestion.toString()
+                                                            ? 'bg-[rgb(var(--brand-100))] text-[rgb(var(--brand-800))] font-semibold border-r-4 border-[rgb(var(--brand-500))]'
+                                                            : 'text-slate-700 hover:text-[rgb(var(--brand-700))]'">
+                                                        <span class="flex items-center leading-none gap-1">
+                                                            <Icon :icon-button="true" name="calendar"
+                                                                class-name="text-slate-400 block" fill="none"
+                                                                stroke="currentColor" stroke-width="1" :size="18" />
+                                                            {{ year.gestion }}
+                                                        </span>
+                                                        <Icon
+                                                            v-if="selectedYear && selectedYear.toString() === year.gestion.toString()"
+                                                            :icon-button="true" name="check" class-name="text-[rgb(var(--brand-700))]"
+                                                            :viewBox="'0 0 20 20'" :size="17" />
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                </Dropdown>
+                            </div>
+                        </div>
 
+                        <!-- Información del Beneficiario - Versión Mini -->
+                        <div v-if="datosPersona && datosPersona.length > 0" class="relative">
+                            <div v-for="persona in datosPersona" :key="persona.id_persona" @click="openPersonaModal"
+                                class="bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600/40 rounded-xl px-3 py-2 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
 
-            <!-- Header Principal -->
-            <div class="bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="py-4">
-                        <!-- Título y Selector de Gestión -->
-                        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-0 ">
-                            <div class="flex items-center gap-3">
-                                <div v-if="selectedYear" class="flex items-center">
-                                    <h1
-                                        class="text-3xl p-1.5 font-bold text-slate-800 text-center tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 bg-clip-text text-transparent">
-                                        GESTIÓN
-                                    </h1>
-                                    <Dropdown align="left" width="60">
-                                        <template #trigger>
-                                            <button
-                                                class="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow"
-                                                type="button">
-                                                <span class="text-xl font-semibold text-slate-700">
-                                                    {{ selectedYear }}
-                                                </span>
-                                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2" d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </button>
-                                        </template>
+                                <div class="flex items-center gap-2.5">
+                                    <!-- Avatar -->
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-gradient-to-br from-[rgb(var(--brand-500))] to-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                        <span class="text-xs font-bold text-white uppercase">
+                                            {{ getInitials(
+                                                persona.nombre_persona || persona.nombre_completo?.split(' ')[0],
+                                                persona.apellido_persona || persona.nombre_completo?.split(' ')[1] || ''
+                                            ) }}
+                                        </span>
+                                    </div>
 
-                                        <template #content>
-                                            <div
-                                                class="w-64 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-200">
-                                                <!-- Lista scrolleable -->
-                                                <div
-                                                    class="max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
-                                                    <ul class="py-2">
-                                                        <li v-if="!gestiones || gestiones.length === 0"
-                                                            class="px-4 py-3">
-                                                            <div class="flex items-center gap-3 text-slate-400">
-                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor"
-                                                                    viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                                        stroke-width="2"
-                                                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                                                                </svg>
-                                                                <span class="text-sm">No hay datos disponibles</span>
-                                                            </div>
-                                                        </li>
-                                                        <li v-for="year in gestiones" :key="year.gestion">
-                                                            <a href="#" @click.prevent="selectGestion(year)"
-                                                                class="flex items-center justify-between px-4 py-3 text-sm hover:bg-blue-50 transition-all duration-150 group"
-                                                                :class="selectedYear.toString() === year.gestion.toString()
-                                                                    ? 'bg-blue-100 text-blue-800 font-semibold border-r-4 border-blue-500'
-                                                                    : 'text-slate-700 hover:text-blue-700'">
-                                                                <span class="flex items-center gap-2">
-                                                                    <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors"
-                                                                        fill="currentColor" viewBox="0 0 20 20">
-                                                                        <path fill-rule="evenodd"
-                                                                            d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z"
-                                                                            clip-rule="evenodd" />
-                                                                    </svg>
-                                                                    {{ year.gestion }}
-                                                                </span>
-                                                                <svg v-if="selectedYear.toString() === year.gestion.toString()"
-                                                                    class="w-5 h-5 text-blue-600" fill="currentColor"
-                                                                    viewBox="0 0 20 20">
-                                                                    <path fill-rule="evenodd"
-                                                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                                        clip-rule="evenodd" />
-                                                                </svg>
-                                                            </a>
-                                                        </li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </Dropdown>
+                                    <!-- Nombre — oculto en móvil muy pequeño -->
+                                    <div class="flex-1 min-w-0 hidden sm:block">
+                                        <p
+                                            class="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wide leading-none">
+                                            Beneficiario</p>
+                                        <p
+                                            class="text-xs font-semibold text-slate-700 dark:text-slate-200 capitalize truncate mt-0.5">
+                                            {{ persona.apellido_persona && persona.nombre_persona
+                                                ? `${persona.apellido_persona} ${persona.nombre_persona}`
+                                                : persona.nombre_completo }}
+                                        </p>
+                                    </div>
+
+                                    <!-- Estado -->
+                                    <span
+                                        class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border flex-shrink-0"
+                                        :class="getColorEstado(persona.estado)">
+                                        <span class="w-1.5 h-1.5 rounded-full"
+                                            :class="getCircleEstado(persona.estado)"></span>
+                                        {{ getNombreEstado(persona.estado) }}
+                                    </span>
+
+                                    <!-- Chevron -->
+                                    <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform"
+                                        :class="showPersonaModal ? 'rotate-180' : ''" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 9l-7 7-7-7" />
+                                    </svg>
                                 </div>
                             </div>
 
-                            <!-- Información del Beneficiario (Solo en Desktop) - Versión Mini -->
-                            <div v-if="datosPersona && datosPersona.length > 0" class="hidden lg:block relative">
-                                <div v-for="persona in datosPersona" :key="persona.id_persona" @click="openPersonaModal"
-                                    class="bg-gradient-to-r from-slate-50 to-gray-50 border border-gray-200 rounded-lg px-4 py-2 shadow-sm cursor-pointer hover:shadow-md hover:border-gray-300 transition-all duration-200">
-                                    <div class="flex items-center gap-4">
-                                        <div class="flex-1">
-                                            <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">
-                                                Beneficiario
-                                            </p>
-                                            <h4 class="text-sm font-bold text-gray-900 capitalize">
-                                                {{ persona.nombre_persona }} {{ persona.apellido_persona }}
-                                            </h4>
-                                        </div>
-                                        <span
-                                            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium"
-                                            :class="[
-                                                persona.estado === 'activo' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                                                    : persona.estado === 'baja_temporal' ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                        : 'bg-red-100 text-red-700 border border-red-200'
-                                            ]">
-                                            <span class="w-1.5 h-1.5 rounded-full" :class="[
-                                                persona.estado === 'activo' ? 'bg-emerald-500'
-                                                    : persona.estado === 'baja_temporal' ? 'bg-amber-500'
-                                                        : 'bg-red-500'
-                                            ]"></span>
-                                            {{ getNombreEstado(persona.estado) }}
-                                        </span>
+                            <!-- Modal Expandido -->
+                            <Transition enter-active-class="transition ease-out duration-200"
+                                enter-from-class="opacity-0 translate-y-1" enter-to-class="opacity-100 translate-y-0"
+                                leave-active-class="transition ease-in duration-150"
+                                leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 translate-y-1">
+                                <div v-if="showPersonaModal" class="absolute top-full right-0 mt-2 z-50 w-80 sm:w-96"
+                                    @click.stop>
+                                    <div v-for="persona in datosPersona" :key="'modal-' + persona.id_persona"
+                                        class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
 
-                                        <!-- Indicador de clic -->
-                                        <svg class="w-4 h-4 text-gray-400 transition-transform"
-                                            :class="showPersonaModal ? 'rotate-180' : ''" fill="none"
-                                            stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M19 9l-7 7-7-7" />
-                                        </svg>
-                                    </div>
-                                </div>
-
-                                <!-- Modal Expandido -->
-                                <Transition enter-active-class="transition ease-out duration-200"
-                                    enter-from-class="opacity-0 translate-y-1"
-                                    enter-to-class="opacity-100 translate-y-0"
-                                    leave-active-class="transition ease-in duration-150"
-                                    leave-from-class="opacity-100 translate-y-0"
-                                    leave-to-class="opacity-0 translate-y-1">
-                                    <div v-if="showPersonaModal" class="absolute top-full right-0 mt-2 z-50"
-                                        @click.stop>
-                                        <div v-for="persona in datosPersona" :key="'modal-' + persona.id_persona"
-                                            class="bg-gradient-to-br from-white to-gray-50 w-96 border border-gray-200 rounded-xl p-4 shadow-2xl">
-
-                                            <!-- Botón cerrar -->
+                                        <!-- Header del modal -->
+                                        <div
+                                            class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                                            <div class="flex items-center gap-2.5 min-w-0">
+                                                <div
+                                                    class="w-9 h-9 rounded-full bg-gradient-to-br from-[rgb(var(--brand-500))] to-gray-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                                    <span class="text-xs font-bold text-white uppercase">
+                                                        {{ getInitials(persona.nombre_persona
+                                                            || persona.nombre_completo?.split(' ')[0],
+                                                            persona.apellido_persona
+                                                            || persona.nombre_completo?.split(' ')[1] || ''
+                                                        ) }}
+                                                    </span>
+                                                </div>
+                                                <div class="min-w-0">
+                                                    <p
+                                                        class="text-sm font-bold text-slate-700 dark:text-slate-200 capitalize truncate">
+                                                        {{ persona.apellido_persona && persona.nombre_persona
+                                                            ? `${persona.apellido_persona} ${persona.nombre_persona}`
+                                                            : persona.nombre_completo }}
+                                                    </p>
+                                                    <p class="text-xs text-indigo-500 dark:text-indigo-300">CI: {{
+                                                        persona.ci_persona }}</p>
+                                                </div>
+                                            </div>
                                             <button @click="closePersonaModal"
-                                                class="absolute top-3 right-3 p-1 rounded-lg bg-red-200 hover:bg-red-400 transition-colors"
-                                                title="Cerrar (ESC)">
-                                                <svg class="w-4 h-4 text-red-500 hover:text-red-600" fill="none"
-                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors flex-shrink-0">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round"
                                                         stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                                 </svg>
                                             </button>
+                                        </div>
 
-                                            <!-- Header: Nombre y Estado -->
+                                        <!-- Contenido -->
+                                        <div class="p-3.5 space-y-2.5">
+
+                                            <!-- Fecha registro -->
                                             <div
-                                                class="flex items-start justify-between gap-3 mb-3 pb-3 border-b border-gray-100">
-                                                <div class="flex-1 min-w-0">
-                                                    <p
-                                                        class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
-                                                        Beneficiario
-                                                    </p>
-                                                    <h4 class="text-sm font-bold text-gray-900 capitalize truncate">
-                                                        {{ persona.nombre_persona }} {{ persona.apellido_persona }}
-                                                    </h4>
-                                                </div>
-                                            </div>
-
-                                            <!-- Información de fechas -->
-                                            <div class="grid grid-cols-2 gap-2 mb-3">
-                                                <!-- Fecha de Registro -->
-                                                <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                                    <div class="flex items-center gap-1.5 mb-1">
-                                                        <svg class="w-3.5 h-3.5 text-blue-500" fill="none"
-                                                            stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
-                                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        <span
-                                                            class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Registro</span>
-                                                    </div>
-                                                    <p class="text-xs font-bold text-gray-800"> {{
-                                                        getCurrentDate(persona.fecha_registro?.split('T')[0]) }}</p>
-                                                </div>
-
-                                                <!-- Fecha de Inicio Estado -->
-                                                <div class="bg-white rounded-lg p-2 border border-gray-100">
-                                                    <div class="flex items-center gap-1.5 mb-1">
-                                                        <svg class="w-3.5 h-3.5 text-purple-500" fill="none"
-                                                            stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
-                                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                        <span
-                                                            class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Estado
-                                                            Desde</span>
-                                                    </div>
-                                                    <p class="text-xs font-bold text-gray-800">
-                                                        {{ getCurrentDate(persona.fecha_inicio?.split('T')[0]) }}</p>
-                                                </div>
-                                            </div>
-
-                                            <!-- Observaciones (si existen) -->
-                                            <div v-if="persona.observaciones"
-                                                class="bg-amber-50 border border-amber-100 rounded-lg p-2.5 mt-3">
-                                                <div class="flex items-start gap-2">
-                                                    <svg class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"
-                                                        fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd"
-                                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                                                            clip-rule="evenodd" />
+                                                class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3.5 py-2.5 border border-gray-200 dark:border-gray-600/40">
+                                                <div class="flex items-center gap-2">
+                                                    <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none"
+                                                        stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                     </svg>
-                                                    <div class="flex-1 min-w-0">
-                                                        <p
-                                                            class="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-0.5">
-                                                            Observaciones
-                                                        </p>
-                                                        <p class="text-xs text-amber-900 leading-relaxed">{{
-                                                            persona.observaciones }}</p>
-                                                    </div>
+                                                    <span class="text-xs text-slate-500 dark:text-slate-400">Registrado
+                                                        el</span>
+                                                </div>
+                                                <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                                    {{ getCurrentDate(persona.fecha_registro?.split('T')[0]) }}
+                                                </span>
+                                            </div>
+
+                                            <!-- Vigencia carnet (una sola vez acá, no se repite en cada mes) -->
+                                            <div
+                                                class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3.5 py-1.5 border border-gray-200 dark:border-gray-600/40">
+                                                <div class="flex items-center gap-2">
+                                                    <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none"
+                                                        stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <span class="text-xs text-slate-500 dark:text-slate-400">Vigencia
+                                                        carnet</span>
+                                                </div>
+                                                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold" :class="{
+                                                    'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300': carnetEstadoPersona === 'indefinido',
+                                                    'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300': carnetEstadoPersona === 'vencido',
+                                                    'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300': carnetEstadoPersona === 'vigente',
+                                                }">
+                                                    {{ carnetEstadoPersona === 'indefinido' ? 'Indefinido' :
+                                                        carnetEstadoPersona === 'vencido' ? 'Vencido' : 'Vigente' }}
+                                                </span>
+                                            </div>
+
+                                            <!-- Separador: Estado -->
+                                            <div class="flex items-center gap-2 px-1">
+                                                <span
+                                                    class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide whitespace-nowrap">Estado
+                                                    actual</span>
+                                                <div class="flex-1 h-px bg-gray-200 dark:bg-gray-700"></div>
+                                            </div>
+
+                                            <!-- Estado + fecha -->
+                                            <div
+                                                class="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3.5 py-2.5 border border-gray-200 dark:border-gray-600/40 space-y-2">
+                                                <div class="flex items-center justify-between">
+                                                    <span
+                                                        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border"
+                                                        :class="getColorEstado(persona.estado)">
+                                                        <span class="w-1.5 h-1.5 rounded-full"
+                                                            :class="getCircleEstado(persona.estado)"></span>
+                                                        {{ getNombreEstado(persona.estado) }}
+                                                    </span>
+                                                    <span v-if="persona.fecha_inicio"
+                                                        class="text-xs text-slate-500 dark:text-slate-400">
+                                                        Desde: {{ getCurrentDate(persona.fecha_inicio) }}
+                                                    </span>
+                                                </div>
+                                                <div class="h-px bg-gray-200 dark:bg-gray-600"></div>
+                                                <div class="flex gap-2">
+                                                    <span
+                                                        class="text-xs text-slate-400 flex-shrink-0">Observación:</span>
+                                                    <span v-if="persona.observaciones"
+                                                        class="text-xs text-slate-600 dark:text-slate-300 break-words">
+                                                        {{ persona.observaciones }}
+                                                    </span>
+                                                    <span v-else class="text-xs text-slate-400 italic">Sin
+                                                        observaciones</span>
                                                 </div>
                                             </div>
 
-                                            <!-- Indicador visual inferior -->
-                                            <div class="mt-3 pt-2 border-t border-gray-100">
-                                                <div
-                                                    class="flex items-center justify-between text-[10px] text-gray-400">
-                                                    <span class="flex items-center gap-1">
-                                                        <span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
-                                                        ID: {{ persona.id_persona.substring(0, 8) }}...
-                                                    </span>
-                                                    <span class="font-medium">{{ selectedYear }}</span>
-                                                </div>
+                                            <!-- Separador: Meses -->
+                                            <div class="flex items-center gap-2 px-1">
+                                                <span
+                                                    class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                                                    Gestión {{ selectedYear }}
+                                                </span>
+                                                <div class="flex-1 h-px bg-gray-200 dark:bg-gray-700"></div>
                                             </div>
+
+                                            <!-- Resumen meses -->
+                                            <div class="flex flex-wrap gap-1.5">
+                                                <span v-if="resumenMeses.habilitados > 0"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-700/40">
+                                                    <span class="font-bold">{{ resumenMeses.habilitados }}</span>
+                                                    Habilitado(s)
+                                                </span>
+                                                <span v-if="resumenMeses.deshabilitados > 0"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-700/40">
+                                                    <span class="font-bold">{{ resumenMeses.deshabilitados }}</span>
+                                                    Deshabilitado(s)
+                                                </span>
+                                                <span v-if="resumenMeses.bajaTemp > 0"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-700/40">
+                                                    <span class="font-bold">{{ resumenMeses.bajaTemp }}</span> Baja
+                                                    temporal
+                                                </span>
+                                                <span v-if="resumenMeses.sinHabilitar > 0"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-slate-500 border border-gray-200 dark:bg-gray-700/40 dark:text-slate-400 dark:border-gray-600/40">
+                                                    <span class="font-bold">{{ resumenMeses.sinHabilitar }}</span>
+                                                    Sin habilitar
+                                                </span>
+                                                <span v-if="resumenMeses.retro > 0"
+                                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-800 border border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-700/40">
+                                                    <span class="font-bold">{{ resumenMeses.retro }}</span>
+                                                    Retroactivo(s)
+                                                </span>
+                                                <span v-if="datosHabilitado.length === 0"
+                                                    class="text-xs text-slate-400 italic">
+                                                    Sin meses registrados
+                                                </span>
+                                            </div>
+
                                         </div>
                                     </div>
-                                </Transition>
-                            </div>
-
-                            <!-- Backdrop transparente para cerrar al hacer clic afuera -->
-                            <Transition enter-active-class="transition ease-out duration-200"
-                                enter-from-class="opacity-0" enter-to-class="opacity-100"
-                                leave-active-class="transition ease-in duration-150" leave-from-class="opacity-100"
-                                leave-to-class="opacity-0">
-                                <div v-if="showPersonaModal" @click="closePersonaModal" class="fixed inset-0 z-40">
                                 </div>
                             </Transition>
                         </div>
 
-
+                        <!-- Backdrop transparente para cerrar al hacer clic afuera -->
+                        <Transition enter-active-class="transition ease-out duration-200" enter-from-class="opacity-0"
+                            enter-to-class="opacity-100" leave-active-class="transition ease-in duration-150"
+                            leave-from-class="opacity-100" leave-to-class="opacity-0">
+                            <div v-if="showPersonaModal" @click="closePersonaModal" class="fixed inset-0 z-40">
+                            </div>
+                        </Transition>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Contenido Principal: Grid de Meses -->
-            <main
-                class="flex-1 overflow-x-hidden overflow-y-auto border-b-2 border-x-2 bg-white rounded-b-lg px-2 pt-3 mr-1">
-                <!-- Grid de Cards optimizado para 1-12 items -->
-                <div v-if="existe_gestion && tiene_meses && datosHabilitado.length > 0">
-                    <div class="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                        <div v-for="item in datosHabilitado" :key="item.id_habilitado" @click="openModal(item)"
-                            class="group cursor-pointer h-[130px] bg-white rounded-2xl border-2 border-gray-200 hover:border-gray-400
-            hover:shadow-lg transition-all duration-700 overflow-hidden transform hover:-translate-y-1 relative p-4 z-0">
-
-                            <!-- Círculo animado de fondo -->
-                            <div class="circle absolute h-[5em] w-[5em] -top-[2.5em] -right-[2.5em] rounded-full group-hover:scale-[900%] duration-700 z-[-1] pointer-events-none"
-                                :class="{
-                                    'bg-emerald-500': item.habilitado === true,
-                                    'bg-amber-500': item.habilitado !== true && item.estado_mes === 'baja_temporal',
-                                    'bg-red-500': item.habilitado !== true && item.estado_mes === 'baja_definitiva',
-                                    'bg-gray-400': item.habilitado !== true && item.estado_mes === 'activo'
+        <!-- ============================================================================ -->
+        <!-- CONTENIDO PRINCIPAL - GRID DE MESES -->
+        <!-- ============================================================================ -->
+        <main
+            class="flex-1 overflow-x-hidden overflow-y-auto border-b-2 border-x-2 bg-white rounded-b-lg px-2 pt-3 mr-1">
+            <!-- Grid de Cards optimizado para 1-12 items -->
+            <div v-if="existe_gestion && tiene_meses && datosHabilitado.length > 0">
+                <div class="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+                    <div v-for="item in datosHabilitado" :key="item.id_habilitado" @click="openModal(item)"
+                        class="group cursor-pointer h-[125px] rounded-2xl border-2 border-gray-100 hover:border-transparent
+                                hover:shadow-xl transition-all duration-500 overflow-hidden transform hover:-translate-y-1 relative z-0 bg-white" :class="{
+                                    'hover:bg-emerald-500': item.estado_mes === 'activo',
+                                    'hover:bg-amber-500': item.estado_mes === 'baja_temporal',
+                                    'hover:bg-red-500': item.estado_mes === 'baja_definitiva',
+                                    'hover:bg-gray-500': item.estado_mes === 'depurado',
+                                    'hover:bg-purple-500': item.estado_mes === 'pagos_suspendidos',
+                                    'hover:bg-gray-100': !item.estado_mes
                                 }">
+                        <!-- Círculo decorativo esquina -->
+                        <div class="absolute h-[5em] w-[5em] -top-[2.5em] -right-[2.5em] rounded-full
+                                    opacity-100 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none"
+                            :class="{
+                                'bg-emerald-300': item.estado_mes === 'activo',
+                                'bg-amber-300': item.estado_mes === 'baja_temporal',
+                                'bg-red-300': item.estado_mes === 'baja_definitiva',
+                                'bg-gray-400': item.estado_mes === 'depurado',
+                                'bg-purple-400': item.estado_mes === 'pagos_suspendidos',
+                                'bg-gray-50': !item.estado_mes
+                            }"></div>
+
+                        <!-- ═══════════════════════════════════ -->
+                        <!--  ESTADO BASE (visible sin hover)   -->
+                        <!-- ═══════════════════════════════════ -->
+                        <div class="absolute inset-0 p-4 flex flex-col justify-between
+                                    opacity-100 group-hover:opacity-0 translate-y-0 group-hover:-translate-y-2
+                                    transition-all duration-400 pointer-events-none z-10">
+
+                            <!-- Fila superior: Mes + ícono de pago -->
+                            <div class="flex items-start justify-between">
+                                <h1 class="font-bold text-2xl leading-tight text-gray-800">
+                                    {{ getMonthNameFromDate(item.es_retroactivo ? item.mes_original : item.mes) }}
+                                    <span v-if="item.es_retroactivo"
+                                        class="block text-[10px] font-semibold text-amber-600">
+                                        Retroactivo
+                                    </span>
+                                </h1>
+
+                                <!-- Ícono de pago (solo si está habilitado) -->
+                                <span v-if="item.habilitado == 1 || item.pagado !== null"
+                                    class="flex items-center justify-center w-7 h-7 rounded-full mt-0.5" :class="{
+                                        'bg-red-200': item.estado_mes === 'pagos_suspendidos' || item.pagado === 0,
+                                        'bg-yellow-100': item.pagado == 1 && item.es_retroactivo,
+                                        'bg-emerald-100 ': item.pagado == 1 && !item.es_retroactivo,
+                                        'bg-gray-100': item.pagado !== 1 && item.pagado !== 0 && item.estado_mes !== 'pagos_suspendidos'
+                                    }">
+                                    <Icon :icon-button="true" name="dollar" :class-name="item.estado_mes === 'pagos_suspendidos' || item.pagado === 0
+                                        ? 'text-red-600'
+                                        : item.pagado == 1
+                                            ? (item.es_retroactivo ? 'text-yellow-600' : 'text-emerald-600')
+                                            : 'text-gray-500'" fill="none" stroke="currentColor" stroke-width="2"
+                                        :size="23" />
+                                </span>
                             </div>
-                            <!-- Título (Mes) -->
-                            <h1
-                                class="z-20 font-bold text-2xl group-hover:text-white group-hover:-translate-y-2 duration-700 mb-1 pointer-events-none">
-                                {{ getMonthNameFromDate(item.mes) }}
+
+                            <!-- Fila inferior: Badge de estado -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] font-bold px-2.5 py-1 rounded-full" :class="{
+                                    'bg-yellow-100 text-yellow-700': item.habilitado === true && item.es_retroactivo,
+                                    'bg-emerald-100 text-emerald-700': item.habilitado === true && !item.es_retroactivo,
+                                    'bg-red-100 text-red-700': item.habilitado === false,
+                                    'bg-gray-100 text-gray-500': item.habilitado === null
+                                }">
+                                    {{ item.habilitado === true ? 'Habilitado' : item.habilitado === false ?
+                                        'Deshabilitado' :
+                                        'Sin habilitar' }}
+                                </span>
+
+                                <!-- Dot de estado del mes -->
+                                <span class="flex items-center gap-1 text-[11px] text-gray-400">
+                                    <span class="w-1.5 h-1.5 rounded-full inline-block" :class="{
+                                        'bg-emerald-400': item.estado_mes === 'activo',
+                                        'bg-amber-400': item.estado_mes === 'baja_temporal',
+                                        'bg-red-400': item.estado_mes === 'baja_definitiva',
+                                        'bg-gray-400': item.estado_mes === 'depurado',
+                                        'bg-purple-600': item.estado_mes === 'pagos_suspendidos',
+                                        'bg-gray-200': !item.estado_mes
+                                    }"></span>
+                                    {{ item.estado_mes ? item.estado_mes.replace('_', ' ') : 'Sin estado' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- ═══════════════════════════════════ -->
+                        <!--  ESTADO HOVER (visible al pasar)   -->
+                        <!-- ═══════════════════════════════════ -->
+                        <div class="absolute inset-0 p-4 pt-3 flex flex-col justify-between
+                                    opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0
+                                    transition-all duration-500 pointer-events-none z-10">
+
+                            <!-- Título mes en hover -->
+                            <h1 class="font-bold text-xl text-white leading-tight">
+                                {{ getMonthNameFromDate(item.es_retroactivo ? item.mes_original : item.mes) }}
+                                <span v-if="item.es_retroactivo" class="block text-[10px] font-semibold text-amber-300">
+                                    Retroactivo
+                                </span>
                             </h1>
 
-                            <!-- Contenido -->
-                            <div class="space-y-0.5 relative z-10 pointer-events-none">
-                                <!-- Fecha de habilitación (solo visible en hover) -->
-                                <div
-                                    class="flex items-center justify-between opacity-0 group-hover:opacity-100 duration-700 max-h-0 group-hover:max-h-10 overflow-hidden transition-all">
-                                    <span class="text-xs font-semibold text-white/90">Fecha Habilitado</span>
-                                    <span class="text-xs font-bold text-white">
+                            <!-- Detalles en hover -->
+                            <div class="space-y-1.5">
+
+                                <!-- Fecha de habilitación -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[11px] text-white/70 flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <rect x="3" y="4" width="18" height="18" rx="2" />
+                                            <line x1="16" y1="2" x2="16" y2="6" />
+                                            <line x1="8" y1="2" x2="8" y2="6" />
+                                            <line x1="3" y1="10" x2="21" y2="10" />
+                                        </svg>
+                                        Habilitado
+                                    </span>
+                                    <span class="text-[11px] font-semibold text-white">
                                         {{ formatDateTime(item.fecha_habilitado) }}
                                     </span>
                                 </div>
 
-                                <!-- Estado de pago (solo visible en hover) -->
-                                <div
-                                    class="flex items-center justify-between opacity-0 group-hover:opacity-100 duration-700 max-h-0 group-hover:max-h-10 overflow-hidden transition-all">
-                                    <span class="text-xs font-semibold text-white/90">Pago</span>
-                                    <span v-if="item.habilitado == 1"
-                                        class="text-xs font-bold px-2 py-1 rounded bg-white/20 text-white">
-                                        {{ item.pagado == 1 ? 'Pagado' : 'Pendiente' }}
+                                <!-- Fecha de pago (solo si pagado) -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[11px] text-white/70 flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <rect x="1" y="4" width="22" height="16" rx="2" />
+                                            <line x1="1" y1="10" x2="23" y2="10" />
+                                        </svg>
+                                        Fecha pago
                                     </span>
-                                    <span v-else class="text-xs font-bold text-white">
-                                        N/A
+
+                                    <span v-if="item.habilitado == 1 && item.pagado == 1"
+                                        class="text-[11px] font-semibold text-white">
+                                        {{ formatDateTime(item.fecha_pago) }}
                                     </span>
+                                    <span v-else class="text-[11px] text-white/60">Pago N/A</span>
                                 </div>
 
-                                <div
-                                    class="flex items-center justify-between translate-y-6 group-hover:translate-y-0 transition-transform duration-700">
-                                    <span
-                                        class="text-xs font-semibold text-gray-600 group-hover:text-white/90 duration-700">Estado</span>
-                                    <span
-                                        class="text-xs font-bold px-2 py-1 rounded group-hover:bg-white/20 group-hover:text-white duration-700"
-                                        :class="{
-                                            'bg-emerald-100 text-emerald-700': item.habilitado === true,
-                                            'bg-red-100 text-red-700': item.habilitado === false,
-                                            'bg-gray-100 text-gray-700': item.habilitado === null
-                                        }">
-                                        {{
-                                            item.habilitado === true ? 'Habilitado' :
-                                                item.habilitado === false ? 'Deshabilitado' :
-                                                    'Sin habilitar'
-                                        }}
+                                <div class="w-full h-px bg-white/20"></div>
+
+                                <!-- Estado + pago -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
+                                        {{ item.habilitado === true ? 'Habilitado' : item.habilitado === false ?
+                                            'Deshabilitado'
+                                            : 'Sin habilitar' }}
                                     </span>
+
+                                    <span v-if="item.pagado === 1"
+                                        class="text-[11px] font-semibold text-white">
+                                        {{ formatDateTime(item.fecha_pago) }}
+                                    </span>
+                                    <span v-else-if="item.pagado === 0"
+                                        class="text-[11px] font-semibold text-red-200">
+                                        Pago Anulado
+                                    </span>
+                                    <span v-else class="text-[11px] text-white/60">Pago N/A</span>
                                 </div>
+
                             </div>
                         </div>
+
                     </div>
                 </div>
-
-                <!-- Estado vacío -->
-                <div v-else class="flex flex-col items-center justify-center min-h-[400px] text-center">
-                    <!-- Icono dinámico según el estado -->
-                    <div class="bg-white rounded-full p-6 ">
-                        <!-- Sin gestión - Icono de calendario con X -->
-                         <Icon v-if="!existe_gestion" :icon-button="true" name="calendarMontSolid" class-name="text-gray-400 dark:text-gray-500"
-                            :size="64" :height="64" />
-
-                        <!-- Sin meses - Icono de reloj/calendario vacío -->
-                        <svg v-else-if="!tiene_meses" class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-
-                        <!-- Sin datos - Icono de carpeta vacía -->
-                        <svg v-else class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                        </svg>
-                    </div>
-
-                    <h3 class="text-xl font-semibold text-gray-800 mb-2">
-                        <span v-if="!existe_gestion">No hay gestiones registradas</span>
-                        <span v-else-if="!tiene_meses">Sin meses registrados</span>
-                        <span v-else>Sin datos disponibles</span>
-                    </h3>
-
-                    <p class="text-gray-500 max-w-md">
-                        <span v-if="!existe_gestion">Debe crear una gestión en el sistema para comenzar a
-                            trabajar</span>
-                        <span v-else-if="!tiene_meses">Agregue meses a la gestión {{ selectedYear }} para habilitar
-                            beneficiarios</span>
-                        <span v-else>No se encontraron registros para mostrar</span>
-                    </p>
-                </div>
-            </main>
-            <div class="mt-1">
-                <Footer />
             </div>
+
+            <!-- Estado vacío -->
+            <div v-else class="flex flex-col items-center justify-center min-h-[400px] text-center">
+                <!-- Icono dinámico según el estado -->
+                <div class="bg-white rounded-full p-6 ">
+                    <!-- Sin gestión - Icono de calendario con X -->
+                    <Icon v-if="!existe_gestion" :icon-button="true" name="calendarMontSolid"
+                        class-name="text-gray-400 dark:text-gray-500" :size="64" :height="64" />
+
+                    <!-- Sin meses - Icono de reloj/calendario vacío -->
+                    <svg v-else-if="!tiene_meses" class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+
+                    <!-- Sin datos - Icono de carpeta vacía -->
+                    <svg v-else class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">
+                    <span v-if="!existe_gestion">No hay gestiones registradas</span>
+                    <span v-else-if="!tiene_meses">Sin meses registrados</span>
+                    <span v-else>Sin datos disponibles</span>
+                </h3>
+
+                <p class="text-gray-500 max-w-md">
+                    <span v-if="!existe_gestion">Debe crear una gestión en el sistema para comenzar a
+                        trabajar</span>
+                    <span v-else-if="!tiene_meses">Agregue meses a la gestión {{ selectedYear }} para habilitar
+                        beneficiarios</span>
+                    <span v-else>No se encontraron registros para mostrar</span>
+                </p>
+            </div>
+        </main>
+
+        <!-- ============================================================================ -->
+        <!-- FOOTER Y PAGINACIÓN -->
+        <!-- ============================================================================ -->
+        <div class="mt-1">
+            <Footer />
         </div>
-    </div>
+
+        <!-- ============================================================================ -->
+        <!-- MODALES -->
+        <!-- ============================================================================ -->
+
+        <!-- Modal: Habilitar Meses -->
+        <Transition name="fade">
+            <ModalHabilitar v-if="openModalHabilitar" :data="selectedItem || {}" :processing="form.processing"
+                @habilitar="submit" @cambioEstado="handleCambioEstado"
+                @sinDatos="(accion) => mostrarMensaje('error', accion === 'deshabilitar' ? 'Error al Deshabilitar' : 'Error al Habilitar', `Debe agregar una observación válida para ${accion}.`)"
+                @close="openModalHabilitar = false" />
+        </Transition>
+    </AppLayout>
 </template>

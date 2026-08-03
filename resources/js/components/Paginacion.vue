@@ -4,94 +4,78 @@ import { computed } from 'vue';
 
 const props = defineProps({
     links: Array,
-    from: {
-        type: Number,
-        default: 1
-    },
-    to: {
-        type: Number,
-        default: 4
-    },
-    total: {
-        type: Number,
-        default: 0
-    }
+    from: { type: Number, default: 1 },
+    to: { type: Number, default: 4 },
+    total: { type: Number, default: 0 },
+    tab: { type: String, default: null },
 });
 
-// Función para extraer el número de página de la etiqueta
+const normalizeLabel = (label) => {
+    if (!label) return label;
+    if (label.includes('pagination.previous') || label === '&laquo; Previous') return '&laquo;';
+    if (label.includes('pagination.next') || label === 'Next &raquo;') return '&raquo;';
+    return label;
+};
+
 const getPageNumber = (label) => {
     if (!label || typeof label !== 'string') return null;
     const num = parseInt(label);
     return isNaN(num) ? null : num;
 };
 
-// Procesar los enlaces para mostrar exactamente 3 números
 const processedLinks = computed(() => {
     if (!props.links || props.links.length <= 2) return props.links;
-    
+
     const result = [];
-    
-    // Añadir "Anterior"
-    result.push(props.links[0]);
-    
-    // Filtrar enlaces numéricos (excluir "Anterior" y "Siguiente")
+
+    result.push({ ...props.links[0], label: normalizeLabel(props.links[0].label) });
+
     const numericLinks = props.links.slice(1, -1).filter(link => {
         const pageNum = getPageNumber(link.label);
         return pageNum !== null;
     });
-    
-    // Encontrar el enlace activo
+
     const activeIndex = numericLinks.findIndex(link => link.active);
     const activePage = activeIndex !== -1 ? getPageNumber(numericLinks[activeIndex].label) : 1;
     const totalPages = numericLinks.length;
-    
-    // Primera página (siempre visible si no es parte de los 3 centrales)
+
     if (totalPages > 0 && activePage > 2) {
         result.push(numericLinks[0]);
-        
-        // Puntos suspensivos a la izquierda
         if (activePage > 3) {
-            result.push({
-                url: null,
-                label: '...',
-                active: false
-            });
+            result.push({ url: null, label: '...', active: false });
         }
     }
-    
-    // Calcular los 3 números a mostrar centrados en la página activa
+
     let start = Math.max(0, activeIndex - 1);
     let end = Math.min(totalPages - 1, start + 2);
-    
-    // Ajustar si estamos al final para seguir mostrando 3 números
+
     if (end - start < 2 && start > 0) {
         start = Math.max(0, end - 2);
     }
-    
-    // Añadir los 3 números centrales
+
     for (let i = start; i <= end; i++) {
         if (i < numericLinks.length) {
             result.push(numericLinks[i]);
         }
     }
-    
-    // Puntos suspensivos a la derecha
+
     if (end < totalPages - 1) {
-        result.push({
-            url: null,
-            label: '...',
-            active: false
-        });
-        
-        // Última página
+        result.push({ url: null, label: '...', active: false });
         result.push(numericLinks[numericLinks.length - 1]);
     }
-    
-    // Añadir "Siguiente"
-    result.push(props.links[props.links.length - 1]);
-    
+
+    const lastLink = props.links[props.links.length - 1];
+    result.push({ ...lastLink, label: normalizeLabel(lastLink.label) });
+
     return result;
 });
+
+function urlConTab(url) {
+    if (!url || !props.tab) return url;
+    const u = new URL(url);
+    u.searchParams.set('tab', props.tab);
+    return u.toString();
+}
 </script>
 
 <template>
@@ -101,7 +85,7 @@ const processedLinks = computed(() => {
             Mostrando <span class="font-semibold text-gray-900">{{ from }}-{{ to }}</span> de
             <span class="font-semibold text-gray-900">{{ total }}</span>
         </span>
-       
+
         <!-- Contenedor de paginación -->
         <ul class="inline-flex -space-x-px rtl:space-x-reverse text-xs sm:text-sm h-6 sm:h-7 flex-shrink-0">
             <template v-for="(link, linkIndex) in processedLinks" :key="linkIndex">
@@ -118,7 +102,7 @@ const processedLinks = computed(() => {
                 </li>
                 <!-- Enlaces activos -->
                 <li v-else>
-                    <Link :href="link.url"
+                    <Link :href="urlConTab(link.url)"
                         :class="[
                             'flex items-center justify-center px-2 sm:px-3 h-7 leading-tight border',
                             {

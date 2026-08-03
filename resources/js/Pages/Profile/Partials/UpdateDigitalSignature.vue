@@ -14,56 +14,76 @@
                     Imagen de Firma
                 </label>
 
-                <div
-                    @drop.prevent="handleDrop"
-                    @dragover.prevent="isDragging = true"
-                    @dragleave.prevent="isDragging = false"
-                    @click="triggerFileInput"
-                    :class="[
-                        'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
-                        isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-gray-400'
-                    ]"
-                >
-                    <!-- Preview de la imagen -->
-                    <div v-if="previewUrl" class="mb-4">
-                        <img
-                            :src="previewUrl"
-                            alt="Vista previa de firma"
-                            class="max-h-40 mx-auto border border-gray-200 rounded"
+                <!-- Overlay wrapper -->
+                <div class="relative">
+                    <div
+                        @drop.prevent="isSuperUser ? handleDrop($event) : null"
+                        @dragover.prevent="isSuperUser ? isDragging = true : null"
+                        @dragleave.prevent="isDragging = false"
+                        @click="isSuperUser ? triggerFileInput() : null"
+                        :class="[
+                            'border-2 border-dashed rounded-lg p-6 text-center transition-colors',
+                            isSuperUser ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                            isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-gray-400'
+                        ]"
+                    >
+                        <!-- Preview de la imagen -->
+                        <div v-if="previewUrl" class="mb-4">
+                            <img
+                                :src="previewUrl"
+                                alt="Vista previa de firma"
+                                class="max-h-40 mx-auto border border-gray-200 rounded"
+                            />
+                        </div>
+
+                        <!-- Imagen actual del usuario -->
+                        <div v-else-if="user.digital_signature && !selectedFile" class="mb-4">
+                            <img
+                                :src="`/${user.digital_signature}`"
+                                alt="Firma actual"
+                                class="max-h-40 mx-auto border border-gray-200 rounded"
+                            />
+                            <p class="mt-2 text-sm text-gray-500">Firma actual</p>
+                        </div>
+
+                        <!-- Icono de upload -->
+                        <div v-else>
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </div>
+
+                        <div class="mt-4 text-sm text-gray-600">
+                            <p class="font-semibold">
+                                {{ selectedFile ? selectedFile.name : 'Arrastra tu firma aquí o haz clic para seleccionar' }}
+                            </p>
+                            <p class="mt-1">PNG, JPG hasta 2MB</p>
+                        </div>
+
+                        <input
+                            ref="fileInput"
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg"
+                            @change="handleFileSelect"
+                            class="hidden"
+                            :disabled="!isSuperUser"
                         />
                     </div>
 
-                    <!-- Imagen actual del usuario -->
-                    <div v-else-if="user.digital_signature && !selectedFile" class="mb-4">
-                        <img
-                            :src="`/${user.digital_signature}`"
-                            alt="Firma actual"
-                            class="max-h-40 mx-auto border border-gray-200 rounded"
-                        />
-                        <p class="mt-2 text-sm text-gray-500">Firma actual</p>
+                    <!-- Mensaje de no disponible para no superusuarios -->
+                    <div
+                        v-if="!isSuperUser"
+                        class="absolute inset-0 flex items-center justify-center rounded-lg"
+                    >
+                        <div class="bg-red-50 border border-red-300 rounded-lg px-4 py-2 flex items-center gap-2 shadow-sm">
+                            <svg class="w-4 h-4 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="text-red-600 text-sm font-medium">
+                                Función no disponible — comuniquese con el area de sistemas.
+                            </span>
+                        </div>
                     </div>
-
-                    <!-- Icono de upload -->
-                    <div v-else>
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                    </div>
-
-                    <div class="mt-4 text-sm text-gray-600">
-                        <p class="font-semibold">
-                            {{ selectedFile ? selectedFile.name : 'Arrastra tu firma aquí o haz clic para seleccionar' }}
-                        </p>
-                        <p class="mt-1">PNG, JPG hasta 2MB</p>
-                    </div>
-
-                    <input
-                        ref="fileInput"
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg"
-                        @change="handleFileSelect"
-                        class="hidden"
-                    />
                 </div>
 
                 <p v-if="form.errors.signature" class="mt-2 text-sm text-red-600">
@@ -73,20 +93,21 @@
 
             <!-- Botones de acción -->
             <div class="flex items-center gap-4">
-                <Button :disabled="form.processing || !selectedFile"
+                <Button
+                    :disabled="form.processing || !selectedFile || !isSuperUser"
                     :class="[
-                        'px-4 py-2 bg-blue-600 text-white rounded-md font-semibold text-sm transition-colors',
-                        form.processing || !selectedFile
+                        'px-4 py-2 bg-[rgb(var(--brand-600))] text-white rounded-md font-semibold text-sm transition-colors',
+                        form.processing || !selectedFile || !isSuperUser
                             ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-blue-700'
+                            : 'hover:bg-[rgb(var(--brand-700))]'
                     ]">
                     {{ form.processing ? 'Guardando...' : 'Guardar Firma' }}
                 </Button>
 
                 <Button v-if="user.digital_signature"
                     type="button"
-                    @click="deleteSignature"
-                    :disabled="form.processing"
+                    @click="isSuperUser ? deleteSignature() : null"
+                    :disabled="form.processing || !isSuperUser"
                     class="px-4 py-2 bg-red-600 text-white rounded-md font-semibold text-sm hover:bg-red-700 transition-colors disabled:opacity-50">
                     Eliminar Firma
                 </Button>
@@ -107,8 +128,9 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useForm } from '@inertiajs/vue3';
+import { can } from '@/lib/can';
 import Button from '@/components/Button.vue';
 
 const props = defineProps({
@@ -117,6 +139,8 @@ const props = defineProps({
         required: true
     }
 });
+
+const isSuperUser = computed(() => can('superusuario'));
 
 const fileInput = ref(null);
 const selectedFile = ref(null);
@@ -147,7 +171,6 @@ const handleDrop = (event) => {
 };
 
 const processFile = (file) => {
-    // Validar tamaño (2MB)
     if (file.size > 2 * 1024 * 1024) {
         alert('El archivo es demasiado grande. Máximo 2MB.');
         return;
@@ -156,7 +179,6 @@ const processFile = (file) => {
     selectedFile.value = file;
     form.signature = file;
 
-    // Crear preview
     const reader = new FileReader();
     reader.onload = (e) => {
         previewUrl.value = e.target.result;
@@ -165,6 +187,7 @@ const processFile = (file) => {
 };
 
 const submitSignature = () => {
+    if (!isSuperUser.value) return;
     form.post(route('profile.signature.update'), {
         preserveScroll: true,
         onSuccess: () => {
@@ -189,7 +212,6 @@ const deleteSignature = () => {
     }
 };
 
-// Limpiar preview si se cancela el formulario
 watch(() => form.recentlySuccessful, (value) => {
     if (value) {
         setTimeout(() => {

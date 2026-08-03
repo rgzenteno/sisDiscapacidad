@@ -1,5 +1,5 @@
 // ============ INICIO IMPORTS ============ //
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 // ============ FIN IMPORTS ============ //
 
 /**
@@ -97,6 +97,22 @@ export function useFileUpload(props, emit) {
         }
     };
     // ============ FIN MÉTODOS ============ //
+
+    // ============ INICIO BLOQUEO GLOBAL ============ //
+    // Evita que, si el archivo se suelta fuera del dropzone, el navegador
+    // navegue y lo abra directamente (ej: PDF ocupando toda la pestaña).
+    const preventBrowserFileOpen = (event) => event.preventDefault();
+
+    onMounted(() => {
+        window.addEventListener('dragover', preventBrowserFileOpen);
+        window.addEventListener('drop', preventBrowserFileOpen);
+    });
+
+    onUnmounted(() => {
+        window.removeEventListener('dragover', preventBrowserFileOpen);
+        window.removeEventListener('drop', preventBrowserFileOpen);
+    });
+    // ============ FIN BLOQUEO GLOBAL ============ //
 
     return {
         selectedFile,

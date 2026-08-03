@@ -2088,7 +2088,7 @@ namespace PHPSTORM_META {
     override(\optional(0), type(0));
 
             registerArgumentsSet('auth', );
-        registerArgumentsSet('configs', 
+        registerArgumentsSet('configs',
 'activitylog.enabled','activitylog.delete_records_older_than_days','activitylog.default_log_name','activitylog.default_auth_driver','activitylog.subject_returns_soft_deleted_models',
 'activitylog.activity_model','activitylog.table_name','activitylog.database_connection','app.name','app.env',
 'app.debug','app.url','app.frontend_url','app.asset_url','app.timezone',
@@ -2175,11 +2175,11 @@ namespace PHPSTORM_META {
 'ide-helper.model_camel_case_properties','ide-helper.type_overrides.integer','ide-helper.type_overrides.boolean','ide-helper.include_class_docblocks','ide-helper.force_fqn',
 'ide-helper.use_generics_annotations','ide-helper.macro_default_return_types.Illuminate\\Http\\Client\\Factory','ide-helper.additional_relation_types','ide-helper.additional_relation_return_types','ide-helper.enforce_nullable_relationships',
 'ide-helper.post_migrate','tinker.commands','tinker.alias','tinker.dont_alias',);
-        registerArgumentsSet('middleware', 
+        registerArgumentsSet('middleware',
 'web','api','auth','auth.basic','auth.session',
 'cache.headers','can','guest','password.confirm','precognitive',
 'signed','throttle','verified',);
-        registerArgumentsSet('routes', 
+        registerArgumentsSet('routes',
 'sanctum.csrf-cookie','dashboard','profile.edit','profile.update',
 'profile.destroy','gestion.index','gestion.reporte','gestion.store','gestion.addMes',
 'gestion.update','postulante.index','postulante.importar.store','persona.index','persona.reporte',
@@ -2195,7 +2195,7 @@ namespace PHPSTORM_META {
 'register','login','password.request',
 'password.email','password.reset','password.store','verification.notice','verification.verify',
 'verification.send','password.confirm','password.update','logout','storage.local',);
-        registerArgumentsSet('views', 
+        registerArgumentsSet('views',
 'app','email.record_email','laravel-exceptions-renderer::components.card','laravel-exceptions-renderer::components.context','laravel-exceptions-renderer::components.editor',
 'laravel-exceptions-renderer::components.header','laravel-exceptions-renderer::components.icons.chevron-down','laravel-exceptions-renderer::components.icons.chevron-up','laravel-exceptions-renderer::components.icons.computer-desktop','laravel-exceptions-renderer::components.icons.moon',
 'laravel-exceptions-renderer::components.icons.sun','laravel-exceptions-renderer::components.layout','laravel-exceptions-renderer::components.navigation','laravel-exceptions-renderer::components.theme-switcher','laravel-exceptions-renderer::components.trace',
@@ -2204,7 +2204,7 @@ namespace PHPSTORM_META {
 'laravel-exceptions::layout','laravel-exceptions::minimal','notifications::email','pagination::bootstrap-4','pagination::bootstrap-5',
 'pagination::default','pagination::semantic-ui','pagination::simple-bootstrap-4','pagination::simple-bootstrap-5','pagination::simple-default',
 'pagination::simple-tailwind','pagination::tailwind',);
-        registerArgumentsSet('translations', 
+        registerArgumentsSet('translations',
 'C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.auth.failed','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.auth.password','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.auth.throttle','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.pagination.previous','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.pagination.next',
 'C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.passwords.reset','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.passwords.sent','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.passwords.throttled','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.passwords.token','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.passwords.user',
 'C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.validation.accepted','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.validation.accepted_if','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.validation.active_url','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.validation.after','C:.xampp.htdocs.sisdiscapacidad - Alacaldia - copia.vendor.laravel.framework.src.Illuminate.Translation.lang.en.validation.after_or_equal',
@@ -2248,7 +2248,7 @@ namespace PHPSTORM_META {
 'validation.required_with','validation.required_without','validation.same','validation.size.numeric','validation.size.file',
 'validation.size.string','validation.size.array','validation.starts_with','validation.string','validation.timezone',
 'validation.unique','validation.uploaded','validation.url','validation.uuid','validation.custom.attribute-name.rule-name',);
-        registerArgumentsSet('env', 
+        registerArgumentsSet('env',
 'APP_NAME','APP_ENV','APP_KEY','APP_DEBUG','APP_TIMEZONE',
 'APP_URL','APP_LOCALE','APP_FALLBACK_LOCALE','APP_FAKER_LOCALE','APP_MAINTENANCE_DRIVER',
 'PHP_CLI_SERVER_WORKERS','BCRYPT_ROUNDS','LOG_CHANNEL','LOG_STACK','LOG_DEPRECATIONS_CHANNEL',
@@ -2263,7 +2263,7 @@ namespace PHPSTORM_META {
 'PUSHER_APP_KEY','PUSHER_APP_SECRET','PUSHER_APP_CLUSTER','VITE_APP_NAME','VITE_PUSHER_APP_KEY',
 'VITE_PUSHER_HOST','VITE_PUSHER_PORT','VITE_PUSHER_SCHEME','VITE_PUSHER_APP_CLUSTER','TWILIO_SID',
 'TWILIO_AUTH_TOKEN','TWILIO_PHONE_NUMBER','API_KEY','URL',);
-        
+
                 expectedArguments(\Illuminate\Support\Facades\Gate::has(), 0, argumentsSet('auth'));
     expectedArguments(\Illuminate\Support\Facades\Gate::allows(), 0, argumentsSet('auth'));
     expectedArguments(\Illuminate\Support\Facades\Gate::denies(), 0, argumentsSet('auth'));
@@ -2327,5 +2327,5 @@ namespace PHPSTORM_META {
                 expectedArguments(\Illuminate\Contracts\Translation\Translator::get(), 0, argumentsSet('translations'));
                 expectedArguments(\env(), 0, argumentsSet('env'));
                 expectedArguments(\Illuminate\Support\Env::get(), 0, argumentsSet('env'));
-            
+
 }

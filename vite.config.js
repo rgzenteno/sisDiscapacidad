@@ -1,8 +1,17 @@
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import vue from '@vitejs/plugin-vue';
+import { resolve } from 'path';
+import { copyFileSync, mkdirSync } from 'fs';
 
 export default defineConfig({
+    base: '/build/',
+    server: {
+        host: '0.0.0.0',
+        hmr: {
+            host: 'localhost',
+        },
+    },
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.js'],
@@ -15,14 +24,27 @@ export default defineConfig({
                     includeAbsolute: false,
                 },
             },
-            css: {
-                postcss: './postcss.config.js',
-            },
         }),
+
+        {
+            name: 'copy-pdf-worker',
+            closeBundle() {
+                try {
+                    mkdirSync(resolve('public/vendor'), { recursive: true });
+                    copyFileSync(
+                        resolve('node_modules/pdfjs-dist/build/pdf.worker.min.mjs'),
+                        resolve('public/vendor/pdf.worker.min.js')
+                    );
+                    console.log('✅ pdf.worker.min.js copiado a public/vendor/');
+                } catch (e) {
+                    console.error('❌ Error copiando pdf worker:', e);
+                }
+            },
+        },
     ],
     resolve: {
         alias: {
-            vue: 'vue/dist/vue.esm-bundler.js', // ← AGREGAR ESTO
+            vue: 'vue/dist/vue.esm-bundler.js',
         },
     },
 });

@@ -30,6 +30,7 @@
         "jspdf": "^4.0.0",
         "jspdf-autotable": "^5.0.7",
         "lodash": "^4.17.21",
+        "pdfjs-dist": "^5.5.207",
         "qrcode": "^1.5.4",
         "twilio": "^5.4.0",
         "vee-validate": "^4.15.0",

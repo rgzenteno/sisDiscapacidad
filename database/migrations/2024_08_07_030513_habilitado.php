@@ -50,7 +50,7 @@ return new class extends Migration {
             // Índices recomendados:
             $table->index('id_persona');          // ⭐ Para JOINs con persona
             $table->index('id_gestion');          // ⭐ Para filtrar por gestión
-            $table->index('id_mes');          // ⭐ Para filtrar por mes
+            $table->index('id_mes');              // ⭐ Para filtrar por mes
             $table->index('id');                  // Para JOINs con users
             $table->index('habilitado');          // ⭐ Para filtrar habilitados/no habilitados
             $table->index('fecha_habilitado');    // Para ordenar por fecha

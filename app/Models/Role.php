@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use DateTimeInterface;
+use Spatie\Permission\Contracts\Role as RoleContract;
 use Spatie\Permission\Models\Role as SpatieRole;
+use Illuminate\Database\Eloquent\Builder;
 
-class Role extends SpatieRole
+class Role extends SpatieRole implements RoleContract
 {
     protected $fillable = [
         'name',
@@ -16,13 +19,15 @@ class Role extends SpatieRole
         'hierarchy_level' => 'integer',
     ];
 
-    const MAX_HIERARCHY_LEVEL = 10;
-    const SUPER_USUARIO_LEVEL = 10;
+    protected function serializeDate(DateTimeInterface $date): string
+    {
+        return $date->format('Y-m-dd-m-Y H:i:s');
+    }
 
-    /**
-     * Verifica si este rol puede ser gestionado por un usuario
-     */
-    public function canBeEditedBy($user): bool
+    public const MAX_HIERARCHY_LEVEL = 10;
+    public const SUPER_USUARIO_LEVEL = 10;
+
+    public function canBeEditedBy(User $user): bool
     {
         if ($user->hasRole('superUsuario')) {
             return true;
@@ -31,17 +36,11 @@ class Role extends SpatieRole
         return $user->getMaxHierarchyLevel() > $this->hierarchy_level;
     }
 
-    /**
-     * Scope para ordenar por jerarquía
-     */
-    public function scopeByHierarchy($query)
+    public function scopeByHierarchy(Builder $query): Builder
     {
         return $query->orderBy('hierarchy_level', 'desc');
     }
 
-    /**
-     * Verifica si es el nivel máximo
-     */
     public function isMaxHierarchy(): bool
     {
         return $this->hierarchy_level === self::MAX_HIERARCHY_LEVEL;

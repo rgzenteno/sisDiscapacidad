@@ -1,79 +1,57 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useSidebar } from '../composables/useSidebar'
+// ============================================================================
+// IMPORTS
+// ============================================================================
+import { onMounted, ref, watch } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { can } from '@/lib/can.ts';
 
-const { isOpen } = useSidebar();
+/**
+ * Composables
+ */
+import { useSidebar } from '../composables/useSidebar';
+
+/**
+ * Utilidades
+ */
+import { can } from '@/lib/can';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+
+// ============================================================================
+// INICIALIZACIÓN DE COMPOSABLES
+// ============================================================================
+const { isOpen, closeSidebar } = useSidebar();
 const page = usePage();
 
-const activeClass = "bg-[#223B87] border-gray-50 rounded-r-lg mr-2 text-white border-l-4 border-black dark:text-white dark:bg-gray-700 dark:text-white dark:border-white"
-const inactiveClass = "border-gray-100 text-white hover:bg-blue-600 dark:hover:bg-gray-500"
+// ============================================================================
+// CONSTANTES - ESTILOS
+// ============================================================================
+const activeClass = 'bg-[rgb(var(--brand-rgb))] border-gray-50 rounded-r-lg mr-2 text-white border-l-4 border-black dark:text-white dark:bg-gray-700 dark:border-white';
+const inactiveClass = 'border-gray-100 text-white hover:bg-[rgb(var(--brand-rgb))] dark:hover:bg-gray-500';
 
+// ============================================================================
+// REFS - ESTADO UI
+// ============================================================================
 const currentRoute = ref('');
 const activeButton = ref('dashboard');
 const lastUserId = ref(null);
 
-// Inicializar con el usuario actual
+// ============================================================================
+// WATCHERS / LIFECYCLE
+// ============================================================================
 onMounted(() => {
     const currentUserId = page.props.auth?.user?.id;
     if (currentUserId) {
         lastUserId.value = currentUserId;
     }
-
     checkRoutePermission();
     updateActiveButton();
 });
 
-// Nueva función para verificar permisos
-function checkRoutePermission() {
-    const current = route().current();
-
-    // Si está en dashboard o login, no verificar
-    if (!current || current === 'dashboard' || current === 'login') {
-        return;
-    }
-
-    // Obtener la ruta principal
-    const mainRoute = current.split('.')[0];
-
-    // Mapeo de rutas a permisos
-    const routePermissions = {
-        'postulante': 'general',
-        'persona': 'beneficiario',
-        'tutor': 'tutor',
-        'gestion': 'gestion',
-        'usuario': 'usuario',
-        'roles': 'roles'
-    };
-
-    const requiredPermission = routePermissions[mainRoute];
-
-    // Si la ruta requiere permiso y el usuario NO lo tiene
-    if (requiredPermission && !can(requiredPermission)) {
-        // Redirigir al dashboard
-        router.visit(route('dashboard'), {
-            replace: true,
-            preserveState: false,
-            preserveScroll: false
-        });
-    }
-}
-
-// Detectar cambio de usuario INMEDIATAMENTE
-// Detectar cambio de usuario INMEDIATAMENTE
+// Redirige al dashboard cuando se detecta un cambio de sesión de usuario
 watch(() => page.props.auth?.user?.id, (newUserId, oldUserId) => {
-    // Si hay un cambio real de usuario (no la inicialización)
     if (oldUserId && newUserId && oldUserId !== newUserId) {
-        console.log('Cambio de usuario detectado - redirigiendo a dashboard');
-
-        // Resetear estado
         activeButton.value = 'dashboard';
         lastUserId.value = newUserId;
-
-        // Redirigir SIEMPRE al dashboard cuando cambia el usuario
-        // Eliminar la condición if (route().current() !== 'dashboard')
         router.visit(route('dashboard'), {
             replace: true,
             preserveState: false,
@@ -85,25 +63,67 @@ watch(() => page.props.auth?.user?.id, (newUserId, oldUserId) => {
     }
 });
 
-// Actualizar botón activo cuando cambia la ruta
+// Sincroniza el botón activo al navegar entre rutas
 watch(() => route().current(), () => {
     updateActiveButton();
 });
 
+// ============================================================================
+// FUNCIONES
+// ============================================================================
+
+/**
+ * Verifica si el usuario tiene permiso para la ruta actual y redirige al dashboard si no
+ */
+function checkRoutePermission() {
+    const current = route().current();
+
+    if (!current || current === 'dashboard' || current === 'login') return;
+
+    const mainRoute = current.split('.')[0];
+
+    const routePermissions = {
+        'postulante': 'general',
+        'persona': 'beneficiario',
+        'tutor': 'tutor',
+        'gestion': 'gestion',
+        'usuario': 'usuario',
+        'roles': 'roles',
+        'presupuesto': 'presupuesto'
+    };
+
+    const requiredPermission = routePermissions[mainRoute];
+
+    if (requiredPermission && !can(requiredPermission)) {
+        router.visit(route('dashboard'), {
+            replace: true,
+            preserveState: false,
+            preserveScroll: false
+        });
+    }
+}
+
+/**
+ * Actualiza el botón activo del sidebar según la ruta actual
+ */
 function updateActiveButton() {
     currentRoute.value = route().current();
 
     if (currentRoute.value === 'login' || currentRoute.value === 'dashboard') {
         activeButton.value = 'dashboard';
     } else {
-        const mainRoute = currentRoute.value?.split('.')[0] || 'dashboard';
-        activeButton.value = mainRoute;
+        activeButton.value = currentRoute.value?.split('.')[0] || 'dashboard';
     }
 }
 
+/**
+ * Marca un botón como activo y cierra el sidebar en móvil
+ * @param {string} button - Nombre del botón a activar
+ */
 const setActiveButton = (button) => {
     activeButton.value = button;
-}
+    isOpen.value = false;
+};
 </script>
 
 <template>
@@ -113,14 +133,13 @@ const setActiveButton = (button) => {
             class="fixed inset-0 z-20 transition-opacity bg-black opacity-50 lg:hidden" @click="isOpen = false" />
         <!-- End Backdrop -->
 
-        <div :class="isOpen ? 'translate-x-0 ease-out ml-1 mt-1 mb-1' : '-translate-x-full ease-in'"
-            class="rounded-lg fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto transition duration-300 transform bg-[#13326A] dark:bg-gray-900 lg:translate-x-0 lg:static lg:inset-0">
+        <div :class="isOpen ? 'translate-x-0 ease-out' : '-translate-x-96 ease-in'"
+            class="ml-1 mt-1 mb-1 sm:mt-0 sm:mb-0 rounded-lg fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto transition duration-300 transform bg-[rgb(var(--brand-dark-rgb))] dark:bg-gray-900 lg:translate-x-0 lg:static lg:inset-0">
             <div class="flex items-center justify-center mt-8">
-                <div class="flex items-center">
-                    <!-- Texto  -->
-                    <span class="mx-2 text-4xl font-semibold text-white dark:text-white"
-                        style="text-shadow: -5px 5px 4px rgb(158 158 158 / 79%);">UMADIS</span>
-                </div>
+                <!-- Texto  -->
+                <span class="mx-2 text-4xl font-semibold text-white dark:text-white"
+                    style="text-shadow: -5px 5px 4px rgb(158 158 158 / 79%);">UMADIS</span>
+
             </div>
             <AuthenticatedLayout>
                 <nav class="mt-8">
@@ -137,6 +156,10 @@ const setActiveButton = (button) => {
                         <span class="mx-4">Inicio</span>
                     </Link>
 
+                    <!-- Módulo "General" oculto del sidebar (no se usa actualmente).
+                         El módulo, sus rutas y sus permisos siguen existiendo, solo se
+                         quitó del menú y del selector de permisos en Roles. -->
+                    <!--
                     <Link v-if="can('general')" class="flex items-center px-6 py-2 mt-4 duration-200"
                         :class="[activeButton === 'general' ? activeClass : inactiveClass]"
                         :href="route('general.index')" @click="setActiveButton('general')">
@@ -148,6 +171,7 @@ const setActiveButton = (button) => {
                         </svg>
                         <span class="mx-4">General</span>
                     </Link>
+                    -->
 
                     <Link v-if="can('beneficiario')" class="flex items-center px-6 py-2 mt-4 duration-200"
                         :class="[activeButton === 'persona' ? activeClass : inactiveClass]"
@@ -185,6 +209,22 @@ const setActiveButton = (button) => {
                         <span class="mx-4">Gestiones</span>
                     </Link>
 
+                    <Link v-if="can('presupuesto')" class="flex items-center px-6 py-2 mt-4 duration-200"
+                        :class="[activeButton === 'presupuesto' ? activeClass : inactiveClass]"
+                        :href="route('presupuesto.index')" @click="setActiveButton('presupuesto')">
+                        <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24"
+                            height="24" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd"
+                                d="M7 6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2v-4a3 3 0 0 0-3-3H7V6Z"
+                                clip-rule="evenodd" />
+                            <path fill-rule="evenodd"
+                                d="M2 11a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7Zm7.5 1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"
+                                clip-rule="evenodd" />
+                            <path d="M10.5 14.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" />
+                        </svg>
+                        <span class="mx-4">Presupuesto</span>
+                    </Link>
+
                     <Link v-if="can('usuario')" class="flex items-center px-6 py-2 mt-4 duration-200"
                         :class="[activeButton === 'usuario' ? activeClass : inactiveClass]"
                         :href="route('usuario.index')" @click="setActiveButton('usuario')">
@@ -209,8 +249,18 @@ const setActiveButton = (button) => {
                         <span class="mx-4">Roles</span>
                     </Link>
 
+                    <Link class="flex items-center px-6 py-2 mt-4 duration-200"
+                        :class="[activeButton === 'bandeja' ? activeClass : inactiveClass]"
+                        :href="route('bandeja.index')" @click="setActiveButton('bandeja')">
+                        <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24"
+                            height="24" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd"
+                                d="M9 15a6 6 0 1 1 12 0 6 6 0 0 1-12 0Zm3.845-1.855a2.4 2.4 0 0 1 1.2-1.226 1 1 0 0 1 1.992-.026c.426.15.809.408 1.111.749a1 1 0 1 1-1.496 1.327.682.682 0 0 0-.36-.213.997.997 0 0 1-.113-.032.4.4 0 0 0-.394.074.93.93 0 0 0 .455.254 2.914 2.914 0 0 1 1.504.9c.373.433.669 1.092.464 1.823a.996.996 0 0 1-.046.129c-.226.519-.627.94-1.132 1.192a1 1 0 0 1-1.956.093 2.68 2.68 0 0 1-1.227-.798 1 1 0 1 1 1.506-1.315.682.682 0 0 0 .363.216c.038.009.075.02.111.032a.4.4 0 0 0 .395-.074.93.93 0 0 0-.455-.254 2.91 2.91 0 0 1-1.503-.9c-.375-.433-.666-1.089-.466-1.817a.994.994 0 0 1 .047-.134Zm1.884.573.003.008c-.003-.005-.003-.008-.003-.008Zm.55 2.613s-.002-.002-.003-.007a.032.032 0 0 1 .003.007ZM4 14a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0v-4a1 1 0 0 1 1-1Zm3-2a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1Zm6.5-8a1 1 0 0 1 1-1H18a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-.796l-2.341 2.049a1 1 0 0 1-1.24.06l-2.894-2.066L6.614 9.29a1 1 0 1 1-1.228-1.578l4.5-3.5a1 1 0 0 1 1.195-.025l2.856 2.04L15.34 5h-.84a1 1 0 0 1-1-1Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span class="mx-4">Bandeja de Pagos</span>
+                    </Link>
                 </nav>
-
             </AuthenticatedLayout>
         </div>
     </div>

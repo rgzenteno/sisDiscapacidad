@@ -1,61 +1,93 @@
 // ============ INICIO IMPORTS ============ //
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 // ============ FIN IMPORTS ============ //
 
 /**
- * Composable para cálculos de presupuesto
+ * Composable para el presupuesto del mes (PDF).
+ *
+ * El presupuesto YA NO se autocompleta al escribir el monto: se calcula
+ * explícitamente contra el backend (gestion.mes.preview, solo lectura) y
+ * recién ahí se llena form.presupuesto — así el usuario ve el desglose real
+ * (activos, nuevos, bajas, depurados, duplicados, ausentes) antes de que el
+ * número quede cargado, en vez de un total ciego que nadie revisa.
+ *
+ * El monto por persona ya no se tipea en este formulario: lo toma el
+ * backend del parámetro "Monto - Persona" configurado en Configuración
+ * (ver ConfiguracionController) — acá solo se muestra de forma informativa.
+ *
  * @param {Object} form - Formulario de Inertia
- * @param {Object} props - Props del componente
- * @returns {Object} - { mostrarPresupuestoAnual, presupuestoSugerido }
+ * @param {Object} props - Props del componente (propsConRegistros de Form.vue)
+ * @returns {Object} - { mostrarPresupuestoAnual, previsualizacion, cargandoPreview, errorPreview, calcularPreview }
  */
 export function usePresupuestoCalculation(form, props) {
-
-    // ============ INICIO REFS ============ //
     const mostrarPresupuestoAnual = ref(false);
-    // ============ FIN REFS ============ //
 
-    // ============ INICIO COMPUTED ============ //
-    /**
-     * Calcula el presupuesto sugerido basado en personas válidas y monto
-     */
-    const presupuestoSugerido = computed(() => {
-        const monto = parseInt(form.monto) || 0;
-        const personas = props.personasValidas || 0;
-        return (personas * monto).toLocaleString('es-BO');
-    });
-    // ============ FIN COMPUTED ============ //
+    // ============ PREVISUALIZACIÓN (backend) — desglose real antes de subir ============ //
+    const previsualizacion = ref(null);
+    const cargandoPreview = ref(false);
+    const errorPreview = ref('');
 
-    // ============ INICIO WATCHERS ============ //
-    // Watch para calcular presupuesto automáticamente SOLO si NO está en modo edición
-    watch(() => form.monto, (nuevoMonto) => {
-        // 👇 Solo calcular si NO estamos en modo edición
+    const calcularPreview = async () => {
+        errorPreview.value = '';
+        previsualizacion.value = null;
+
+        if (form.archivo_validacion?.isValid !== true) {
+            errorPreview.value = 'Cargue el archivo PDF válido antes de calcular.';
+            return;
+        }
+
+        let registros = [];
+        try {
+            registros = JSON.parse(form.registros_extraidos || '[]');
+        } catch {
+            registros = [];
+        }
+
+        if (registros.length === 0) {
+            errorPreview.value = 'No se encontraron registros en el PDF.';
+            return;
+        }
+
+        cargandoPreview.value = true;
+        try {
+            const { data } = await axios.post(route('gestion.mes.preview'), {
+                id_gestion: props.data?.id,
+                mes: props.data?.mes,
+                registros,
+            });
+            previsualizacion.value = data;
+            form.presupuesto = data.presupuesto_sugerido;
+            if (form.errors.presupuesto) delete form.errors.presupuesto;
+        } catch (e) {
+            errorPreview.value = e.response?.data?.message ?? 'No se pudo calcular la vista previa.';
+        } finally {
+            cargandoPreview.value = false;
+        }
+    };
+
+    // Si cambia el archivo, el presupuesto y la previsualización ya no
+    // corresponden a los datos actuales — se limpian y hay que volver a
+    // calcular antes de poder guardar.
+    watch(() => form.registros_extraidos, () => {
         if (!props.editMode) {
-            if (nuevoMonto) {
-                const resultado = (props.personasValidas || 0) * parseInt(nuevoMonto);
-                form.presupuesto = resultado;
-
-                // Limpiar error si existe
-                if (form.errors.presupuesto) {
-                    delete form.errors.presupuesto;
-                }
-            } else {
-                form.monto = '';
-                form.presupuesto = '';
-            }
+            previsualizacion.value = null;
+            form.presupuesto = '';
         }
     });
 
-    // Determinar si se debe mostrar el campo de presupuesto anual
+    // ============ WATCHER — mostrar campo presupuesto anual ============ //
     watch(() => props.dataGestion, (dataGestion) => {
         if (props.gestion && dataGestion) {
             const existeGestion = dataGestion.some(g => g.gestion === props.gestion.gestion);
             mostrarPresupuestoAnual.value = !existeGestion;
         }
     }, { immediate: true });
-    // ============ FIN WATCHERS ============ //
 
     return {
         mostrarPresupuestoAnual,
-        presupuestoSugerido
+        previsualizacion,
+        cargandoPreview,
+        errorPreview,
+        calcularPreview,
     };
 }

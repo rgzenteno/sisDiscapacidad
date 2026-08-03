@@ -1,7 +1,13 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+// ============================================================================
+// IMPORTS
+// ============================================================================
+import { onMounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 
+// ============================================================================
+// PROPS
+// ============================================================================
 const props = defineProps({
     data: Object,
     rutaBusqueda: String,
@@ -10,18 +16,52 @@ const props = defineProps({
     initialValue: {
         type: String,
         default: '',
+    },
+    extraParams: {
+        type: Object,
+        default: () => ({}),
     }
 });
 
+const emit = defineEmits(['update:search']);
+
+// ============================================================================
+// REFS
+// ============================================================================
 const buscador = ref(props.initialValue);
 let debounceTimeout = null;
 
+// ============================================================================
+// WATCHERS / LIFECYCLE
+// ============================================================================
+onMounted(() => {
+    buscador.value = props.initialValue;
+});
+
+watch(buscador, () => {
+    emit('update:search', buscador.value);
+    buscarProducto();
+});
+
+watch(() => props.initialValue, (newValue) => {
+    if (newValue) buscador.value = newValue;
+});
+
+// ============================================================================
+// FUNCIONES
+// ============================================================================
+
+/**
+ * Ejecuta la búsqueda con debounce al cambiar el valor del buscador
+ */
 const buscarProducto = () => {
     if (debounceTimeout) clearTimeout(debounceTimeout);
 
     debounceTimeout = setTimeout(() => {
         router.get(
-            route(props.rutaBusqueda), { buscador: buscador.value }, {
+            route(props.rutaBusqueda),
+            { buscador: buscador.value, ...props.extraParams },
+            {
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
@@ -31,23 +71,12 @@ const buscarProducto = () => {
     }, 300);
 };
 
+/**
+ * Limpia el valor del buscador
+ */
 const limpiarBusqueda = () => {
     buscador.value = '';
 };
-
-watch(buscador, () => {
-    buscarProducto();
-});
-
-onMounted(() => {
-    buscador.value = props.initialValue;
-});
-
-watch(() => props.initialValue, (newValue) => {
-    if (newValue) {
-        buscador.value = newValue;
-    }
-});
 </script>
 
 <template>
@@ -66,7 +95,7 @@ watch(() => props.initialValue, (newValue) => {
             type="text"
             v-model="buscador"
             :placeholder="`Buscar ${props.name}...`"
-            class="p-2 block ps-10 pr-10 text-sm text-gray-900 border border-gray-300 rounded-lg w-80 bg-white focus:ring-gray-500 focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-gray-500 dark:focus:border-gray-500"
+            class="p-2 block ps-10 pr-10 text-sm text-gray-900 border border-gray-300 rounded-xl w-full sm:w-80 bg-white focus:ring-gray-500 focus:border-gray-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-gray-500 dark:focus:border-gray-500"
         />
 
         <!-- Botón X para limpiar (solo visible cuando hay texto) -->

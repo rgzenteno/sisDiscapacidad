@@ -1,167 +1,246 @@
-// ============ INICIO IMPORTS ============ //
-import { watch } from 'vue';
-import { useForm } from '@inertiajs/vue3';
-import { useDateCalculation } from './useDateCalculation';
-import { useTutorSearch } from './useTutorSearch';
-// ============ FIN IMPORTS ============ //
+import { watch, computed, nextTick, ref } from "vue";
+import { useForm } from "@inertiajs/vue3";
+import { useDateCalculation } from "./useDateCalculation";
+import { useTutorSearch } from "./useTutorSearch";
+import { useObservacionFija } from "./useObservacionFija";
 
-/**
- * Composable para manejar el estado del formulario
- * @param {Object} props - Props del componente Form
- * @param {Function} emit - Función emit del componente
- * @returns {Object} - { form, updateField, resetForm }
- */
 export function useFormState(props, emit) {
-    // ============ INICIO INICIALIZACIÓN FORM ============ //
-    const form = useForm({
-        // Mapear todos los campos desde props.fields
-        ...((props.fields || []).reduce((acc, field) => {
-            // Checkboxes de pago
-            if (field.typeInput === 'checkbox_pago') {
+
+    // =========================
+    // HELPERS
+    // =========================
+
+    const getDefaultValue = (field, existingData) => {
+        const val = existingData?.[field.name];
+
+        if (field.typeInput === "file_upload") return null;
+
+        if (field.typeInput === "checkbox_permissions") {
+            return val ?? [];
+        }
+
+        if (field.typeInput === "comple") {
+            return val ?? "";
+        }
+
+        if (field.typeInput === "indefinido_check") {
+            return existingData?.carnet?.fecha_emision === null ? 1 : 0;
+        }
+
+        if (field.typeInput === "propio_check") {
+            return 0;
+        }
+
+        if (field.type === "boolean") return false;
+
+        if (field.type === "number" || field.typeInput === "number") {
+            return val ?? "";
+        }
+
+        if (field.typeInput === "time") {
+            return field.value || "";
+        }
+
+        return val ?? "";
+    };
+
+    const mapFields = () => {
+        return (props.fields || []).reduce((acc, field) => {
+
+            // CHECKBOXES (agrupados)
+            if (["checkbox_pago", "check"].includes(field.typeInput)) {
                 field.options.forEach(option => {
-                    if (option.value === 'efectivo') {
-                        acc[option.value] = 1;
-                    } else {
-                        acc[option.value] = props.editMode ?
-                            props.existingData[option.value] || 0 : 0;
-                    }
+                    acc[option.value] =
+                        option.value === "efectivo"
+                            ? 1
+                            : props.editMode
+                                ? props.existingData?.[option.value] ?? 0
+                                : 0;
                 });
+                return acc;
             }
-            // Checkboxes normales
-            else if (field.typeInput === 'check') {
-                field.options.forEach(option => {
-                    acc[option.value] = props.editMode ?
-                        props.existingData[option.value] || 0 : 0;
-                });
-            }
-            // File upload
-            else if (field.typeInput === 'file_upload') {
-                acc[field.name] = null;
-            }
-            // Checkboxes de permisos
-            else if (field.typeInput === 'checkbox_permissions') {
-                acc[field.name] = props.editMode && props.existingData[field.name] ?
-                    props.existingData[field.name] : [];
-            }
-            // Campo complemento
-            else if (field.typeInput === 'comple') {
-                acc[field.name] = props.editMode ?
-                    (props.existingData[field.name] ?? '') : '';
-            }
-            // Resto de campos
-            else if (field.typeInput !== 'check') {
-                acc[field.name] = props.editMode && props.existingData[field.name] ?
-                    props.existingData[field.name] :
-                    field.type === 'number' ? '' :
-                    field.type === 'boolean' ? false :
-                    field.typeInput === 'time' ? field.value || '' : '';
-            }
+
+            acc[field.name] = props.editMode
+                ? getDefaultValue(field, props.existingData)
+                : getDefaultValue(field, {});
+
             return acc;
-        }, {})),
-        id_persona: null,
+
+        }, {});
+    };
+
+    // =========================
+    // FORM
+    // =========================
+
+    const form = useForm({
+        ...mapFields(),
+        id_persona: props.data?.id_persona ?? props.existingData?.id_persona ?? null,
     });
-    // ============ FIN INICIALIZACIÓN FORM ============ //
 
-    // ============ INICIO GENERACIÓN CÓDIGO CARNET ============ //
-    // Generación automática de código de carnet
-    if (props.nombreFor && props.fechaNacimiento) {
-        const palabras = props.nombreFor.trim().split(' ');
-        const iniciales = palabras.map(palabra => palabra.charAt(0).toUpperCase()).join('');
-        const fechaFormateada = props.fechaNacimiento.replace(/-/g, '');
-        const resultado = `03-${fechaFormateada}${iniciales}`;
-        form.doc = resultado;
+    // =========================
+    // SNAPSHOT
+    // =========================
+
+    const initialValues = ref({});
+    const snapshotReady = ref(false);
+    const snapshotTaken = ref(false);
+
+    const takeSnapshot = () => {
+        if (snapshotTaken.value) return;
+
+        initialValues.value = JSON.parse(JSON.stringify(form.data()));
+        snapshotReady.value = true;
+        snapshotTaken.value = true;
+    };
+
+    if (!props.editMode) {
+        nextTick(takeSnapshot);
     }
-    // ============ FIN GENERACIÓN CÓDIGO CARNET ============ //
 
-    // ============ INICIO COMPOSABLES ============ //
-    // Cálculo de fecha de vencimiento
+    // =========================
+    // NORMALIZE (CLAVE)
+    // =========================
+
+    const normalize = (val) => {
+        if (val === "" || val === null || val === undefined) return null;
+        if (Array.isArray(val)) return JSON.stringify([...val].sort());  // arrays ordenados
+        if (!isNaN(val) && val !== "") return Number(val);
+        return val;
+    };
+
+    const isDirty = computed(() => {
+        if (!snapshotReady.value) return false;
+
+        const current = form.data();
+
+        return Object.keys(initialValues.value).some(key => {
+            return normalize(current[key]) !== normalize(initialValues.value[key]);
+        });
+    });
+
+    const resetToInitial = () => {
+        Object.assign(form, JSON.parse(JSON.stringify(initialValues.value)));
+    };
+
+    // =========================
+    // LOGICA EXTRA
+    // =========================
+
+    if (props.nombreFor && props.apellidoFor && props.fechaNacimiento) {
+        const nombre = props.nombreFor.trim().split(" ")[0][0].toUpperCase();
+        const apellidos = props.apellidoFor
+            .trim()
+            .split(" ")
+            .map(p => p[0].toUpperCase())
+            .join("");
+
+        const fecha = props.fechaNacimiento.replace(/-/g, "");
+
+        form.doc = `03-${fecha}${nombre}${apellidos}`;
+    }
+
+    // Distingue "observaciones" precargado (al editar) de un cambio hecho a
+    // mano por el usuario en esta sesión del formulario — solo lo segundo
+    // debe frenar el autocompletado de useObservacionFija.
+    const observacionesTocada = ref(false);
+
     useDateCalculation(form);
-
-    // Búsqueda de tutores
+    useObservacionFija(form, observacionesTocada);
     const { search } = useTutorSearch(form, props, emit);
-    // ============ FIN COMPOSABLES ============ //
 
-    // ============ INICIO WATCHERS ============ //
-    // Watch para cargar permisos en las opciones del campo
-    watch(() => props.permissions, (newPermissions) => {
-        if (newPermissions && newPermissions.length > 0) {
-            const permissionsField = props.fields.find(f => f.typeInput === 'checkbox_permissions');
-            if (permissionsField) {
-                permissionsField.options = newPermissions.map(permission => ({
-                    value: permission.name,
-                    text: permission.name
-                }));
-            }
+    // =========================
+    // WATCHERS
+    // =========================
+
+    // permisos
+    watch(() => props.permissions, (permissions) => {
+        const field = props.fields.find(f => f.typeInput === "checkbox_permissions");
+        if (field && permissions?.length) {
+            field.options = permissions.map(p => ({
+                value: p.name,
+                text: p.name,
+            }));
         }
     }, { immediate: true });
 
-    // Watch para actualizar campos con datos existentes
-    watch(() => props.existingData, (newData) => {
-        if (props.editMode && newData) {
-            (props.fields || []).forEach(field => {
-                const fieldName = field.name;
+    // existingData (UNIFICADO)
+    watch(() => props.existingData, (data) => {
+        if (!data) return;
 
-                // Caso especial para permisos
-                if (field.typeInput === 'checkbox_permissions' && newData[fieldName]) {
-                    form[fieldName] = Array.isArray(newData[fieldName]) ?
-                        newData[fieldName].map(p => typeof p === 'object' ? p.name : p) :
-                        [];
+        if (props.editMode) {
+            (props.fields || []).forEach(field => {
+
+                if (field.typeInput === "propio_check") {
+                    form[field.name] = 0;
                     return;
                 }
 
-                // Si hay un objeto carnet, intentar obtener el valor de ahí primero
-                if (newData.carnet && newData.carnet[fieldName] !== undefined) {
-                    form[fieldName] = newData.carnet[fieldName];
-                } else if (newData[fieldName] !== undefined) {
-                    form[fieldName] = newData[fieldName];
+                if (field.typeInput === "checkbox_permissions") {
+                    form[field.name] = Array.isArray(data[field.name])
+                        ? data[field.name].map(p => typeof p === "object" ? p.name : p)
+                        : [];
+                    return;
                 }
+
+                if (field.typeInput === "indefinido_check") {
+                    form[field.name] =
+                        data.carnet?.fecha_emision === null ? 1 : 0;
+                    return;
+                }
+
+                form[field.name] =
+                    data.carnet?.[field.name] ??
+                    data[field.name] ??
+                    form[field.name];
             });
         }
+
+        if (data.id_persona) {
+            form.id_persona = data.id_persona;
+        }
+
+        // tutor
+        if (data.tiene_tutor) {
+            form.nombre_tutor = data.nombre_tutor ?? "";
+            form.apellido_tutor = data.apellido_tutor ?? "";
+            form.ci_tutor = data.ci_tutor ?? "";
+            form.complemento_tutor = data.complemento_tutor ?? "";
+        }
+
+        if (!snapshotTaken.value) {
+            nextTick(takeSnapshot);
+        }
+
     }, { deep: true, immediate: true });
 
-    // Watch para cargar datos del tutor automáticamente
-    watch(() => props.existingData, (newData) => {
-        if (newData && newData.tiene_tutor === true) {
-            if (newData.nombre_tutor && newData.apellido_tutor) {
-                form.nombre_tutor = newData.nombre_tutor;
-                form.apellido_tutor = newData.apellido_tutor;
+    // indefinido emit
+    watch(() => form.indefinido, val => {
+        emit('indefinidoChange', !!val);
+    });
 
-                if (newData.ci_tutor) {
-                    form.ci_tutor = newData.ci_tutor;
-                }
-                if (newData.complemento_tutor) {
-                    form.complemento_tutor = newData.complemento_tutor;
-                }
-            }
-        }
-    }, { immediate: true, deep: true });
-    // ============ FIN WATCHERS ============ //
+    // =========================
+    // METHODS
+    // =========================
 
-    // ============ INICIO MÉTODOS ============ //
-    /**
-     * Actualiza un campo del formulario
-     */
-    const updateField = (fieldName, value) => {
-        form[fieldName] = value;
-
-        // Limpiar error del campo si existe
-        if (form.errors[fieldName]) {
-            delete form.errors[fieldName];
-        }
+    const updateField = (field, value) => {
+        form[field] = value;
+        delete form.errors[field];
+        if (field === "observaciones") observacionesTocada.value = true;
     };
 
-    /**
-     * Resetea el formulario
-     */
-    const resetForm = () => {
-        form.reset();
-    };
-    // ============ FIN MÉTODOS ============ //
+    const resetForm = () => form.reset();
+
+    // =========================
+    // RETURN
+    // =========================
 
     return {
         form,
         updateField,
         resetForm,
-        search
+        search,
+        isDirty,
+        resetToInitial,
     };
 }

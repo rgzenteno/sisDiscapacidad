@@ -1,8 +1,10 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue';
-import PrimaryButton from './PrimaryButton.vue';
-import { Link } from '@inertiajs/vue3';
 import { can } from '@/lib/can.ts';
+
+import Modal from "@/components/Modal.vue";
+import Button from "@/components/Button.vue";
+import Icon from "@/components/Icon.vue";
 
 const props = defineProps({
     data: {
@@ -11,11 +13,35 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['close']);
+//console.log(props.data);
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-const getTutor = () => {
-    return props.tutor.filter((t) => t.id_tutor === props.data);
-};
+const getInitials = (nombre, apellido) => {
+    const n = nombre?.charAt(0)?.toUpperCase() ?? ''
+    const a = apellido?.charAt(0)?.toUpperCase() ?? ''
+    return `${n}${a}` || '??'
+}
+
+const toTitleCase = str =>
+    str
+        ? str
+            .toLocaleLowerCase('es')
+            .replace(/(^|\s)\S/g, l => l.toLocaleUpperCase('es'))
+        : ''
+
+const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'No disponible'
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('es-BO', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+}
+
+const emit = defineEmits(['close', 'changeTutor']);
 
 const openWhatsApp = (whatsapp) => {
     const phoneNumber = whatsapp;
@@ -37,10 +63,6 @@ const openGoogleMaps = (direccion) => {
     window.open(url, '_blank');
 };
 
-const getCarnetUrl = (ruta, id) => {
-    return route(ruta, window.btoa(id));
-}
-
 const closeOnEscape = (e) => {
     if (e.key === 'Escape') {
         emit('close');
@@ -52,195 +74,257 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 </script>
 
 <template>
-    <div
-        class="fixed inset-0 bg-slate-900/75 flex items-center justify-center z-50 px-4 py-6 overflow-y-auto backdrop-blur-sm">
-        <div
-            class="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 transform transition-all duration-300">
-            <!-- Modal Header -->
-            <div
-                class="grid grid-cols-[1fr_auto] gap-6 px-6 py-3 border-b border-gray-100 bg-gray-50 dark:bg-gray-700/50 rounded-t-3xl">
-                <!-- Contenido principal -->
-                <div class="min-w-0">
-                    <!-- Fila 1: Avatar/ícono y título -->
-                    <div class="grid grid-cols-[auto_1fr] gap-4 items-center">
-                        <!-- Avatar -->
-                        <div
-                            class="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-md ring-1 ring-indigo-100 flex-shrink-0">
-                            <svg class="w-6 h-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="currentColor"
-                                viewBox="0 0 24 24">
-                                <path fill-rule="evenodd"
-                                    d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2 9a4 4 0 0 0-4 4v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1a4 4 0 0 0-4-4H6Zm7.25-2.095c.478-.86.75-1.85.75-2.905a5.973 5.973 0 0 0-.75-2.906 4 4 0 1 1 0 5.811ZM15.466 20c.34-.588.535-1.271.535-2v-1a5.978 5.978 0 0 0-1.528-4H18a4 4 0 0 1 4 4v1a2 2 0 0 1-2 2h-4.535Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </div>
+    <Modal :showHeader="true" :showFooter="false" maxWidth="max-w-md" @close="$emit('close')">
+        <template #icon>
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center">
+                <Icon :icon-button="true" name="users" class-name="text-white" :size="20" />
+            </div>
+        </template>
+        <template #label1>Tutor del beneficiario</template>
+        <template #label2>Datos de contacto y registro del tutor asignado</template>
 
-                        <!-- Título y subtítulo -->
-                        <div class="min-w-0">
-                            <h2 class="text-2xl font-semibold text-slate-800 dark:text-gray-100 truncate">
-                                Detalles del Tutor
-                            </h2>
-                            <p class="text-sm text-slate-500 truncate">
-                                Información básica del tutor
-                            </p>
+        <!-- Modal Body -->
+        <div class="space-y-2.5">
+            <!-- Avatar + Info del BENEFICIARIO -->
+            <div
+                class="flex items-center gap-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700/40 rounded-xl px-4 py-3">
+                <div
+                    class="w-11 h-11 rounded-full bg-gradient-to-br from-[rgb(var(--brand-500))] to-gray-400 flex items-center justify-center shadow-md flex-shrink-0">
+                    <span class="text-white font-bold text-sm uppercase">
+                        {{ getInitials(props.data.nombre_persona, props.data.apellido_persona) }}
+                    </span>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Beneficiario</p>
+                    <p class="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">
+                        {{ toTitleCase(props.data.nombre_persona) }}
+                        {{ toTitleCase(props.data.apellido_persona) }}
+                    </p>
+                    <p class="text-xs text-indigo-500 dark:text-indigo-300">
+                        CI: {{ props.data.ci_persona }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Separador: Detalles del tutor -->
+            <div class="flex items-center gap-2 my-6">
+                <div class="flex-1 h-px bg-gradient-to-r from-transparent via-gray-500 to-transparent">
+                </div>
+                <div class="flex items-center justify-center">
+                    <span class="text-sm text-slate-400">Detalles del tutor</span>
+                </div>
+                <div class="flex-1 h-px bg-gradient-to-r from-transparent via-gray-500 to-transparent">
+                </div>
+            </div>
+
+            <!-- CASO: tutor propio -->
+            <template v-if="props.data.es_propio">
+                <div
+                    class="flex flex-col items-center gap-3 bg-[rgb(var(--brand-50))] dark:bg-[rgba(var(--brand-900),0.2)] border border-[rgb(var(--brand-200))] dark:border-[rgba(var(--brand-700),0.4)] rounded-xl px-4 py-6 text-center">
+                    <div
+                        class="w-12 h-12 rounded-full flex items-center justify-center">
+                        <Icon :icon-button="true" name="users" class-name="text-gray-600" :size="32" :height="32" />
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-slate-700 dark:text-slate-200">Tutor Propio</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
+                            Este beneficiario actúa como su propio tutor. Los datos de contacto del tutor no están
+                            disponibles.
+                        </p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- CASO: tutor normal -->
+            <template v-else>
+                <div
+                    class="flex items-center gap-3 bg-[rgb(var(--brand-50))] dark:bg-[rgba(var(--brand-900),0.2)] border border-[rgb(var(--brand-200))] dark:border-[rgba(var(--brand-700),0.4)] rounded-xl px-4 py-3">
+                    <div
+                        class="w-11 h-11 rounded-full bg-gradient-to-br from-[rgb(var(--brand-500))] to-teal-400 flex items-center justify-center shadow-md flex-shrink-0">
+                        <span class="text-white font-bold text-sm uppercase">
+                            {{ getInitials(props.data.tutor?.nombre_tutor, props.data.tutor?.apellido_tutor) }}
+                        </span>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Tutor responsable</p>
+                        <p class="text-sm font-bold text-slate-700 dark:text-slate-200 capitalize truncate">
+                            {{ toTitleCase(props.data.tutor?.nombre_tutor) }}
+                            {{ toTitleCase(props.data.tutor?.apellido_tutor) }}
+                        </p>
+                        <p class="text-xs text-[rgb(var(--brand-500))] dark:text-[rgb(var(--brand-300))]">
+                            CI: {{ props.data.tutor?.ci_tutor }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Métricas: tutorados totales y activos -->
+                <!-- <div class="grid grid-cols-2 gap-2.5">
+                <div
+                    class="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-600/40">
+                    <p class="text-xs text-slate-500 mb-1">Tutorados</p>
+                    <p class="text-2xl font-bold text-slate-700 dark:text-slate-200">
+                        {{ props.data.total_tutorados ?? 0 }}
+                    </p>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">en total</p>
+                </div>
+                <div
+                    class="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-600/40">
+                    <p class="text-xs text-slate-500 mb-1">Activos</p>
+                    <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                        {{ props.data.tutorados_activos ?? 0 }}
+                    </p>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">tutorados activos</p>
+                </div>
+            </div> -->
+
+                <!-- Contacto: teléfono y email -->
+                <div class="grid grid-cols-2 gap-2.5">
+
+                    <!-- Teléfono -->
+                    <div
+                        class="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-600/40">
+                        <p class="text-xs text-slate-500 mb-1.5">Teléfono</p>
+                        <div class="flex items-center justify-between gap-2">
+                            <span v-if="props.data.tutor?.telefono"
+                                class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+                                {{ props.data.tutor.telefono }}
+                            </span>
+                            <span v-else class="text-xs text-red-400 italic">no disponible</span>
+                            <button v-if="props.data.tutor?.telefono" @click="openWhatsApp(props.data.tutor.telefono)"
+                                class="text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-md p-0.5 transition-colors flex-shrink-0"
+                                title="Abrir WhatsApp">
+                                <svg class="w-5 h-5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 24 24" fill="none">
+                                    <path fill="currentColor" fill-rule="evenodd"
+                                        d="M12 4a8 8 0 0 0-6.895 12.06l.569.718-.697 2.359 2.32-.648.379.243A8 8 0 1 0 12 4ZM2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10a9.96 9.96 0 0 1-5.016-1.347l-4.948 1.382 1.426-4.829-.006-.007-.033-.055A9.958 9.958 0 0 1 2 12Z"
+                                        clip-rule="evenodd" />
+                                    <path fill="currentColor"
+                                        d="M16.735 13.492c-.038-.018-1.497-.736-1.756-.83a1.008 1.008 0 0 0-.34-.075c-.196 0-.362.098-.49.291-.146.217-.587.732-.723.886-.018.02-.042.045-.057.045-.013 0-.239-.093-.307-.123-1.564-.68-2.751-2.313-2.914-2.589-.023-.04-.024-.057-.024-.057.005-.021.058-.074.085-.101.08-.079.166-.182.249-.283l.117-.14c.121-.14.175-.25.237-.375l.033-.066a.68.68 0 0 0-.02-.64c-.034-.069-.65-1.555-.715-1.711-.158-.377-.366-.552-.655-.552-.027 0 0 0-.112.005-.137.005-.883.104-1.213.311-.35.22-.94.924-.94 2.16 0 1.112.705 2.162 1.008 2.561l.041.06c1.161 1.695 2.608 2.951 4.074 3.537 1.412.564 2.081.63 2.461.63.16 0 .288-.013.4-.024l.072-.007c.488-.043 1.56-.599 1.804-1.276.192-.534.243-1.117.115-1.329-.088-.144-.239-.216-.43-.308Z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Email -->
+                    <div
+                        class="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-600/40">
+                        <p class="text-xs text-slate-500 mb-1.5">Email</p>
+                        <div class="flex items-center justify-between gap-2">
+                            <span v-if="props.data.tutor?.email"
+                                class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
+                                {{ props.data.tutor.email }}
+                            </span>
+                            <span v-else class="text-xs text-red-400 italic">no disponible</span>
+                            <button v-if="props.data.tutor?.email" @click="openEmail(props.data.tutor.email)"
+                                class="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md p-0.5 transition-colors flex-shrink-0"
+                                title="Enviar email">
+                                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M20 4H4c-1.103 0-2 .897-2 2v12c0 1.103.897 2 2 2h16c1.103 0 2-.897 2-2V6c0-1.103-.897-2-2-2zm0 2v.511l-8 6.223-8-6.222V6h16zM4 18V9.044l7.386 5.745a.994.994 0 0 0 1.228 0L20 9.044 20.002 18H4z" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Acciones -->
-                <div class="flex items-start gap-3 flex-shrink-0">
-                    <button type="button" @click="$emit('close')"
-                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
-                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 6l12 12M6 18L18 6" />
+                <!-- Dirección -->
+                <div
+                    class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-600/40">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <svg class="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <div class="min-w-0">
+                            <p class="text-xs text-slate-500">Dirección</p>
+                            <span v-if="props.data.tutor?.direccion"
+                                class="text-xs font-semibold text-slate-700 dark:text-slate-200 capitalize truncate block">
+                                {{ props.data.tutor.direccion }}
+                            </span>
+                            <span v-else class="text-xs text-red-400 italic">no disponible</span>
+                        </div>
+                    </div>
+                    <button v-if="props.data.tutor?.direccion" @click="openGoogleMaps(props.data.tutor.direccion)"
+                        class="text-[rgb(var(--brand-500))] hover:bg-[rgb(var(--brand-100))] dark:hover:bg-[rgba(var(--brand-900),0.3)] rounded-md p-0.5 transition-colors flex-shrink-0 ml-2"
+                        title="Abrir en Google Maps">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
                     </button>
                 </div>
-            </div>
 
-            <!-- Modal Body -->
-            <div class="p-4 space-y-3">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <!-- Personal Information -->
-                    <div class="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
-                        <h3
-                            class="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center space-x-2">
-                            <svg class="w-6 h-6 text-blue-600 dark:text-white" aria-hidden="true"
-                                xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                viewBox="0 0 24 24">
-                                <path fill-rule="evenodd"
-                                    d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2 9a4 4 0 0 0-4 4v1a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1a4 4 0 0 0-4-4h-4Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                            <span>Información Personal</span>
-                        </h3>
-                        <div class="space-y-2">
-                            <div class="flex items-center space-x-2 p-2 bg-white dark:bg-gray-800 rounded-lg text-sm">
-                                <span class="text-gray-700 dark:text-gray-300 font-medium min-w-[4.5rem]">Nombre:</span>
-                                <span class="text-gray-600 dark:text-gray-400 capitalize truncate">{{
-                                    props.data.tutor?.nombre_tutor }}</span>
-                            </div>
-                            <div class="flex items-center space-x-2 p-2 bg-white dark:bg-gray-800 rounded-lg text-sm">
-                                <span
-                                    class="text-gray-700 dark:text-gray-300 font-medium min-w-[4.5rem]">Apellidos:</span>
-                                <span class="text-gray-600 dark:text-gray-400 capitalize truncate">{{
-                                    props.data.tutor?.apellido_tutor }}</span>
-                            </div>
-                            <div class="flex items-center space-x-2 p-2 bg-white dark:bg-gray-800 rounded-lg text-sm">
-                                <span class="text-gray-700 dark:text-gray-300 font-medium min-w-[4.5rem]">C.I.:</span>
-                                <span class="text-gray-600 dark:text-gray-400">{{ props.data.tutor?.ci_tutor }}</span>
-                            </div>
-                        </div>
+                <!-- Fecha de registro -->
+                <div
+                    class="flex items-center gap-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-600/40">
+                    <svg class="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <div>
+                        <p class="text-xs text-slate-500">Fecha de registro</p>
+                        <p class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            {{ formatDateTime(props.data.tutor?.fecha_registro) }}
+                        </p>
                     </div>
+                </div>
 
-                    <!-- Contact Information -->
-                    <div class="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg">
-                        <h3
-                            class="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center space-x-2">
-                            <svg class="w-6 h-6 text-blue-600" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
-                                width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    d="M7.978 4a2.553 2.553 0 0 0-1.926.877C4.233 6.7 3.699 8.751 4.153 10.814c.44 1.995 1.778 3.893 3.456 5.572 1.68 1.679 3.577 3.018 5.57 3.459 2.062.456 4.115-.073 5.94-1.885a2.556 2.556 0 0 0 .001-3.861l-1.21-1.21a2.689 2.689 0 0 0-3.802 0l-.617.618a.806.806 0 0 1-1.14 0l-1.854-1.855a.807.807 0 0 1 0-1.14l.618-.62a2.692 2.692 0 0 0 0-3.803l-1.21-1.211A2.555 2.555 0 0 0 7.978 4Z" />
-                            </svg>
-                            <span>Información de Contacto</span>
-                        </h3>
-                        <div class="space-y-2">
-                            <div class="p-2 bg-white dark:bg-gray-800 rounded-lg">
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center space-x-2 min-w-0 flex-1">
-                                        <span
-                                            class="text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">Teléfono:</span>
-                                        <span class="truncate">
-                                            <span v-if="props.data.tutor?.telefono"
-                                                class="text-gray-600 dark:text-gray-400">{{ props.data.tutor?.telefono
-                                                }}</span>
-                                            <span v-else class="text-red-500 dark:text-red-400 italic">no
-                                                disponible</span>
-                                        </span>
-                                    </div>
-                                    <a v-if="props.data.tutor?.telefono"
-                                        @click="openWhatsApp(props.data.tutor?.telefono)"
-                                        class="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors duration-200 flex-shrink-0 ml-2">
-                                        <svg class="cursor-pointer w-5 h-5 text-green-600 dark:text-white"
-                                            aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                                            fill="none">
-                                            <path fill="currentColor" fill-rule="evenodd"
-                                                d="M12 4a8 8 0 0 0-6.895 12.06l.569.718-.697 2.359 2.32-.648.379.243A8 8 0 1 0 12 4ZM2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10a9.96 9.96 0 0 1-5.016-1.347l-4.948 1.382 1.426-4.829-.006-.007-.033-.055A9.958 9.958 0 0 1 2 12Z"
-                                                clip-rule="evenodd" />
-                                            <path fill="currentColor"
-                                                d="M16.735 13.492c-.038-.018-1.497-.736-1.756-.83a1.008 1.008 0 0 0-.34-.075c-.196 0-.362.098-.49.291-.146.217-.587.732-.723.886-.018.02-.042.045-.057.045-.013 0-.239-.093-.307-.123-1.564-.68-2.751-2.313-2.914-2.589-.023-.04-.024-.057-.024-.057.005-.021.058-.074.085-.101.08-.079.166-.182.249-.283l.117-.14c.121-.14.175-.25.237-.375l.033-.066a.68.68 0 0 0-.02-.64c-.034-.069-.65-1.555-.715-1.711-.158-.377-.366-.552-.655-.552-.027 0 0 0-.112.005-.137.005-.883.104-1.213.311-.35.22-.94.924-.94 2.16 0 1.112.705 2.162 1.008 2.561l.041.06c1.161 1.695 2.608 2.951 4.074 3.537 1.412.564 2.081.63 2.461.63.16 0 .288-.013.4-.024l.072-.007c.488-.043 1.56-.599 1.804-1.276.192-.534.243-1.117.115-1.329-.088-.144-.239-.216-.43-.308Z" />
-                                        </svg>
-                                    </a>
+                <!-- Cambio de tutor (opcional) -->
+                <div v-if="props.data.tutor_anterior"
+                    class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-xl px-4 py-3">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Cambio de tutor</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                                Este tutorado fue reasignado. El tutor anterior fue:
+                            </p>
+                            <div
+                                class="flex items-center gap-2.5 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 border border-amber-100 dark:border-amber-800/40">
+                                <div
+                                    class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-xs font-bold text-gray-600 dark:text-gray-300 flex-shrink-0 uppercase">
+                                    {{ getInitials(props.data.tutor_anterior?.nombre_tutor,
+                                        props.data.tutor_anterior?.apellido_tutor) }}
                                 </div>
-                            </div>
-                            <div class="p-2 bg-white dark:bg-gray-800 rounded-lg">
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center space-x-2 min-w-0 flex-1">
-                                        <span
-                                            class="text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">Email:</span>
-                                        <span class="truncate">
-                                            <span v-if="props.data.tutor?.email"
-                                                class="text-gray-600 dark:text-gray-400">{{ props.data.tutor?.email
-                                                }}</span>
-                                            <span v-else class="text-red-500 dark:text-red-400 italic">no
-                                                disponible</span>
-                                        </span>
-                                    </div>
-                                    <a v-if="props.data.tutor?.email" @click="openEmail(props.data.tutor?.email)"
-                                        class="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-200 flex-shrink-0 ml-2">
-                                        <svg class="cursor-pointer w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                                            <path
-                                                d="M20 4H4c-1.103 0-2 .897-2 2v12c0 1.103.897 2 2 2h16c1.103 0 2-.897 2-2V6c0-1.103-.897-2-2-2zm0 2v.511l-8 6.223-8-6.222V6h16zM4 18V9.044l7.386 5.745a.994.994 0 0 0 1.228 0L20 9.044 20.002 18H4z" />
-                                        </svg>
-                                    </a>
-                                </div>
-                            </div>
-                            <!-- Address section with button -->
-                            <div class="p-2 bg-white dark:bg-gray-800 rounded-lg">
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center space-x-2 min-w-0 flex-1">
-                                        <span
-                                            class="text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">Dirección:</span>
-                                        <span class="truncate">
-                                            <span v-if="props.data.tutor?.direccion"
-                                                class="text-gray-600 dark:text-gray-400 capitalize">{{
-                                                props.data.tutor?.direccion }}</span>
-                                            <span v-else class="text-red-500 dark:text-red-400 italic">No
-                                                disponible</span>
-                                        </span>
-                                    </div>
-                                    <a v-if="props.data.tutor?.direccion"
-                                        @click="openGoogleMaps(props.data.tutor?.direccion)"
-                                        class="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors duration-200 flex-shrink-0 ml-2"
-                                        title="Abrir en Google Maps">
-                                        <svg class="cursor-pointer w-5 h-5" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                    </a>
+                                <div class="min-w-0">
+                                    <p
+                                        class="text-sm font-semibold text-slate-700 dark:text-slate-200 capitalize truncate">
+                                        {{ toTitleCase(props.data.tutor_anterior?.nombre_tutor) }}
+                                        {{ toTitleCase(props.data.tutor_anterior?.apellido_tutor) }}
+                                    </p>
+                                    <p class="text-xs text-slate-400">Tutor anterior</p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Modal Footer -->
-            <div
-                class="flex justify-end px-6 py-4 border-t dark:border-gray-600/50 rounded-b-3xl bg-gray-50 dark:bg-gray-700/50">
-                <Link v-if="can('tutorados-tutor')" :href="getCarnetUrl('tutor.tutorados', props.data.id_tutor)"
-                    class="px-4 py-2 border  text-white bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors duration-200 focus:ring-4 focus:ring-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800">
-                    Ver Tutorados
-                </Link>
-                <button @click="$emit('close')"
-                    class="ms-2 px-6 py-2 border border-gray-400 text-gray-600 bg-white hover:bg-gray-50 rounded-lg text-sm font-medium transition-colors duration-200 focus:ring-4 focus:ring-blue-300 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800">
-                    Cerrar
-                </button>
-            </div>
+            </template>
         </div>
-    </div>
+
+        <!-- Footer -->
+        <template #footer>
+            <div class="sm:px-5 border-t border-gray-100 dark:border-gray-700/50 py-5">
+                <div class="flex justify-center sm:justify-end gap-2">
+                    <Button @click="$emit('close')"
+                        :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border border-gray-200'"
+                        class="text-slate-700 bg-slate-100 hover:bg-slate-200">
+                        Aceptar
+                    </Button>
+                    <Button v-if="can('tutorados-tutor')" @click="$emit('changeTutor')"
+                        :style="'py-3 px-4 sm:px-6 sm:py-2.5 rounded-xl'"
+                        class="text-white bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))]">
+                        <span>Cambiar de Tutor</span>
+                    </Button>
+                </div>
+            </div>
+        </template>
+    </Modal>
 </template>

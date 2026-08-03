@@ -14,8 +14,8 @@ return new class extends Migration {
             $table->increments('id_carnet');
             $table->string('doc', 50);
             $table->string('discapacidad', 50);
-            $table->date('fecha_emision')->nullable();        // Cambiado a date
-            $table->date('fecha_vencimiento');    // Cambiado a date
+            $table->date('fecha_emision')->nullable();
+            $table->date('fecha_vencimiento');
             $table->uuid('id_persona');
             $table->foreign('id_persona')
                 ->references('id_persona')
@@ -24,13 +24,11 @@ return new class extends Migration {
                 ->onUpdate('cascade');
             $table->timestamps();
 
-            // Agregamos el índice recomendado
-            // Índices recomendados:
-            $table->index('id_persona');          // ⭐ Para JOINs con persona
-            $table->index('discapacidad');        // Para filtrar por tipo
-            $table->index('fecha_emision');       // Para ordenar por fecha
-// fecha_vencimiento ya lo tienes, perfecto
-            $table->unique('id_persona');         // ⭐ Solo un carnet por persona
+            // Índices:
+            $table->index('id_persona');
+            $table->index('discapacidad');
+            $table->index('fecha_emision');
+            $table->unique('id_persona');
             $table->index('fecha_vencimiento');
         });
     }

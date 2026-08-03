@@ -1,18 +1,21 @@
 <?php
 
 use App\Http\Controllers\CarnetController;
+use App\Http\Controllers\ConfiguracionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DigitalSignatureController;
 use App\Http\Controllers\DropDownController;
 use App\Http\Controllers\GestionController;
 use App\Http\Controllers\HabilitadoController;
 use App\Http\Controllers\LogController;
-use App\Http\Controllers\NombreController;
 use App\Http\Controllers\PagoController;
+use App\Http\Controllers\PagoSuspendidoController;
+use App\Http\Controllers\PresupuestoController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PersonaController;
 use App\Http\Controllers\RegistroGeneralController;
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\RetroactivoController;
 use App\Http\Controllers\TutorController;
 use App\Http\Controllers\UserController;
 use Illuminate\Foundation\Application;
@@ -62,20 +65,70 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('permission:gestion')
             ->name('gestion.index');
         Route::get('reporte', [GestionController::class, 'reporte'])
-            ->middleware('reporte-gestion')
+            ->middleware('permission:reporte-gestion')
             ->name('gestion.reporte');
+        Route::get('diciembre-prestado/{año}', [GestionController::class, 'getDiciembrePrestado'])
+            ->middleware('permission:reporte-gestion')
+            ->name('gestion.diciembrePrestado');
+        Route::get('mes/{idMes}/personas', [GestionController::class, 'personasPorMes'])
+            ->middleware('permission:gestion')
+            ->name('gestion.mes.personas');
+        Route::post('reporte-mes/excel', [GestionController::class, 'exportReporteMesExcel'])
+            ->middleware('permission:reporte-mes')
+            ->name('gestion.reporteMes.excel');
+        Route::post('reporte-arqueo-general/excel', [GestionController::class, 'exportReporteArqueoGeneralExcel'])
+            ->middleware('permission:reporte-gestion')
+            ->name('gestion.reporteArqueoGeneral.excel');
         Route::post('store', [GestionController::class, 'store'])
             ->middleware('permission:agregar-gestion')
             ->name('gestion.store');
         Route::post('addMes', [GestionController::class, 'addMes'])
             ->middleware('permission:agregar-mes')
             ->name('gestion.addMes');
+        Route::post('mes/preview', [GestionController::class, 'previsualizarMes'])
+            ->middleware('permission:agregar-mes')
+            ->name('gestion.mes.preview');
         Route::put('{id}', [GestionController::class, 'update'])
             ->middleware('permission:editar-gestion')
             ->name('gestion.update');
         Route::put('mes/{id}', [GestionController::class, 'updateMes'])
             ->middleware('permission:editar-mes')
             ->name('gestion.updateMes');
+        Route::get('retroactivo/estado', [RetroactivoController::class, 'estado'])
+            ->middleware('permission:agregar-mes')
+            ->name('gestion.retroactivo.estado');
+        Route::get('retroactivo/detalle', [RetroactivoController::class, 'detalle'])
+            ->middleware('permission:agregar-mes')
+            ->name('gestion.retroactivo.detalle');
+        Route::post('retroactivo/preview', [RetroactivoController::class, 'preview'])
+            ->middleware('permission:agregar-mes')
+            ->name('gestion.retroactivo.preview');
+        Route::post('retroactivo/store', [RetroactivoController::class, 'store'])
+            ->middleware('permission:agregar-mes')
+            ->name('gestion.retroactivo.store');
+        Route::post('retroactivo/toggle', [RetroactivoController::class, 'toggle'])
+            ->middleware('permission:superusuario')
+            ->name('gestion.retroactivo.toggle');
+        Route::post('{id}/cerrar-caja', [GestionController::class, 'cerrarCaja'])
+            ->middleware('permission:superusuario')
+            ->name('gestion.cerrarCaja');
+    });
+
+    // Presupuesto por usuario/cajero y mes (informativo — ver Asignado/Restante
+    // en BandejaPagos/index.vue tab Resumen General)
+    Route::prefix('presupuesto')->group(function () {
+        Route::get('index', [PresupuestoController::class, 'index'])
+            ->middleware('permission:presupuesto')
+            ->name('presupuesto.index');
+        Route::post('store', [PresupuestoController::class, 'store'])
+            ->middleware('permission:agregar-presupuesto')
+            ->name('presupuesto.store');
+        Route::put('{id}', [PresupuestoController::class, 'update'])
+            ->middleware('permission:editar-presupuesto')
+            ->name('presupuesto.update');
+        Route::delete('{id}', [PresupuestoController::class, 'destroy'])
+            ->middleware('permission:eliminar-presupuesto')
+            ->name('presupuesto.destroy');
     });
 
     // Registro General
@@ -123,28 +176,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('permission:reporte-beneficiario')
             ->name('persona.reporte');
 
+        Route::post('reporte/excel', [PersonaController::class, 'exportReporteBeneficiarioExcel'])
+            ->middleware('permission:reporte-beneficiario')
+            ->name('persona.reporte.excel');
+
         Route::get('showHabilitado/{id}', [HabilitadoController::class, 'showHabilitado'])
             ->middleware('permission:pago')
             ->name('persona.showHabilitado');
 
-        Route::delete('persona/estado/{id}', [PersonaController::class, 'destroyEstado'])
+        Route::put('estado/{id}', [PersonaController::class, 'updateEstado'])
+            ->middleware('permission:agregar-estado')
+            ->name('persona.estado.update');
+
+        Route::put('estado/{id}/observacion', [PersonaController::class, 'updateObservacionEstado'])
+            ->middleware('permission:agregar-estado')
+            ->name('persona.estado.observacion');
+
+        Route::delete('estado/{id}', [PersonaController::class, 'destroyEstado'])
             ->middleware('permission:eliminar-estado')
             ->name('persona.estado.eliminar');
 
-        /*
-        Route::get('importar', [PersonaController::class, 'mostrarFormulario'])
-            ->middleware('permission:importar-personas')
-            ->name('persona.importar');
+        Route::post('estado/intermedio', [PersonaController::class, 'insertarEstadoIntermedio'])
+            ->middleware('permission:agregar-estado')
+            ->name('persona.estado.intermedio');
 
-        Route::get('reporteGeneral', [PersonaController::class, 'reporteGeneral'])
-            ->middleware('permission:reporte-general-personas')
-            ->name('persona.reporteGeneral');
-        Route::post('importar', [PersonaController::class, 'importar'])
-            ->middleware('permission:importar-personas')
-            ->name('persona.importar.store');
-        Route::delete('{id}', [PersonaController::class, 'destroy'])
-            ->middleware('permission:eliminar-personas')
-            ->name('persona.destroy'); */
+        Route::delete('clear-tutor-session', [PersonaController::class, 'clearTutorSession'])
+            ->name('persona.clearTutorSession');
     });
 
     // Tutor
@@ -177,6 +234,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('sistem.config');
     }); */
 
+    // Configuración de logos institucionales (sacaba.png / sigamos.png),
+    // usados en todos los reportes PDF/Excel — solo superusuario.
+    Route::prefix('configuracion')->middleware('permission:superusuario')->group(function () {
+        Route::get('/', [ConfiguracionController::class, 'index'])
+            ->name('configuracion.index');
+        Route::post('logo', [ConfiguracionController::class, 'update'])
+            ->name('configuracion.logo.update');
+        Route::post('parametro/{parametro}', [ConfiguracionController::class, 'actualizarParametro'])
+            ->name('configuracion.parametro.update');
+    });
+
     // Carnet
     Route::prefix('carnet')->group(function () {
         Route::post('store', [CarnetController::class, 'store'])
@@ -192,7 +260,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('show/{id?}', [HabilitadoController::class, 'show'])
             ->middleware('permission:habilitar')
             ->name('persona.show');
-        Route::get('show', [HabilitadoController::class, 'show'])
+
+        /* Route::get('show', [HabilitadoController::class, 'show'])
+            ->name('habilitado.show'); */
+
+        Route::get('/habilitados/{id}', [HabilitadoController::class, 'show'])
             ->middleware('permission:habilitar')
             ->name('habilitado.show');
 
@@ -219,7 +291,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Pago
     Route::prefix('pago')->group(function () {
         Route::get('reporteLog', [PagoController::class, 'reporteLog'])
-            ->middleware('permission:reporteGestion-gestion')
+            /* ->middleware('permission:reporteGestion-gestion') */
             ->name('pago.reporteLog');
         Route::post('store', [PagoController::class, 'store'])
             ->middleware('permission:registrar-pago')
@@ -228,28 +300,60 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('permission:registrar-pago')
             ->name('pago.comp');
 
-        /*  Route::get('index', [PagoController::class, 'index'])
-            ->middleware('permission:pago')
-            ->name('pago.index');
-        Route::get('show/{id}', [PagoController::class, 'show'])
-            ->middleware('permission:ver-pagos')
-            ->name('pago.show');
-        Route::get('reporte', [PagoController::class, 'reporte'])
-            ->middleware('permission:reporte-pagos')
-            ->name('pago.reporte');
-        Route::get('reportePago', [PagoController::class, 'reportePago'])
-            ->middleware('permission:reporte-pagos')
-            ->name('pago.reportePago');
-        Route::get('transferencia', [PagoController::class, 'transferencia'])
-            ->middleware('permission:gestionar-transferencias')
-            ->name('pago.transferencia'); */
+        Route::patch('pagos/{pago}/anular', [PagoController::class, 'anular'])
+            ->middleware('permission:anular-pago')
+            ->name('pagos.anular');
+
+        Route::patch('pagos/{pago}/reactivar', [PagoController::class, 'reactivar'])
+            ->middleware('permission:superusuario')
+            ->name('pagos.reactivar');
+
+        Route::get('bandeja', [PagoController::class, 'bandejaPago'])
+            ->name('bandeja.index');
+        Route::post('bandeja/no-pagados/excel', [PagoController::class, 'exportNoPagadosExcel'])
+            ->name('bandeja.noPagados.excel');
+        Route::post('bandeja/bajas/excel', [PagoController::class, 'exportBajasExcel'])
+            ->name('bandeja.bajas.excel');
+        Route::post('bandeja/individual/excel', [PagoController::class, 'exportPagosIndividualExcel'])
+            ->name('bandeja.individual.excel');
+        Route::post('bandeja/todos/excel', [PagoController::class, 'exportPagosTodosExcel'])
+            ->name('bandeja.todos.excel');
+        Route::post('bandeja/resumen/excel', [PagoController::class, 'exportResumenGeneralExcel'])
+            ->name('bandeja.resumen.excel');
+        Route::post('bandeja/arqueo/excel', [PagoController::class, 'exportArqueoCajaExcel'])
+            ->name('bandeja.arqueo.excel');
+
+        Route::get('bandejaReporteLog', [PagoController::class, 'bandejaReporteLog'])
+            ->name('bandeja.reporteLog');
+        Route::post('descargar-boleta', [PagoController::class, 'descargarBoleta'])
+            /* ->middleware('permission:comprobante-pago') */
+            ->name('pago.descargarBoleta');
+
+        Route::post('imprimir-boleta', [PagoController::class, 'imprimirBoleta'])
+            ->name('pago.imprimirBoleta');
+
+        Route::delete('descargar-boleta/{idPago}', [PagoController::class, 'resetearDescarga'])
+            ->middleware('permission:superusuario')
+            ->name('pago.resetearDescarga');
+    });
+
+    // Suspensión de pagos — decisión interna de UMADIS, independiente de
+    // historial_estados (ver Persona/listaHabilitados.vue)
+    Route::prefix('pago-suspendido')->group(function () {
+        Route::post('store', [PagoSuspendidoController::class, 'store'])
+            ->middleware('permission:suspender-pago')
+            ->name('pagoSuspendido.store');
+
+        Route::delete('{pagoSuspendido}', [PagoSuspendidoController::class, 'destroy'])
+            ->middleware('permission:suspender-pago')
+            ->name('pagoSuspendido.destroy');
     });
 
     // Reporte
     Route::prefix('reporte')->group(function () {
         Route::get('index', [ReporteController::class, 'index'])
-            ->middleware('permission:ver-reportes')
-            ->name('reporte.index');
+            /* ->middleware('permission:ver-reportes') */
+            ->name('reportes.index');
     });
 
     Route::get('/reporte/buscar', [ReporteController::class, 'buscar'])

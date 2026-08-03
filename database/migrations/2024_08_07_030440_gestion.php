@@ -17,7 +17,7 @@ return new class extends Migration {
             $table->timestamps();
 
             // Índices recomendados:
-            $table->index('gestion');  // Para búsquedas rápidas por año
+            $table->index('gestion');
         });
     }
 

@@ -2,19 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class Gestion extends Model
+class Gestion extends BaseModel
 {
-    // Nombre de la tabla asociada
     protected $table = 'gestion';
-    // Clave primaria personalizada
     protected $primaryKey = 'id_gestion';
 
-    // Campos asignables masivamente
     protected $fillable = [
         'gestion',
         'presupuesto_anual',
+        'retroactivos_habilitado',
+        'caja_cerrada',
+        'fecha_cierre_caja',
+    ];
+
+    protected $casts = [
+        'retroactivos_habilitado' => 'boolean',
+        'caja_cerrada' => 'boolean',
+        'fecha_cierre_caja' => 'datetime',
     ];
 
     // ============ RELACIONES ============//
@@ -26,5 +30,12 @@ class Gestion extends Model
     public function habilitados()
     {
         return $this->hasMany(Habilitado::class, 'id_gestion');
+    }
+
+    // ============ CIERRE DE CAJA ============ //
+
+    public function estaCerrada(): bool
+    {
+        return (bool) $this->caja_cerrada;
     }
 }

@@ -123,6 +123,18 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        // Log de tiempos de consultas puntuales que sabemos que podrían
+        // degradarse con el crecimiento de datos (ver GestionController::
+        // personasPorMes) — archivo propio, sin rotación/borrado automático
+        // (a diferencia de 'daily'), para poder comparar duración de hoy
+        // contra la de dentro de 1-2 años sin perder el historial.
+        'performance' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/performance.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'replace_placeholders' => true,
+        ],
+
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],

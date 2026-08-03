@@ -33,16 +33,16 @@ const form = useForm({
             </h2>
 
             <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                Actualice la información de perfil y la dirección de correo electrónico de su cuenta.
+                Actualice la información de perfil y el usuario de su cuenta.
             </p>
         </header>
 
-        <form @submit.prevent="form.patch(route('profile.update'))" class="mt-6 space-y-6">
+        <form @submit.prevent="form.patch(route('profile.update'))" class="mt-5 space-y-2 sm:space-y-6">
             <div>
                 <InputLabel for="name" value="Nombre" />
 
                 <TextInput id="name" type="text" class="capitalize mt-1 block w-full" v-model="form.nombre" required
-                    autofocus autocomplete="name" />
+                    autocomplete="name" />
 
                 <InputError class="mt-2" :message="form.errors.nombre" />
             </div>
@@ -50,8 +50,8 @@ const form = useForm({
             <div>
                 <InputLabel for="apellido" value="Apellidos" />
 
-                <TextInput id="apellido" type="text" class="capitalize mt-1 block w-full" v-model="form.apellido" required
-                    autocomplete="apellido" />
+                <TextInput id="apellido" type="text" class="capitalize mt-1 block w-full" v-model="form.apellido"
+                    required autocomplete="apellido" />
 
                 <InputError class="mt-2" :message="form.errors.nombre" />
             </div>
@@ -90,7 +90,7 @@ const form = useForm({
             </div>
 
             <div class="flex items-center gap-4">
-                <Button :disabled="form.processing" class="text-white bg-blue-600 hover:bg-blue-500">
+                <Button :disabled="form.processing" class="text-white bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))]">
                     Guardar
                 </Button>
 

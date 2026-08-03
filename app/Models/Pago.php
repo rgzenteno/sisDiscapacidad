@@ -5,7 +5,7 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
-class Pago extends Model
+class Pago extends BaseModel
 {
     // Nombre de la tabla asociada
     protected $table = 'pago';
@@ -22,19 +22,10 @@ class Pago extends Model
         'numero_boleta',
         'tipo_pago',
         'id_habilitado',
+        'id',
     ];
 
-    public function setCreatedAtAttribute($value)
-    {
-        date_default_timezone_set('America/La_Paz');
-        $this->attributes["created_at"] = Carbon::now();
-    }
-
-    public function setUpdatedAtAttribute($value)
-    {
-        date_default_timezone_set('America/La_Paz');
-        $this->attributes["updated_at"] = Carbon::now();
-    }
+    
 
     // Habilitar timestamps
     public $timestamps = true;
@@ -45,10 +36,19 @@ class Pago extends Model
     // Tipo de dato de la clave primaria
     protected $keyType = 'int';
 
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'id', 'id');
+    }
+
     // Relaciones
     public function habilitado()
     {
         return $this->belongsTo(Habilitado::class, 'id_habilitado', 'id_habilitado');
     }
 
+    public function anulacion()
+    {
+        return $this->hasOne(PagoAnulacion::class, 'id_pago', 'id_pago');
+    }
 }

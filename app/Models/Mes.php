@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Mes extends Model
+class Mes extends BaseModel
 {
     // Nombre de la tabla asociada
     protected $table = 'mes';
@@ -16,7 +16,15 @@ class Mes extends Model
         'mes',
         'monto',
         'presupuesto',
-        'id_gestion'
+        'id_gestion',
+        'es_retroactivo',
+        'mes_original',
+        'sin_retroactivo',
+    ];
+
+    protected $casts = [
+        'es_retroactivo' => 'boolean',
+        'sin_retroactivo' => 'boolean',
     ];
 
     // ============ RELACIONES ============//

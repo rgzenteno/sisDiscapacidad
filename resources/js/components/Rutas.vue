@@ -1,5 +1,5 @@
 <template>
-    <nav v-if="label1" class="flex pl-1 mr-3" aria-label="Breadcrumb">
+    <nav v-if="label1" class="flex" aria-label="Breadcrumb">
         <ol class="inline-flex items-center space-x-1 rtl:space-x-reverse">
             <li class="inline-flex items-center">
                 <a @click="handleNavigation(label1)"

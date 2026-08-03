@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Parametro;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -24,6 +25,21 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $request->user()
                     ? $request->user()->getAllPermissions()->pluck('name')
                     : [],
+                // Aparte de los permisos: algunas validaciones (ej. tocar
+                // estados anteriores al mes vigente) tienen que basarse en el
+                // rol/jerarquía real, no en un permiso que podría estar mal
+                // asignado a otro rol.
+                'roles' => $request->user()
+                    ? $request->user()->getRoleNames()
+                    : [],
+            ],
+            // Compartido globalmente (incluye páginas de invitado como
+            // Login/Register) para que el frontend derive de acá todos los
+            // tonos de la interfaz — ver resources/js/composables/useColorSistema.js.
+            // Fallback al azul actual mientras el superusuario no lo configure
+            // en Configuración (Parametro "Color - Sistema").
+            'sistema' => [
+                'color' => Parametro::valorDe('Color - Sistema') ?? '#285FC6',
             ],
             'flash' => [
                 'message' => $request->session()->get('message'),

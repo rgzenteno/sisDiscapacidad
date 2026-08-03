@@ -1,5 +1,8 @@
 <script setup>
-// ============ INICIO PROPS ============ //
+
+// ============================================================================
+// PROPS
+// ============================================================================
 const props = defineProps({
     options: {
         type: Array,
@@ -14,19 +17,20 @@ const props = defineProps({
         default: false
     }
 });
-// ============ FIN PROPS ============ //
 
-// ============ INICIO EMITS ============ //
+// ============================================================================
+// EMITS
+// ============================================================================
 const emit = defineEmits(['select', 'add-new']);
-// ============ FIN EMITS ============ //
+
 </script>
 
 <template>
     <div class="w-full max-w-sm bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
-        <!-- Lista scrolleable con altura limitada -->
+
         <div class="max-h-48 overflow-y-auto">
             <ul class="py-1">
-                <!-- Mensaje cuando no hay opciones -->
+                
                 <li v-if="!options || options.length === 0" class="px-4 py-3">
                     <div class="flex items-center gap-3 text-slate-400 dark:text-gray-500">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,13 +47,13 @@ const emit = defineEmits(['select', 'add-new']);
                         @click="emit('select', option.value)"
                         class="flex items-center justify-between w-full px-4 py-2 text-sm text-left hover:bg-gray-100 transition-colors duration-150 dark:hover:bg-gray-700"
                         :class="selectedValue && selectedValue.toString() === option.value.toString()
-                            ? 'bg-blue-50 text-blue-700 font-medium dark:bg-blue-900 dark:text-blue-200'
+                            ? 'bg-[rgb(var(--brand-50))] text-[rgb(var(--brand-700))] font-medium dark:bg-[rgb(var(--brand-900))] dark:text-[rgb(var(--brand-200))]'
                             : 'text-gray-700 dark:text-gray-300'"
                     >
                         <span>{{ option.text }}</span>
                         <svg
                             v-if="selectedValue && selectedValue.toString() === option.value.toString()"
-                            class="w-4 h-4 text-blue-600 dark:text-blue-400"
+                            class="w-4 h-4 text-[rgb(var(--brand-600))] dark:text-[rgb(var(--brand-400))]"
                             fill="currentColor"
                             viewBox="0 0 20 20"
                         >
@@ -65,10 +69,10 @@ const emit = defineEmits(['select', 'add-new']);
             <button
                 type="button"
                 @click="emit('add-new')"
-                class="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-150 dark:text-blue-400 dark:hover:bg-gray-600 dark:hover:text-blue-300"
+                class="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-50))] hover:text-[rgb(var(--brand-700))] transition-colors duration-150 dark:text-[rgb(var(--brand-400))] dark:hover:bg-gray-600 dark:hover:text-[rgb(var(--brand-300))]"
             >
-                <div class="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-md flex items-center justify-center dark:bg-blue-900">
-                    <svg class="w-3 h-3 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <div class="flex-shrink-0 w-6 h-6 bg-[rgb(var(--brand-100))] rounded-md flex items-center justify-center dark:bg-[rgb(var(--brand-900))]">
+                    <svg class="w-3 h-3 text-[rgb(var(--brand-600))] dark:text-[rgb(var(--brand-400))]" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
                     </svg>
                 </div>

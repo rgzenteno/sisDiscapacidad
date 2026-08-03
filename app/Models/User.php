@@ -2,25 +2,14 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-
-use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use DateTimeInterface;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
     use HasRoles;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'nombre',
         'apellido',
@@ -33,21 +22,24 @@ class User extends Authenticatable
         'password_reset_required',
     ];
 
-    public function setCreatedAtAttribute($value)
+    protected function casts(): array
     {
-        date_default_timezone_set('America/La_Paz');
-        $this->attributes["created_at"] = Carbon::now();
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'password_reset_required' => 'boolean',
+            'habilitado' => 'boolean',
+        ];
+    }
+
+    protected function serializeDate(DateTimeInterface $date): string
+    {
+        return $date->format('Y-m-d H:i:s');
     }
 
     public function getMaxHierarchyLevel(): int
     {
         return $this->roles()->max('hierarchy_level') ?? 0;
-    }
-
-    public function setUpdatedAtAttribute($value)
-    {
-        date_default_timezone_set('America/La_Paz');
-        $this->attributes["updated_at"] = Carbon::now();
     }
 
     /**
@@ -59,21 +51,4 @@ class User extends Authenticatable
         'password',
         'remember_token',
     ];
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'password_reset_required' => 'boolean',
-            'habilitado' => 'boolean',
-            'created_at' => 'datetime:Y-m-d H:i:s',
-            'updated_at' => 'datetime:Y-m-d H:i:s',
-        ];
-    }
 }

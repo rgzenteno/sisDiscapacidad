@@ -6,26 +6,34 @@ use App\Models\Carnet;
 use App\Models\Discapacidad;
 use App\Models\Distrito;
 use App\Models\Gestion;
+use App\Models\Habilitado;
 use App\Models\HistorialEstados;
 use App\Models\Mes;
+use App\Models\Pago;
 use App\Models\Persona;
 use App\Models\Tutor;
+use App\Exceptions\HistorialEstadoException;
+use App\Exports\ReporteBeneficiarioExport;
+use App\Services\HistorialEstadoService;
 use App\Services\LogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Inertia\Inertia;
 
 class PersonaController extends Controller
 {
     protected $logService;
+    protected $historialEstadoService;
 
-    public function __construct(LogService $logService)
+    public function __construct(LogService $logService, HistorialEstadoService $historialEstadoService)
     {
         $this->logService = $logService;
+        $this->historialEstadoService = $historialEstadoService;
     }
     /**
      * Display a listing of the resource.
@@ -43,22 +51,64 @@ class PersonaController extends Controller
         $search = $request->input('buscador');
 
         $personas = Persona::conRelacionesCompletas()
+            ->with([
+                'historialEstados' => fn($q) => $q->orderBy('fecha_inicio', 'desc'),
+                'habilitados' => fn($q) => $q->whereHas('pago')->with(['gestion', 'mes', 'pago']),
+            ])
             ->beneficiarios()
             ->busquedaGlobal($search)
-            // 👇 SOLUCIÓN: Usar UPPER o LOWER para ignorar mayúsculas/minúsculas
             ->selectRaw('persona.*,
-            UPPER(COALESCE(
-                CONCAT(TRIM(apellido_persona), " ", TRIM(nombre_persona)),
-                nombre_completo
-            )) as nombre_orden')
+                UPPER(COALESCE(
+                    CONCAT(TRIM(apellido_persona), " ", TRIM(nombre_persona)),
+                    nombre_completo
+                )) as nombre_orden')
             ->orderByRaw('nombre_orden ASC')
-            ->paginate(30)
+            ->paginate(50)
             ->withQueryString();
 
-        $personas->getCollection()->transform(function ($persona) {
-            $persona->historial_completo = $persona->historialEstados()
-                ->orderBy('fecha_registro', 'desc')
-                ->get();
+        // Se valida por rol/jerarquía, no por el permiso 'superusuario': ese
+        // permiso puede estar asignado a otros roles por configuración
+        // (ej. 'encargado'), y esta validación tiene que reflejar quién es
+        // realmente el superusuario del sistema.
+        $esSuperusuario = Auth::user()->hasRole('superUsuario');
+
+        // Conteos de tutorados precalculados en 2 consultas agrupadas para
+        // todos los tutores de esta página, en vez de 2 consultas por cada
+        // persona-con-tutor (podían ser hasta ~100 queries sueltas por carga
+        // de página).
+        $tutorIdsPagina = $personas->getCollection()
+            ->pluck('tutor.id_tutor')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $totalTutoradosPorTutor = Persona::whereIn('id_tutor', $tutorIdsPagina)
+            ->beneficiarios()
+            ->selectRaw('id_tutor, COUNT(*) as total')
+            ->groupBy('id_tutor')
+            ->pluck('total', 'id_tutor');
+
+        $tutoradosActivosPorTutor = Persona::whereIn('id_tutor', $tutorIdsPagina)
+            ->beneficiarios()
+            ->activos()
+            ->selectRaw('id_tutor, COUNT(*) as total')
+            ->groupBy('id_tutor')
+            ->pluck('total', 'id_tutor');
+
+        $personas->getCollection()->transform(function ($persona) use ($esSuperusuario, $totalTutoradosPorTutor, $tutoradosActivosPorTutor) {
+            // Orden cronológico (fecha_inicio), no de inserción: con estados
+            // intermedios insertados retroactivamente, el registro más nuevo
+            // en la base de datos no es necesariamente el más reciente en el
+            // tiempo. Ya viene ordenado así desde el eager load de arriba.
+            $persona->historial_completo = $persona->historialEstados
+                ->map(function ($h) use ($esSuperusuario) {
+                    // El frontend no debe reimplementar la regla de "mes
+                    // vigente": el backend manda ya resuelto si este registro
+                    // puntual se puede editar/eliminar/usar como base para
+                    // insertar un estado intermedio.
+                    $h->puede_gestionar = $esSuperusuario || $this->historialEstadoService->esMesVigente(Carbon::parse($h->fecha_inicio));
+                    return $h;
+                });
 
             $estadoActual = $persona->ultimoEstado;
 
@@ -72,13 +122,69 @@ class PersonaController extends Controller
                 $persona->observaciones = $estadoActual->observaciones;
             }
 
-            $persona->makeHidden(['historialEstados', 'ultimoEstado']);
+            $persona->makeHidden(['historialEstados', 'ultimoEstado', 'habilitados']);
 
             $persona->carnet_vigente = $persona->carnet &&
                 $persona->carnet->fecha_vencimiento >= now() ? 1 : 0;
 
+            $persona->meses_pagados = $persona->habilitados
+                ->map(function ($h) {
+                    $esRetro = (bool) $h->mes->es_retroactivo;
+                    $anio = $esRetro && $h->mes->mes_original == 12
+                        ? $h->gestion->gestion - 1
+                        : $h->gestion->gestion;
+                    $mes = $esRetro ? $h->mes->mes_original : $h->mes->mes;
+
+                    return [
+                        'gestion' => $anio,
+                        'mes' => $mes,
+                        'anulado' => (int) $h->pago->pago === 0,
+                        'es_retroactivo' => $esRetro,
+                    ];
+                });
+
+            // Adjuntar conteos del tutor al objeto persona (precalculados
+            // arriba en 2 consultas agrupadas, no una consulta por persona).
+            if ($persona->tutor) {
+                $tutorId = $persona->tutor->id_tutor;
+
+                $persona->tutor->total_tutorados = (int) ($totalTutoradosPorTutor[$tutorId] ?? 0);
+                $persona->tutor->tutorados_activos = (int) ($tutoradosActivosPorTutor[$tutorId] ?? 0);
+                $persona->tutor->fecha_registro = $persona->tutor->created_at?->format('Y-m-d H:i:s');
+            }
+
             return $persona;
         });
+
+        // Obtener todos los meses reales registrados con su gestión — los
+        // meses-retro (es_retroactivo=true, offset +100 en `mes`) quedan
+        // fuera: son correcciones sobre periodos ya cerrados, no meses
+        // "disponibles" para gestionar el estado de un beneficiario. Mismo
+        // filtro que usa HistorialEstadoService::ultimoMesVigente().
+        $mesesDisponibles = Mes::with('gestion')
+            ->where('es_retroactivo', false)
+            ->get()
+            ->map(fn($m) => [
+                'gestion' => $m->gestion->gestion,
+                'mes' => str_pad($m->mes, 2, '0', STR_PAD_LEFT),
+            ]);
+
+        // Tutores con conteos precalculados para otros usos (ej: listados, filtros)
+        $tutores = Tutor::conConteoTutorados()
+            ->orderBy('apellido_tutor')
+            ->get()
+            ->map(fn($t) => [
+                'id_tutor' => $t->id_tutor,
+                'nombre_tutor' => $t->nombre_tutor,
+                'apellido_tutor' => $t->apellido_tutor,
+                'ci_tutor' => $t->ci_tutor,
+                'telefono' => $t->telefono,
+                'email' => $t->email,
+                'direccion' => $t->direccion,
+                'total_tutorados' => $t->total_tutorados,
+                'tutorados_activos' => $t->tutorados_activos,
+                'fecha_registro' => $t->created_at,
+            ]);
 
         return Inertia::render('Persona/index', [
             'persona' => $personas,
@@ -86,164 +192,212 @@ class PersonaController extends Controller
             'distrito' => Distrito::all(),
             'discapacidad' => Discapacidad::all(),
             'carnet' => Carnet::all(),
-            'tutor' => Tutor::all(),
+            'tutor' => $tutores,
             'selectedTutorName' => $selectedTutorName,
+            'mesesDisponibles' => $mesesDisponibles,
             'filters' => [
                 'buscador' => $search
             ]
         ]);
     }
 
-    public function estado(Request $request)
-    {
-        DB::beginTransaction();
-
-        $user = Auth::user();
-        $nombreCompleto = "{$user->nombre} {$user->apellido}";
-
-        try {
-            // Obtener el estado actual
-            $estadoActual = HistorialEstados::where('id_persona', $request->id_persona)
-                ->whereNull('fecha_fin')
-                ->first();
-
-            $fechaInicio = Carbon::parse($request->fecha_inicio);
-
-            if ($estadoActual) {
-                $fechaRegistro = Carbon::parse($estadoActual->fecha_registro);
-                $mismodia = $fechaInicio->isSameDay($fechaRegistro);
-
-                // Determinar fechas basado en la misma lógica
-                $fechaFinPropuesta = $mismodia ? $fechaInicio : $fechaInicio->copy()->subDay();
-                $fechaInicioNuevo = $mismodia ? $fechaInicio->copy()->addDay() : $fechaInicio;
-
-                // Cerrar estado actual
-                HistorialEstados::where('id_persona', $request->id_persona)
-                    ->whereNull('fecha_fin')
-                    ->update(['fecha_fin' => $fechaFinPropuesta]);
-            } else {
-                $fechaInicioNuevo = $fechaInicio;
-            }
-
-            // Determinar observaciones según el estado
-            $observaciones = $request->observacion;
-
-            if ($request->estado === 'baja_temporal') {
-                $observaciones = 'PADRE FUNCIONARIO TRABAJANDO CON ITEM';
-            } elseif ($request->estado === 'baja_definitiva') {
-                $observaciones = 'FALLECIO';
-            }
-
-            // Crear nuevo registro
-            HistorialEstados::create([
-                'id_persona' => $request->id_persona,
-                'estado' => $request->estado,
-                'fecha_inicio' => $fechaInicioNuevo,
-                'fecha_fin' => null,
-                'usuario_modificacion' => $nombreCompleto,
-                'observaciones' => $observaciones
-            ]);
-
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
-    }
-
-
     public function reporte(Request $request)
     {
+        $year = $request->input('gestion_gestion');
+        $mes = $request->input('mes');
+        $verRetro = $request->boolean('ver_retro');
+
         $mesesNumeros = collect([]);
         $resultados = collect([]);
         $resultadosReporte = collect([]);
 
-        $year = $request->input('gestion_gestion');
-        $mes = $request->input('mes');
+        $gestion = $year ? Gestion::where('gestion', $year)->first() : null;
 
-        // Si se seleccionó una gestión, obtener los meses disponibles
-        if ($year) {
-            $gestion = Gestion::where('gestion', $year)->first();
-
-            if ($gestion) {
-                $mesesNumeros = Mes::where('id_gestion', $gestion->id_gestion)
-                    ->pluck('mes')
-                    ->sort()
-                    ->values();
-            }
+        if ($gestion) {
+            $mesesNumeros = $gestion
+                ->meses()
+                ->where('es_retroactivo', false)
+                ->orderBy('mes')
+                ->pluck('mes');
         }
 
-        // Verificar que tengamos gestión y mes para ejecutar la consulta principal
-        if ($year && $mes) {
-            $gestion = Gestion::where('gestion', $year)->first();
+        // "Ver retro": en vez del mes normal, filtrar por el mes-retro (mes.mes
+        // es un código interno como 101-112) cuyo mes_original coincide con el
+        // mes elegido. $mes sigue representando el mes calendario real (1-12)
+        // elegido en el selector; $mesFiltro es el valor real de `mes.mes` a
+        // buscar (retro o normal según corresponda). Mismo patrón que
+        // PagoController::bandejaPago().
+        $mesFiltro = $mes;
+        $mesRetroInfo = null;
 
-            if ($gestion) {
-                $query = Persona::query()
-                    ->select([
-                        'persona.id_persona',
-                        'persona.ci_persona as ci',
-                        'persona.complemento as complemento',
-                        'persona.apellido_persona as apellido',
-                        'persona.nombre_persona as nombre',
-                        'mes.mes as mes',
-                        'mes.monto as monto',
-                        'gestion.gestion as gestion',
-                        'historial_estados.observaciones as observaciones',
-                        'historial_estados.estado as estado_actual',
-                        DB::raw('COUNT(*) OVER() as total_personas'),
-                        DB::raw('COUNT(*) OVER() * mes.monto as monto_total'),
-                        DB::raw("COUNT(CASE WHEN historial_estados.estado IN ('baja_temporal', 'baja_definitiva') THEN 1 END) OVER() as cantidad_bajas"),
-                        DB::raw("COUNT(CASE WHEN historial_estados.estado IN ('baja_temporal', 'baja_definitiva') THEN 1 END) OVER() * mes.monto as monto_bajas"),
-                        DB::raw("COUNT(CASE WHEN historial_estados.estado = 'activo' THEN 1 END) OVER() as cantidad_activos"),
-                        DB::raw("COUNT(CASE WHEN historial_estados.estado = 'activo' THEN 1 END) OVER() * mes.monto as monto_activos")
-                    ])
-                    ->join('carnet', 'carnet.id_persona', '=', 'persona.id_persona')
-                    ->join('gestion', 'gestion.id_gestion', '=', DB::raw($gestion->id_gestion))
-                    ->join('mes', function ($join) use ($gestion, $mes) {
-                        $join->on('mes.id_gestion', '=', 'gestion.id_gestion')
-                            ->where('mes.mes', '=', $mes);
-                    })
-                    ->leftJoin(
-                        DB::raw('(SELECT id_persona, estado, observaciones FROM historial_estados WHERE id IN (SELECT MAX(id) FROM historial_estados GROUP BY id_persona)) as historial_estados'),
-                        'historial_estados.id_persona',
-                        '=',
-                        'persona.id_persona'
+        if ($gestion && $mes && $verRetro) {
+            $mesRetroInfo = Mes::where('id_gestion', $gestion->id_gestion)
+                ->where('es_retroactivo', true)
+                ->where('mes_original', $mes)
+                ->first();
+
+            // Si todavía no se cargó el retro de este mes, se usa un valor de
+            // mes imposible para que la query de abajo devuelva vacío sin
+            // lanzar error.
+            $mesFiltro = $mesRetroInfo->mes ?? -1;
+        }
+
+        $mesModel = ($gestion && $mes) ? $gestion->meses()->where('mes', $mesFiltro)->first() : null;
+
+        if ($gestion && $mes && $mesModel) {
+
+            // Diciembre-retro representa diciembre del año ANTERIOR a la
+            // gestión que se cierra (el mes-retro de diciembre no vive en esta
+            // gestión) — el resto de los meses usa el año de la gestión
+            // seleccionada tal cual.
+            $anioRealMes = ($verRetro && $mesRetroInfo && $mes == 12) ? $year - 1 : $year;
+
+            // ── Subquery: último historial por persona ──────────────────────
+            $fechaFinMes = Carbon::createFromDate($anioRealMes, $mes, 1, 'America/La_Paz')->endOfMonth()->toDateString();
+
+            $ultimoHistorial = DB::table('historial_estados as he')
+                ->select('he.id_persona', 'he.estado', 'he.observaciones')
+                ->where('he.fecha_inicio', '<=', $fechaFinMes)
+                ->whereNotExists(function ($sub) use ($fechaFinMes) {
+                    $sub->select(DB::raw(1))
+                        ->from('historial_estados as he2')
+                        ->whereColumn('he2.id_persona', 'he.id_persona')
+                        ->where('he2.fecha_inicio', '<=', $fechaFinMes)
+                        ->where(function ($q) {
+                            $q->whereColumn('he2.fecha_inicio', '>', 'he.fecha_inicio')
+                                ->orWhere(function ($q2) {
+                                    $q2->whereColumn('he2.fecha_inicio', '=', 'he.fecha_inicio')
+                                        ->whereColumn('he2.id', '>', 'he.id');
+                                });
+                        });
+                })
+                ->where('he.estado', '!=', 'depurado');
+
+            // Para retro, "quién es baja" no se deriva del historial general
+            // (eso arrastra bajas de CUALQUIER momento, sin relación con el
+            // Excel de retro cargado ese mes) sino de retroactivo_evaluacion,
+            // que ahora solo guarda exclusiones para ESTE mes-retro (nunca
+            // pagables) — ya sea automática (estado_baja con la baja real) o
+            // manual (es_correccion_manual, el estado real sigue diciendo
+            // activo pero se decidió no pagar por retro). Se le da la misma
+            // forma (id_persona, estado, observaciones) que $ultimoHistorial
+            // para poder reusar el resto de la consulta sin duplicarla. Como
+            // no todas las personas habilitadas-retro tienen fila acá, el
+            // join tiene que ser LEFT, no INNER.
+            $estadoSource = $verRetro
+                ? DB::table('retroactivo_evaluacion as re')
+                    ->select(
+                        're.id_persona',
+                        DB::raw("COALESCE(re.estado_baja, 'baja_definitiva') as estado"),
+                        // Motivo real de la exclusión (ej. "Excluido de retroactivo:
+                        // baja_temporal vigente desde 2025-02-10" o "Excluido
+                        // manualmente: ..."), no una etiqueta fija por estado.
+                        're.motivo as observaciones'
                     )
-                    ->whereNotNull('persona.id_tutor')
-                    ->where('carnet.fecha_vencimiento', '>=', now())
-                    ->whereRaw("DATE_FORMAT(persona.fecha_registro, '%Y%m') <= ?", [
-                        sprintf('%04d%02d', $year, $mes)
-                    ])
-                    ->groupBy([
-                        'persona.id_persona',
-                        'persona.ci_persona',
-                        'persona.complemento',
-                        'persona.apellido_persona',
-                        'persona.nombre_persona',
-                        'mes.mes',
-                        'mes.monto',
-                        'gestion.gestion',
-                        'historial_estados.observaciones',
-                        'historial_estados.estado'
-                    ])
-                    ->orderBy('persona.apellido_persona', 'asc')
-                    ->orderBy('persona.nombre_persona', 'asc');
+                    ->where('re.id_gestion', $gestion->id_gestion)
+                    ->where('re.mes_original', $mes)
+                    ->where(function ($q) {
+                        $q->whereNotNull('re.estado_baja')->orWhere('re.es_correccion_manual', true);
+                    })
+                : $ultimoHistorial;
 
-                // Clonar la consulta ANTES de paginar
-                $resultadosReporte = clone $query;
+            $joinMetodo = $verRetro ? 'leftJoinSub' : 'joinSub';
 
-                // Paginación para la vista
-                $resultados = $query->paginate(100)->appends($request->query());
+            // ── Base de personas válidas (reutilizada en los conteos) ───────
+            $basePersonas = Persona::query()
+                ->{$joinMetodo}($estadoSource, 'h', 'h.id_persona', '=', 'persona.id_persona')
+                ->where('persona.tipo_registro', '!=', 'registrado')
+                ->where(function ($q) {
+                    $q->whereNotNull('hab.id_habilitado')
+                        ->orWhereIn('h.estado', ['baja_temporal', 'baja_definitiva']);
+                })
+                ->leftJoin('habilitado as hab', function ($join) use ($gestion, $mesModel) {
+                    $join->on('hab.id_persona', '=', 'persona.id_persona')
+                        ->where('hab.id_gestion', $gestion->id_gestion)
+                        ->where('hab.id_mes', $mesModel->id_mes)
+                        ->where('hab.habilitado', 1);
+                });
 
-                // Todos los resultados para imprimir/exportar
-                $resultadosReporte = $resultadosReporte->get();
-            }
+            // ── Totales calculados por separado (reemplazan los OVER) ───────
+            $totalPersonas = (clone $basePersonas)->distinct()->count('persona.id_persona');
+            $cantidadBajas = (clone $basePersonas)
+                ->whereIn('h.estado', ['baja_temporal', 'baja_definitiva'])
+                ->distinct()
+                ->count('persona.id_persona');
+            $cantidadActivos = $totalPersonas - $cantidadBajas;
+
+            $montoTotal = $totalPersonas * $mesModel->monto;
+            $montoBajas = $cantidadBajas * $mesModel->monto;
+            $montoActivos = $cantidadActivos * $mesModel->monto;
+
+            // ── Consulta principal ──────────────────────────────────────────
+            $query = Persona::query()
+                ->without(['ultimoEstado', 'historialEstados'])
+                ->select([
+                    'persona.id_persona',
+                    'persona.ci_persona       as ci',
+                    'persona.complemento',
+                    'persona.apellido_persona as apellido',
+                    'persona.nombre_persona   as nombre',
+                    'persona.nombre_completo',
+                    // En retro, un habilitado-retro pagable no tiene fila en
+                    // retroactivo_evaluacion (esa tabla es solo para exclusiones),
+                    // así que el LEFT JOIN deja h.estado en null — hay que mostrarlo
+                    // como 'activo' para que se vea igual que un habilitado normal
+                    // (mismo estilo de fila/negrita en el reporte).
+                    $verRetro
+                        ? DB::raw("COALESCE(h.estado, 'activo') as estado_periodo")
+                        : 'h.estado as estado_periodo',
+                    'h.observaciones',
+                    DB::raw("{$mes}             as mes"),
+                    DB::raw("{$mesModel->monto} as monto"),
+                    DB::raw("{$year}            as gestion"),
+                    DB::raw("{$totalPersonas}   as total_personas"),
+                    DB::raw("{$montoTotal}      as monto_total"),
+                    DB::raw("{$cantidadBajas}   as cantidad_bajas"),
+                    DB::raw("{$montoBajas}      as monto_bajas"),
+                    DB::raw("{$cantidadActivos} as cantidad_activos"),
+                    DB::raw("{$montoActivos}    as monto_activos"),
+                    DB::raw("UPPER(REGEXP_REPLACE(
+                        COALESCE(
+                            CONCAT(TRIM(persona.apellido_persona), ' ', TRIM(persona.nombre_persona)),
+                            persona.nombre_completo
+                        ),
+                        ' +', ' '
+                    )) as nombre_orden"),
+                ])
+                ->{$joinMetodo}($estadoSource, 'h', 'h.id_persona', '=', 'persona.id_persona')
+                ->where('persona.tipo_registro', '!=', 'registrado')
+                ->where(function ($q) {
+                    $q->whereNotNull('hab.id_habilitado')
+                        ->orWhereIn('h.estado', ['baja_temporal', 'baja_definitiva']);
+                })
+                ->leftJoin('habilitado as hab', function ($join) use ($gestion, $mesModel) {
+                    $join->on('hab.id_persona', '=', 'persona.id_persona')
+                        ->where('hab.id_gestion', $gestion->id_gestion)
+                        ->where('hab.id_mes', $mesModel->id_mes)
+                        ->where('hab.habilitado', 1);
+                })
+                ->groupBy([
+                    'persona.id_persona',
+                    'persona.ci_persona',
+                    'persona.complemento',
+                    'persona.apellido_persona',
+                    'persona.nombre_persona',
+                    'persona.nombre_completo',
+                    'h.estado',
+                    'h.observaciones',
+                ])
+                ->orderByRaw('nombre_orden COLLATE utf8mb4_spanish_ci ASC');
+
+            $resultadosReporte = (clone $query)->get()->makeHidden(['estado_actual', 'ultimo_estado']);
+
+            $resultados = $query->paginate(1000)->appends($request->query());
         }
 
-        // Obtener todas las gestiones disponibles
-        $gestiones = Gestion::select('gestion as anio')
+        $gestiones = Gestion::select('gestion as anio', 'retroactivos_habilitado')
             ->distinct()
-            ->orderBy('gestion', 'desc')
+            ->orderByDesc('gestion')
             ->get();
 
         return Inertia::render('Persona/reporteBeneficiario', [
@@ -251,98 +405,45 @@ class PersonaController extends Controller
             'resultadosReporte' => $resultadosReporte,
             'gestiones' => $gestiones,
             'mesesNumeros' => $mesesNumeros,
+            'filters' => ['gestion' => $year, 'mes' => $mes, 'ver_retro' => $verRetro],
+            'mesRetroDisponible' => (bool) $mesRetroInfo,
         ]);
     }
 
-
-
-    public function reporteGeneral(Request $request)
+    /**
+     * Igual que reporte(), pero en Excel — mismo modelo que
+     * useReporteBeneficiarioPDF.js (columnas, colores de baja y totales).
+     */
+    public function exportReporteBeneficiarioExcel(Request $request)
     {
-        $resultados = collect([]);
-        $year = $request->input('gestion_gestion');
-
-        // Si se seleccionó una gestión
-        if ($year) {
-            $gestion = Gestion::where('gestion', $year)->first();
-
-            if ($gestion) {
-                // Aumentar el límite de GROUP_CONCAT
-                DB::statement('SET SESSION group_concat_max_len = 10000');
-
-                // Consulta optimizada con GROUP_CONCAT
-                $resultados = DB::table('persona as p')
-                    ->select([
-                        'p.ci_persona',
-                        'p.nombre_persona',
-                        'p.apellido_persona',
-                        DB::raw("GROUP_CONCAT(
-                        CONCAT(m.mes, ':',
-                            CASE
-                                WHEN h.id_mes IS NOT NULL THEN 'H'
-                                ELSE 'NH'
-                            END
-                        )
-                        ORDER BY m.mes ASC
-                        SEPARATOR ','
-                    ) as meses_estados")
-                    ])
-                    ->crossJoin('mes as m')
-                    ->leftJoin('habilitado as h', function ($join) {
-                        $join->on('h.id_persona', '=', 'p.id_persona')
-                            ->on('h.id_mes', '=', 'm.id_mes');
-                    })
-                    ->whereYear('p.fecha_registro', '<=', $year)
-                    ->whereNotNull('p.id_tutor')
-                    ->where('m.id_gestion', $gestion->id_gestion)
-                    // NUEVO: Solo mostrar personas que tienen al menos un registro en habilitado para esta gestión
-                    ->whereExists(function ($query) use ($gestion) {
-                        $query->select(DB::raw(1))
-                            ->from('habilitado as hab')
-                            ->join('mes as mes_hab', 'mes_hab.id_mes', '=', 'hab.id_mes')
-                            ->whereColumn('hab.id_persona', 'p.id_persona')
-                            ->where('mes_hab.id_gestion', $gestion->id_gestion);
-                    })
-                    ->groupBy('p.id_persona', 'p.ci_persona', 'p.nombre_persona', 'p.apellido_persona')
-                    ->orderBy('p.apellido_persona', 'asc')
-                    ->orderBy('p.nombre_persona', 'asc')
-                    ->get()
-                    ->map(function ($persona) {
-                        // Convertir el string de meses_estados a array
-                        $mesesArray = collect(explode(',', $persona->meses_estados))
-                            ->map(function ($mesEstado) {
-                                list($mes, $estado) = explode(':', $mesEstado);
-                                return [
-                                    'mes' => (int) $mes,
-                                    'estado' => $estado
-                                ];
-                            });
-
-                        return [
-                            'ci_persona' => $persona->ci_persona,
-                            'nombre_persona' => $persona->nombre_persona,
-                            'apellido_persona' => $persona->apellido_persona,
-                            'meses' => $mesesArray
-                        ];
-                    });
-            }
-        }
-
-        // Obtener todas las gestiones disponibles
-        $gestiones = Gestion::select('gestion as anio')
-            ->distinct()
-            ->orderBy('gestion', 'desc')
-            ->get();
-
-        return Inertia::render('Persona/reporteGeneral', [
-            'resultados' => $resultados,
-            'gestiones' => $gestiones,
+        $request->validate([
+            'datos' => 'required|array',
+            'gestion' => 'required',
+            'mes' => 'required',
         ]);
+
+        $esRetro = $request->boolean('es_retro');
+        $meses = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+        $mesNombre = $meses[(int) $request->input('mes')] ?? 'MES';
+        $gestion = $request->input('gestion');
+        // Mismo patrón de nombre que el PDF de referencia (useReporteBeneficiarioPDF.js).
+        $nombreArchivo = "0 PAGO DE BONO MES DE {$mesNombre} {$gestion}" . ($esRetro ? ' RETROACTIVO' : '') . '.xlsx';
+
+        return Excel::download(
+            new ReporteBeneficiarioExport(
+                $request->input('datos'),
+                $gestion,
+                $request->input('mes'),
+                $esRetro,
+            ),
+            $nombreArchivo
+        );
     }
 
-    public function mostrarFormulario()
+    public function clearTutorSession(Request $request)
     {
-        // Usamos Inertia para devolver la vista con el formulario de importación
-        return Inertia::render('Persona/importarExcel', []);
+        $request->session()->forget('selected_tutor_id');
+        return response()->noContent();
     }
 
     public function importar(Request $request)
@@ -358,8 +459,6 @@ class PersonaController extends Controller
             $spreadsheet = IOFactory::load($archivo->getPathname());
             $sheet = $spreadsheet->getActiveSheet();
             $rows = $sheet->toArray();
-
-            Log::info('Total de filas:', ['total' => count($rows)]);
 
             $insertados = 0;
             $actualizados = 0;
@@ -386,16 +485,6 @@ class PersonaController extends Controller
 
                     // ✅ Procesar observación: si es "NINGUNO" o vacío -> NULL
                     $observacion = $this->procesarObservacion($observacionRaw);
-
-                    // ✅ Log de datos extraídos
-                    Log::info("Fila $index: Datos extraídos", [
-                        'nombre' => $nombre,
-                        'apellido' => $apellido,
-                        'distrito' => $distrito,
-                        'ci' => $ciCompleto,
-                        'observacion_raw' => $observacionRaw,
-                        'observacion_procesada' => $observacion,
-                    ]);
 
                     // ✅ Validar CI obligatorio
                     if (empty($ciCompleto)) {
@@ -427,13 +516,6 @@ class PersonaController extends Controller
                     $personaExistente = Persona::where('ci_persona', $ci)->first();
 
                     if ($personaExistente) {
-                        Log::info("Fila $index: CI $ci encontrado en BD", [
-                            'id_persona' => $personaExistente->id_persona,
-                            'complemento_bd' => $personaExistente->complemento,
-                            'complemento_excel' => $complemento,
-                            'observacion_bd' => $personaExistente->observacion_persona,
-                            'observacion_excel' => $observacion,
-                        ]);
 
                         // ✅ VERIFICAR QUÉ CAMPOS NECESITAN ACTUALIZARSE
                         $datosActualizar = [];
@@ -463,11 +545,6 @@ class PersonaController extends Controller
                         if (count($datosActualizar) > 0) {
                             $datosActualizar['tipo_registro'] = 'beneficiario';
 
-                            Log::info("Fila $index: Actualizando campos vacíos", [
-                                'ci' => $ci,
-                                'campos_actualizar' => $datosActualizar
-                            ]);
-
                             $personaExistente->update($datosActualizar);
 
                             // ✅ Crear registro en HistorialEstados solo si no existe uno activo usando Eloquent
@@ -488,16 +565,9 @@ class PersonaController extends Controller
                             }
 
                             $actualizados++;
-                        } else {
-                            Log::info("Fila $index: CI $ci ya tiene todos los datos completos, marcando como duplicado");
-                            $duplicados++;
                         }
-
                         continue;
                     }
-
-                    // ✅ NO EXISTE: INSERTAR NUEVO REGISTRO
-                    Log::info("Fila $index: CI $ci no existe, insertando nuevo registro");
 
                     $fechaRegistro = Carbon::now()->format('Y-m-d');
 
@@ -519,11 +589,6 @@ class PersonaController extends Controller
                         'observacion_persona' => $observacion,
                         'tipo_registro' => 'beneficiario',
                         'fecha_registro' => $fechaRegistro,
-                    ]);
-
-                    Log::info("Fila $index: Registro insertado correctamente", [
-                        'id_persona' => $nuevaPersona->id_persona,
-                        'observacion' => $observacion
                     ]);
 
                     // ✅ Crear registro en HistorialEstados para nueva persona usando Eloquent
@@ -549,13 +614,6 @@ class PersonaController extends Controller
 
             DB::commit();
 
-            Log::info("Importación finalizada", [
-                'insertados' => $insertados,
-                'actualizados' => $actualizados,
-                'duplicados' => $duplicados,
-                'errores' => $errores
-            ]);
-
             return back()->with('importResults', [
                 'type' => ($insertados > 0 || $actualizados > 0) ? 'success' : 'warning',
                 'insertados' => $insertados,
@@ -578,7 +636,7 @@ class PersonaController extends Controller
     /**
      * Procesa observación: convierte "NINGUNO" o vacío a NULL
      */
-    private function procesarObservacion($valor): ?string
+    private function procesarObservacion(string $valor): ?string
     {
         if (empty($valor)) {
             return null;
@@ -614,7 +672,6 @@ class PersonaController extends Controller
             $complemento = strtoupper(trim($partes[1]));
         }
 
-        // Eliminar espacios
         $ci = str_replace(' ', '', $ci);
 
         if ($complemento) {
@@ -630,7 +687,7 @@ class PersonaController extends Controller
     /**
      * Limpia texto: trim, capitaliza primera letra de cada palabra
      */
-    private function limpiarTexto($valor): ?string
+    private function limpiarTexto(string $valor): ?string
     {
         if (empty($valor)) {
             return null;
@@ -680,11 +737,18 @@ class PersonaController extends Controller
     public function store(Request $request)
     {
         // Verificar si existe la sesión y obtener el ID del tutor
-        if (session('selected_tutor_id')) {
+        $tutor = null;
+        $esPropioTutor = session('tutor_propio', false);
+
+        if (!$esPropioTutor && session('selected_tutor_id')) {
             $id_tutor = session('selected_tutor_id');
+            $tutor = Tutor::find($id_tutor);
         }
 
-        $fecha_actual = Carbon::now('America/La_Paz')->format('Y-m-d');
+        // ✅ Definir fechaBase ANTES de preparar $data
+        $fechaBase = $request->filled('fecha_registro')
+            ? Carbon::parse($request->fecha_registro, 'America/La_Paz')->startOfMonth()->format('Y-m-d')
+            : Carbon::now('America/La_Paz')->startOfMonth()->format('Y-m-d');
 
         // Preparar los datos para la creación
         $data = $request->all();
@@ -701,24 +765,29 @@ class PersonaController extends Controller
                 ]);
         }
 
-        // Agregar el ID del tutor si existe
+        // Agregar ID del tutor si existe
         if (isset($id_tutor)) {
             $data['id_tutor'] = $id_tutor;
         }
 
-        $data['fecha_registro'] = $fecha_actual;
+        // Si es propio tutor, guardar en tutor_nombre
+        if ($esPropioTutor) {
+            $data['tutor_nombre'] = 'propio';
+        }
+
+        // ✅ Asignar fechaBase
+        $data['fecha_registro'] = $fechaBase;
         $data['tipo_registro'] = 'beneficiario';
 
-        // ✅ Construir observación de forma dinámica
+        // Construir observación
         $observaciones = [];
 
-        if (!isset($id_tutor)) {
+        if (!isset($id_tutor) && !$esPropioTutor) {
             $observaciones[] = 'Tutor no proporcionado';
         }
 
         $observaciones[] = 'Carnet de discapacidad no proporcionado';
 
-        // Unir todas las observaciones con coma
         $data['observacion_persona'] = implode(', ', $observaciones);
 
         // Crear el registro en la base de datos
@@ -726,32 +795,45 @@ class PersonaController extends Controller
 
         $user = Auth::user();
 
-        // Para mostrarlo junto
         $nombreCompleto = "{$user->nombre} {$user->apellido}";
 
         $dataEstado = [
             'id_persona' => $persona->id_persona,
-            'estado' => 'activo', // Estado inicial
-            'fecha_inicio' => $fecha_actual,
-            'fecha_fin' => null, // Estado actual
+            'estado' => 'activo',
+            'fecha_inicio' => $fechaBase,
+            'fecha_fin' => null,
             'usuario_modificacion' => $nombreCompleto,
             'observaciones' => ''
         ];
 
-        $estado = HistorialEstados::create($dataEstado);
+        HistorialEstados::create($dataEstado);
 
         // Registra la creación
         $nombre = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
-        $this->logService->logCreation('Beneficiario', $persona, "Beneficiario creado: {$nombre}");
+
+        $this->logService->logCreation(
+            'Beneficiario',
+            $persona,
+            "Se registró al beneficiario {$nombre} en el sistema.",
+            null,
+            [
+                'beneficiario' => $nombre,
+                'c.i.' => $persona->ci_persona,
+                'distrito' => $persona->distrito,
+                'fecha nacimiento' => $persona->fecha_nacimiento,
+                'tutor asignado' => $esPropioTutor
+                    ? 'propio'
+                    : ($tutor ? ucwords(strtolower("{$tutor->nombre_tutor} {$tutor->apellido_tutor}")) : null),
+                'c.i. tutor' => $esPropioTutor ? null : ($tutor->ci_tutor ?? null),
+            ]
+        );
 
         // Eliminar la sesión del tutor seleccionado
         session()->forget('selected_tutor_id');
+        session()->forget('tutor_propio');
 
         return redirect()->back();
     }
-
-
-
     /**
      * Update the specified resource in storage.
      */
@@ -759,96 +841,234 @@ class PersonaController extends Controller
     {
         $persona = Persona::findOrFail($id);
 
-        // Guardamos los datos que vienen en el request
         $fieldsToUpdate = $request->all();
-
         unset($fieldsToUpdate['id_persona']);
+        // fecha_registro no se edita desde aquí: la única vía válida es mover
+        // la fecha_inicio del primer estado (HistorialEstadoService::moverLimite),
+        // que ya sabe cuándo corresponde arrastrar fecha_registro con ella.
+        // Editarla directo en este endpoint podía pisar fecha_inicio de TODO
+        // el historial_estados de la persona (ver bug reportado en CI 12556166).
+        unset($fieldsToUpdate['fecha_registro']);
 
-        // ✅ Verificar y actualizar tipo_registro si es necesario
         if ($persona->tipo_registro === 'pendiente') {
             $fieldsToUpdate['tipo_registro'] = 'beneficiario';
         }
 
-        // ✅ Limpiar observación si se está enviando el campo (incluso si es null o vacío)
-        if (array_key_exists('observacion_persona', $fieldsToUpdate)) {
-            $observacion = $fieldsToUpdate['observacion_persona'];
+        // Texto a limpiar de observacion
+        $observacionRaw = \array_key_exists('observacion_persona', $fieldsToUpdate)
+            ? $fieldsToUpdate['observacion_persona']
+            : $persona->observacion_persona;
 
-            // Si el usuario envió una observación vacía o null intencionalmente, respetarla
-            if (empty($observacion)) {
-                $fieldsToUpdate['observacion_persona'] = null;
-            } else {
-                // Eliminar "Fecha de nacimiento no proporcionada"
-                $observacion = str_ireplace('Fecha de nacimiento no proporcionada', '', $observacion);
+        if (!empty($observacionRaw)) {
+            $observacionRaw = str_ireplace('Fecha de nacimiento no proporcionada', '', $observacionRaw);
+            $observacionRaw = preg_replace('/\s*,\s*,\s*/', ', ', $observacionRaw);
+            $observacionRaw = preg_replace('/^\s*,\s*/', '', $observacionRaw);
+            $observacionRaw = preg_replace('/\s*,\s*$/', '', $observacionRaw);
+            $observacionRaw = trim($observacionRaw);
+        }
+        $fieldsToUpdate['observacion_persona'] = empty($observacionRaw) ? null : $observacionRaw;
 
-                // Limpiar comas y espacios sobrantes
-                $observacion = preg_replace('/\s*,\s*,\s*/', ', ', $observacion); // ,, -> ,
-                $observacion = preg_replace('/^\s*,\s*/', '', $observacion); // coma al inicio
-                $observacion = preg_replace('/\s*,\s*$/', '', $observacion); // coma al final
-                $observacion = trim($observacion);
+        $mapaLabels = [
+            'nombre_persona' => 'nombre',
+            'apellido_persona' => 'apellido',
+            'ci_persona' => 'c.i.',
+            'fecha_nacimiento' => 'fecha nacimiento',
+            'distrito' => 'distrito',
+            'observacion_persona' => 'observación',
+            'tipo_registro' => 'tipo registro',
+        ];
 
-                // Si quedó vacío después de limpiar, establecer como null
-                $fieldsToUpdate['observacion_persona'] = empty($observacion) ? null : $observacion;
-            }
-        } else {
-            // ✅ PLAN B: Si la observación no viene en el request pero la persona ya tiene una, limpiarla también
-            if (!empty($persona->observacion_persona)) {
-                $observacion = $persona->observacion_persona;
+        $camposModificados = [];
+        $valoresAnteriores = [];
+        $valoresNuevos = [];
 
-                $observacion = str_ireplace('Fecha de nacimiento no proporcionada', '', $observacion);
-                $observacion = preg_replace('/\s*,\s*,\s*/', ', ', $observacion);
-                $observacion = preg_replace('/^\s*,\s*/', '', $observacion);
-                $observacion = preg_replace('/\s*,\s*$/', '', $observacion);
-                $observacion = trim($observacion);
+        foreach ($fieldsToUpdate as $campo => $nuevoValor) {
+            if (!\array_key_exists($campo, $mapaLabels))
+                continue;
 
-                $fieldsToUpdate['observacion_persona'] = empty($observacion) ? null : $observacion;
+            $valorAnterior = $persona->$campo;
+            $label = $mapaLabels[$campo];
+
+            if ($valorAnterior != $nuevoValor) {
+                $camposModificados[$label] = $nuevoValor;
+                $valoresAnteriores[$label] = $valorAnterior;
+                $valoresNuevos[$label] = $nuevoValor;
             }
         }
 
-        // Preparar los cambios para el log
-        $changes = [
-            'campos_modificados' => [],
-            'valores_anteriores' => [],
-            'valores_nuevos' => []
-        ];
+        if (empty($camposModificados)) {
+            return;
+        }
 
-        // Actualizamos los datos de la persona
         $persona->update($fieldsToUpdate);
 
-        // Registrar el log
         $nombre = ucwords(strtolower("{$persona->nombre_persona} {$persona->apellido_persona}"));
+
         $this->logService->logUpdate(
-            'personas',
+            'Beneficiario',
             $persona,
-            $changes,
-            'Registro Actualizado: ' . $nombre
+            [
+                'campos_modificados' => $camposModificados,
+                'valores_anteriores' => $valoresAnteriores,
+                'valores_nuevos' => $valoresNuevos,
+            ],
+            "Se actualizó el registro de {$nombre} en el sistema."
         );
     }
 
+    public function estado(Request $request)
+    {
+        $request->validate([
+            // Al agregar un estado nuevo no se exige motivo: la observación
+            // (autocompletada según el estado, ej. "FALLECIO 12/01/2026") ya
+            // documenta el porqué — pedir motivo también era redundante.
+            'motivo' => 'nullable|string|max:255',
+            'observaciones' => 'nullable|string|max:50',
+        ]);
+
+        $user = Auth::user();
+        $nombreCompleto = "{$user->nombre} {$user->apellido}";
+
+        // Persona.fecha_registro solo debe seguir a fecha_inicio cuando este
+        // es el primer estado que se registra para la persona (mismo
+        // criterio que HistorialEstadoService::moverLimite). `id_estado` no
+        // sirve para distinguir esto: el formulario de "Agregar estado"
+        // nunca lo envía, así que llegaba null en cada cambio de estado (no
+        // solo en el primero) y pisaba fecha_registro cada vez.
+        $esPrimerEstado = !HistorialEstados::where('id_persona', $request->id_persona)->exists();
+
+        try {
+            $this->historialEstadoService->agregar(
+                $request->id_persona,
+                $request->estado,
+                Carbon::parse($request->fecha_inicio),
+                $request->motivo,
+                $nombreCompleto,
+                $request->input('observaciones')
+            );
+
+            if ($esPrimerEstado) {
+                Persona::where('id_persona', $request->id_persona)
+                    ->update(['fecha_registro' => Carbon::parse($request->fecha_inicio)->format('Y-m-d')]);
+            }
+        } catch (HistorialEstadoException $e) {
+            return back()->withErrors([$e->campo => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function updateEstado(Request $request, string $id)
+    {
+        $request->validate([
+            'motivo' => 'required|string|max:255',
+            'observaciones' => 'nullable|string|max:50',
+        ]);
+
+        $historial = HistorialEstados::findOrFail($id);
+
+        $user = Auth::user();
+        $nombreCompleto = "{$user->nombre} {$user->apellido}";
+        $esSuperusuario = $user->hasRole('superUsuario');
+
+        $nuevoEstado = $request->input('estado');
+        $motivo = $request->input('motivo');
+        $observaciones = $request->input('observaciones');
+        $nuevaFechaInicio = $request->filled('fecha_inicio') ? Carbon::parse($request->input('fecha_inicio')) : null;
+
+        $cambiaFecha = $nuevaFechaInicio && !$nuevaFechaInicio->equalTo(Carbon::parse($historial->fecha_inicio));
+        $cambiaEstado = $nuevoEstado && $nuevoEstado !== $historial->estado;
+        // Editar solo observaciones/motivo (sin tocar estado ni fecha) es un
+        // caso válido — antes se descartaba en silencio porque solo se
+        // guardaba cuando cambiaba el estado.
+        $cambiaObservaciones = $observaciones !== null && $observaciones !== $historial->observaciones;
+        $cambiaMotivo = $motivo !== null && $motivo !== $historial->motivo;
+
+        if (!$cambiaFecha && !$cambiaEstado && !$cambiaObservaciones && !$cambiaMotivo) {
+            return;
+        }
+
+        try {
+            if ($cambiaFecha) {
+                // Persona.fecha_registro se actualiza dentro del servicio,
+                // y solo cuando corresponde (únicamente si el estado movido
+                // es el primer estado de la persona, sin vecino anterior).
+                $this->historialEstadoService->moverLimite($historial, $nuevaFechaInicio, $nombreCompleto, $esSuperusuario);
+            }
+
+            if ($cambiaEstado || $cambiaObservaciones || $cambiaMotivo) {
+                $this->historialEstadoService->editarSoloEstado($historial->fresh(), $nuevoEstado ?: $historial->estado, $motivo, $nombreCompleto, $esSuperusuario, $observaciones);
+            }
+        } catch (HistorialEstadoException $e) {
+            return back()->withErrors([$e->campo => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Edita únicamente la observación de un estado histórico (sin tocar
+     * estado, fecha ni motivo). Es el único punto de edición disponible
+     * sobre un estado que ya no es "gestionable" (ver puede_gestionar más
+     * arriba) para un no-superusuario.
+     */
+    public function updateObservacionEstado(Request $request, string $id)
+    {
+        $request->validate([
+            'observaciones' => 'required|string|max:50',
+        ]);
+
+        $historial = HistorialEstados::findOrFail($id);
+
+        $user = Auth::user();
+        $nombreCompleto = "{$user->nombre} {$user->apellido}";
+
+        $this->historialEstadoService->editarObservacion($historial, $request->input('observaciones'), $nombreCompleto);
+    }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroyEstado(string $id)
+    public function destroyEstado(int $id)
     {
-        $historialEstado = HistorialEstados::findOrFail($id);
+        $historial = HistorialEstados::findOrFail($id);
 
-        $primerRegistro = HistorialEstados::where('id_persona', $historialEstado->id_persona)
-            ->orderBy('fecha_registro', 'asc')
-            ->first();
-
-        if ($historialEstado->id === $primerRegistro->id) {
-            abort(403, 'No se puede eliminar el estado inicial.');
+        try {
+            $this->historialEstadoService->eliminar($historial, Auth::user()->hasRole('superUsuario'));
+        } catch (HistorialEstadoException $e) {
+            return back()->withErrors([$e->campo => $e->getMessage()]);
         }
+    }
 
-        $estadoAnterior = HistorialEstados::where('id_persona', $historialEstado->id_persona)
-            ->where('fecha_inicio', '<', $historialEstado->fecha_inicio)
-            ->orderBy('fecha_inicio', 'desc')
-            ->first();
+    /**
+     * Inserta un estado nuevo en medio de un segmento existente de la línea
+     * de tiempo, partiéndolo en hasta 3 registros (antes/nuevo/después).
+     */
+    public function insertarEstadoIntermedio(Request $request)
+    {
+        $request->validate([
+            // Mismo criterio que en estado(): insertar es una creación, no
+            // una edición — la observación ya documenta el motivo.
+            'motivo' => 'nullable|string|max:255',
+            'observaciones' => 'nullable|string|max:50',
+        ]);
 
-        if ($estadoAnterior) {
-            $estadoAnterior->update(['fecha_fin' => null]);
+        $base = HistorialEstados::findOrFail($request->input('id_estado_base'));
+
+        $user = Auth::user();
+        $nombreCompleto = "{$user->nombre} {$user->apellido}";
+
+        try {
+            $this->historialEstadoService->insertarIntermedio(
+                $base,
+                $request->input('estado'),
+                Carbon::parse($request->input('mes_inicio')),
+                $request->input('motivo'),
+                $nombreCompleto,
+                $user->hasRole('superUsuario'),
+                $request->input('observaciones')
+            );
+        } catch (HistorialEstadoException $e) {
+            return back()->withErrors([$e->campo => $e->getMessage()]);
         }
-
-        $historialEstado->delete();
     }
 }

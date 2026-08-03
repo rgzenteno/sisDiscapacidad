@@ -17,7 +17,7 @@ class ReporteController extends Controller
     {
         $gestiones = Gestion::pluck('gestion');
 
-        return Inertia::render('ReportesDatos/index', [
+        return Inertia::render('Reportes/index', [
             'resultados' => [],
             'gestiones' => $gestiones
         ]);
@@ -76,10 +76,9 @@ class ReporteController extends Controller
             }
         }
 
-        // Filtros especiales (corregidos con alias único en subconsulta)
         if ($request->filled('discapacidad') || $request->filled('estado')) {
             $subQuery = Persona::query()
-                ->from('persona as persona_subq')  // ¡Alias único aquí!
+                ->from('persona as persona_subq')
                 ->leftJoin('habilitado', 'persona_subq.id_persona', '=', 'habilitado.id_persona')
                 ->leftJoin('carnet', 'persona_subq.id_persona', '=', 'carnet.id_persona')
                 ->select('persona_subq.id_persona')
@@ -122,7 +121,7 @@ class ReporteController extends Controller
             ]);
         }
 
-        // Paginación y resultados (sin cambios)
+        // Paginación y resultados
         $resultados = $query->orderBy('persona.id_persona', 'desc')->paginate(15);
         $resultadosReporte = clone $query;
 

@@ -3,19 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
-class Tutor extends Model
+class Tutor extends BaseModel
 {
-
     use HasFactory;
-    // Nombre de la tabla asociada
-    protected $table = 'tutor';
 
-    // Clave primaria personalizada
+    protected $table = 'tutor';
     protected $primaryKey = 'id_tutor';
 
-    // Campos asignables masivamente
     protected $fillable = [
         'nombre_tutor',
         'apellido_tutor',
@@ -27,17 +23,72 @@ class Tutor extends Model
         'direccion'
     ];
 
+    protected $casts = [
+        'fecha_nacimiento'  => 'date:Y-m-d'
+    ];
+
     protected $appends = ['nombre_completo'];
 
-    // ============ RELACIONES ============//
+    // ============================================================
+    // RELACIONES
+    // ============================================================
 
-    // Relación con
+    public function personas()
+    {
+        return $this->hasMany(Persona::class, 'id_tutor', 'id_tutor');
+    }
 
-    // ============ SCOPES ============ //
+    public function tutorados()
+    {
+        return $this->hasMany(Persona::class, 'id_tutor', 'id_tutor')
+            ->beneficiarios();
+    }
 
-    // Scope: nombreTutor
+    public function tutoradosActivos()
+    {
+        return $this->hasMany(Persona::class, 'id_tutor', 'id_tutor')
+            ->beneficiarios()
+            ->activos();
+    }
+
+    // ============================================================
+    // ACCESSORS
+    // ============================================================
+
     public function getNombreCompletoAttribute()
     {
         return trim("{$this->apellido_tutor} {$this->nombre_tutor}");
+    }
+
+    // ============================================================
+    // SCOPES
+    // ============================================================
+
+    /**
+     * Agrega conteo de tutorados (beneficiarios) al query.
+     * Uso: Tutor::conConteoTutorados()->get()
+     */
+    public function scopeConConteoTutorados(Builder $query): Builder
+    {
+        return $query->withCount([
+            'personas as total_tutorados' => fn($q) => $q->beneficiarios(),
+            'personas as tutorados_activos' => fn($q) => $q->beneficiarios()->activos(),
+        ]);
+    }
+
+    /**
+     * Filtra tutores que tengan al menos un tutorado activo.
+     */
+    public function scopeConTutoradosActivos(Builder $query): Builder
+    {
+        return $query->whereHas('tutoradosActivos');
+    }
+
+    /**
+     * Filtra tutores sin ningún tutorado asignado.
+     */
+    public function scopeSinTutorados(Builder $query): Builder
+    {
+        return $query->whereDoesntHave('tutorados');
     }
 }

@@ -2,31 +2,33 @@
 // ============================================================================
 // IMPORTS
 // ============================================================================
-import { computed, ref } from 'vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
+import { computed, ref, onMounted } from 'vue';
 
-// Componentes
+/**
+ * Componentes
+ */
 import ModalImportaciones from '@/components/ModalImportaciones.vue';
 import ModalEstadoBene from '@/components/ModalEstadoBene.vue';
+import ModalEditarObservacion from '@/components/ModalEditarObservacion.vue';
 import ModalEstados from '@/components/ModalEstados.vue';
 import ModalCarnet from '@/components/ModalCarnet.vue';
 import ModalTutor from '@/components/ModalTutor.vue';
 import Paginacion from '@/components/Paginacion.vue';
 import DataTable from '@/components/DataTable.vue';
-import Mensajes from '@/components/Mensajes.vue';
 import Busqueda from '@/components/Busqueda.vue';
-import Sidebar from '@/components/Sidebar.vue';
 import Footer from '@/components/Footer.vue';
 import Button from '@/components/Button.vue';
-import Header from '@/components/Header.vue';
 import Rutas from '@/components/Rutas.vue';
 import Icon from '@/components/Icon.vue';
 import Form from '@/components/Form/Form.vue';
 
-// Utilidades
-import { can } from '@/lib/can';
-import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+/**
+ * Utilidades
+ */
+import { can, hasRole } from '@/lib/can';
 import Modal from '@/components/Modal.vue';
+import AppLayout from '@/Layouts/AppLayout.vue';
 
 // ============================================================================
 // PROPS Y COMPUTED - DATOS DE LA PÁGINA
@@ -40,6 +42,7 @@ const persona = computed(() => page.props.persona);
 const distrito = computed(() => page.props.distrito);
 const discapacidad = computed(() => page.props.discapacidad);
 const selectedTutorName = computed(() => page.props.selectedTutorName);
+const mesesDisponibles = computed(() => page.props.mesesDisponibles ?? []);
 
 // Opciones para selects
 const distritosOptions = computed(() => {
@@ -69,6 +72,7 @@ const showModalCarnet = ref(false);
 const mostrarModalConfirmacion = ref(false);
 const showModalWaringDiscapacidad = ref(false);
 const showModalWaringDistrito = ref(false);
+const showModalEditarObservacion = ref(false);
 const ModalE = ref(false);
 
 // ============================================================================
@@ -78,10 +82,16 @@ const formCreate = ref(false);
 const formEdit = ref(false);
 const formCreateTutor = ref(false);
 const formCreateCarnet = ref(false);
-const formCreateEstado = ref('');
+const formCreateEstado = ref(false);
+const formEditEstado = ref(false);
+const formInsertarIntermedio = ref(false);
 const formCreateOption = ref(false);
 const formCreateOptionDis = ref(false);
 const asignateTutor = ref(false);
+const estadoDesdeModal = ref(false);
+const registroAEliminar = ref(null);
+const esPropioTutor = ref(false);
+const indefinidoCarnet = ref(false);
 
 // ============================================================================
 // REFS - DATOS TEMPORALES
@@ -89,11 +99,17 @@ const asignateTutor = ref(false);
 const selectedItem = ref(null);
 const selectedId = ref(null);
 const selectedNombre = ref(null);
+const selectedApellido = ref(null);
+const selectedCi = ref(null);
 const beneficiarioEncontrado = ref(null);
 const fechaNacimiento = ref(null);
 const tipoEstado = ref('');
 const selectedEstadoData = ref(null);
+const estadoIntermedioData = ref(null);
 const mensajes = ref([]);
+const procesandoPago = ref(false);
+const registroObservacion = ref(null);
+const procesandoObservacion = ref(false);
 
 // ============================================================================
 // REFS - TOOLTIP
@@ -110,18 +126,28 @@ const importando = ref(false);
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - TUTORES
 // ============================================================================
-const tutorFields = [
+const tutorFields = computed(() => [
+    {
+        typeInput: 'propio_check',
+        name: 'es_propio',
+        label: '',
+        hidden: selectedItem.value?.ya_es_propio ?? false,
+        onPropioChange: (val) => { esPropioTutor.value = !!val; }
+    },
     {
         typeCi: 'ci',
         typeInput: 'cedula',
         name: 'ci_tutor',
         label: 'C.I.',
         type: 'number',
-        required: false,
+        required: !esPropioTutor.value,
         placeholder: 'la cédula de identidad',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         range: 10,
-        autofocus: true
+        nameStyle: true,
+        autofocus: true,
+        opaco: esPropioTutor.value
     },
     {
         typeCi: 'ci',
@@ -130,30 +156,36 @@ const tutorFields = [
         label: 'Complemento C.I.',
         type: 'complemento',
         required: false,
-        readonly: false,
-        hidden: true
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
+        hidden: true,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
         name: 'nombre_tutor',
         label: 'Nombre',
         type: 'text',
-        required: true,
+        required: !esPropioTutor.value,
         placeholder: 'el nombre',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: true,
         range: 30,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
         name: 'apellido_tutor',
         label: 'Apellidos',
         type: 'text',
-        required: true,
+        required: !esPropioTutor.value,
         placeholder: 'el apellido',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: true,
         range: 30,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
@@ -162,8 +194,10 @@ const tutorFields = [
         type: 'number',
         required: false,
         placeholder: 'el número de teléfono',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         range: 10,
+        opaco: esPropioTutor.value
     },
     {
         typeInput: 'text',
@@ -172,22 +206,25 @@ const tutorFields = [
         type: 'email',
         required: false,
         placeholder: 'el correo electronico',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: false,
         range: 40,
+        opaco: esPropioTutor.value
     },
     {
-        typeInput: 'text',
+        typeInput: 'direccion',
         name: 'direccion',
         label: 'Dirección',
-        type: 'text',
         required: false,
         placeholder: 'la dirección',
-        readonly: false,
+        readonly: esPropioTutor.value,
+        disabled: esPropioTutor.value,
         nameStyle: false,
-        range: 49,
+        range: 200,
+        opaco: esPropioTutor.value
     }
-];
+]);
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - PERSONAS
@@ -250,8 +287,18 @@ const personaFields = [
         label: 'Fecha de Nacimiento',
         type: 'date',
         placeholder: 'la fecha de nacimiento',
+        nameStyle: false,
         required: true
     },
+    /* {
+        typeInput: 'month_year',
+        name: 'fecha_registro',
+        label: 'Fecha de Registro',
+        required: false,
+        placeholder: 'Ingrese la fecha de registro',
+        hidden: !can('superusuario'),
+        mesesDisponibles: mesesDisponibles.value,
+    }, */
     {
         typeInput: 'text',
         name: 'observacion_persona',
@@ -274,16 +321,39 @@ const personaFields = [
     }
 ];
 
-const personaFieldsEdit = [...personaFields];
+const personaFieldsEdit = computed(() => {
+    const historial = selectedItem.value?.historial_completo || [];
+    const tieneMultiplesEstados = historial.length >= 2;
+
+    // Primer estado (el más antiguo) para usarlo como límite superior
+    const primerEstado = tieneMultiplesEstados
+        ? [...historial].sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))[0]
+        : null;
+
+    return personaFields.map(field => {
+        if (field.name === 'fecha_registro') {
+            return {
+                ...field,
+                hidden: !can('superusuario'),
+                mesesDisponibles: field.mesesDisponibles,
+                // Si tiene 2+ estados, pasar el límite al picker
+                fechaLimite: primerEstado
+                    ? String(primerEstado.fecha_inicio).split('T')[0]
+                    : null,
+            };
+        }
+        return field;
+    });
+});
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - CARNETS
 // ============================================================================
-const carnetFields = [
+const carnetFields = computed(() => [
     {
         typeInput: 'id',
         name: 'id_persona',
-        label: 'Beneficiario',
+        label: '',
         type: 'text',
         readonly: true
     },
@@ -307,13 +377,20 @@ const carnetFields = [
         add: true
     },
     {
+        typeInput: 'indefinido_check',
+        name: 'indefinido',
+        label: '',
+        onIndefinidoChange: (val) => { indefinidoCarnet.value = !!val; } // ← callback
+    },
+    {
         typeInput: 'text',
         name: 'fecha_emision',
         label: 'Fecha de Emisión',
         type: 'date',
-        required: true,
+        required: !indefinidoCarnet.value,
         placeholder: 'la fecha de emisión',
-        readonly: false
+        readonly: false,
+        hidden: indefinidoCarnet.value
     },
     {
         typeInput: 'text',
@@ -322,51 +399,200 @@ const carnetFields = [
         type: 'date',
         required: false,
         readonly: true,
-        placeholder: 'Se calculará automáticamente'
+        placeholder: 'Se calculará automáticamente',
+        hidden: indefinidoCarnet.value
     }
-];
+]);
 
-const carnetFieldsEdit = [...carnetFields];
+const carnetFieldsEdit = computed(() => [...carnetFields.value]);
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - ESTADOS
 // ============================================================================
-const estadoFields = [
-    {
-        name: 'id_persona',
-        label: '',
-        hidden: true
-    },
-    {
-        name: 'id_estado',
-        label: '',
-        hidden: true
-    },
-    {
-        typeInput: 'select',
-        name: 'estado',
-        label: 'Estado del Beneficiario',
-        type: 'text',
-        placeholder: 'el estado del beneficiario',
-        options: [
-            { text: 'Activo', value: 'activo' },
-            { text: 'Baja Temporal', value: 'baja_temporal' },
-            { text: 'Baja Definitiva', value: 'baja_definitiva' }
-        ],
-        required: true,
-        readonly: false,
-        add: false
-    },
-    {
-        typeInput: 'text',
-        name: 'fecha_inicio',
-        label: 'Fecha de Inicio',
-        type: 'date',
-        required: true,
-        placeholder: 'la fecha de inicio del estado',
-        readonly: false
-    }
-];
+const estadoFields = computed(() => {
+    const estadoActual = selectedEstadoData.value?.estado_actual?.estado;
+    const esEdicion = formEditEstado.value;
+    const esPrimerEstado = esEdicion && !!selectedEstadoData.value?.es_primer_estado;
+    // Editar un mes intermedio nunca permite mover su mes/gestión: si el mes
+    // no es el correcto, la acción es eliminar ese registro y crear uno nuevo
+    // en el mes correcto (ver botón "Eliminar" del timeline), no reasignar
+    // uno existente. Aplica a cualquier rol, incluido superusuario.
+    // El primer estado SÍ puede mover su fecha (está ligada a la fecha de
+    // registro del beneficiario — ver PersonaController::estado()), pero
+    // solo mientras sea el único estado de la persona: si ya hay estados
+    // posteriores construidos sobre él, moverlo los desalinearía.
+    const esUnicoEstado = (selectedEstadoData.value?.historial_completo?.length ?? 0) <= 1;
+    const mesForzado = esEdicion
+        ? !(esPrimerEstado && esUnicoEstado)
+        : (!hasRole('superUsuario') && selectedEstadoData.value?.fecha_inicio_forzada);
+
+    // "Depurado" solo tiene sentido si el estado anterior fue una baja
+    // (temporal o definitiva) — no se puede depurar a alguien que nunca
+    // causó baja.
+    const previoPermiteDepurado = ['baja_definitiva', 'baja_temporal'].includes(estadoActual);
+
+    const todasLasOpciones = [
+        { text: 'Activo', value: 'activo' },
+        { text: 'Baja Temporal', value: 'baja_temporal' },
+        { text: 'Baja Definitiva', value: 'baja_definitiva' },
+        { text: 'Depurado', value: 'depurado' },
+        // "Suspender Pagos" ya no se puede elegir desde este formulario
+        // (para nadie, ni superusuario) — solo queda como valor histórico
+        // para registros ya existentes.
+    ]
+        .filter(op => hasRole('superUsuario') || op.value !== 'depurado')
+        .filter(op => op.value !== 'depurado' || previoPermiteDepurado);
+
+    const campoFecha = mesForzado
+        ? {
+            typeInput: 'month_year',
+            name: 'fecha_inicio',
+            label: 'Mes y Gestión',
+            soloLectura: true,
+            valorMostrado: esEdicion
+                ? selectedEstadoData.value?.fecha_inicio
+                : selectedEstadoData.value?.fecha_inicio_forzada,
+        }
+        : {
+            typeInput: 'month_year',
+            name: 'fecha_inicio',
+            label: 'Mes y Gestión',
+            required: true,
+            placeholder: 'Seleccionar mes y gestión',
+            readonly: false,
+            editMode: esEdicion,
+            mesesDisponibles: mesesDisponibles.value,
+            mesActualEdicion: esEdicion ? selectedEstadoData.value?.fecha_inicio : undefined,
+        };
+
+    return [
+        {
+            typeInput: 'hidden',
+            name: 'id_persona',
+            label: '',
+            hidden: true
+        },
+        {
+            typeInput: 'hidden',
+            name: 'id_estado',
+            label: '',
+            hidden: true
+        },
+        {
+            typeInput: 'select',
+            name: 'estado',
+            label: 'Estado del Beneficiario',
+            type: 'text',
+            placeholder: 'el estado del beneficiario',
+            // En ambos casos se excluye el estado del mes anterior (el
+            // vigente antes de este cambio) — no tiene sentido "cambiar" a
+            // lo mismo que ya había.
+            options: todasLasOpciones.filter(op => op.value !== estadoActual),
+            required: true,
+            readonly: false,
+            add: false
+        },
+        {
+            // Se autocompleta según el estado elegido (baja temporal/
+            // definitiva) — el usuario puede editarlo o agregarle detalle
+            // (ej. la fecha de fallecimiento) sin problema. type
+            // 'observacion' (no 'text'): a diferencia de nombre/apellido,
+            // acá se necesitan números (ej. fechas) y se guarda en mayúsculas.
+            typeInput: 'text',
+            type: 'observacion',
+            name: 'observaciones',
+            label: 'Observaciones',
+            placeholder: 'observaciones (se autocompleta según el estado)',
+            required: false,
+            range: 50,
+        },
+        campoFecha,
+        {
+            typeInput: 'textarea',
+            name: 'motivo',
+            label: 'Motivo del cambio',
+            placeholder: 'la razón por la que se cambia el estado',
+            // Solo tiene sentido al editar: al agregar, la observación
+            // (autocompletada según el estado) ya documenta el motivo, así
+            // que ni se muestra el campo.
+            required: esEdicion,
+            hidden: !esEdicion,
+            maxLength: 255,
+        },
+    ];
+});
+
+// ============================================================================
+// CONFIGURACIÓN DE CAMPOS - INSERTAR ESTADO INTERMEDIO
+// ============================================================================
+const estadoIntermedioFields = computed(() => {
+    const estadoBase = estadoIntermedioData.value?.estado_base;
+    const rangoBase = estadoBase
+        ? { inicio: estadoBase.fecha_inicio, fin: estadoBase.fecha_fin, estado: estadoBase.estado }
+        : {};
+    const estadoSiguiente = estadoIntermedioData.value?.estado_siguiente;
+
+    // Igual que en estadoFields: "Depurado" solo aplica si el estado base
+    // (el anterior al hueco donde se inserta) fue una baja.
+    const previoPermiteDepurado = ['baja_definitiva', 'baja_temporal'].includes(estadoBase?.estado);
+
+    const todasLasOpciones = [
+        { text: 'Activo', value: 'activo' },
+        { text: 'Baja Temporal', value: 'baja_temporal' },
+        { text: 'Baja Definitiva', value: 'baja_definitiva' },
+        { text: 'Depurado', value: 'depurado' },
+    ].filter(op => op.value !== 'depurado' || previoPermiteDepurado);
+
+    return [
+        {
+            typeInput: 'hidden',
+            name: 'id_estado_base',
+            label: '',
+            hidden: true
+        },
+        {
+            typeInput: 'select',
+            name: 'estado',
+            label: 'Estado a insertar',
+            type: 'text',
+            placeholder: 'el estado a insertar',
+            options: todasLasOpciones.filter(op => op.value !== estadoBase?.estado),
+            required: true,
+            readonly: false,
+            add: false
+        },
+        {
+            typeInput: 'text',
+            type: 'observacion',
+            name: 'observaciones',
+            label: 'Observaciones',
+            placeholder: 'observaciones (se autocompleta según el estado)',
+            required: false,
+            range: 50,
+        },
+        {
+            typeInput: 'month_year',
+            name: 'mes_inicio',
+            label: 'Mes y Gestión',
+            required: true,
+            placeholder: 'Seleccionar mes y gestión',
+            modoIntermedio: true,
+            rangoBase,
+            estadoSiguiente,
+        },
+        {
+            typeInput: 'textarea',
+            name: 'motivo',
+            label: 'Motivo del cambio',
+            placeholder: 'la razón por la que se cambia el estado',
+            // Insertar es una creación, igual que "Agregar estado": la
+            // observación ya documenta el motivo, así que ni se muestra.
+            required: false,
+            hidden: true,
+            maxLength: 255,
+        },
+    ];
+});
 
 // ============================================================================
 // CONFIGURACIÓN DE CAMPOS - OPCIONES (DISTRITO Y DISCAPACIDAD)
@@ -405,12 +631,12 @@ const DiscapacidadFields = [
 // CONFIGURACIÓN DE TABLA
 // ============================================================================
 const tableColumns = [
-    { label: 'Nombre Completo', field: 'nombre_completo', headerClass: '', cellClass: 'whitespace-nowrap' },
+    { label: 'Nombre Completo', field: 'nombre_completo', headerClass: 'whitespace-nowrap', cellClass: 'whitespace-nowrap' },
     { label: 'Distrito', field: 'distrito', headerClass: '', cellClass: 'whitespace-nowrap' },
-    { label: 'Cedula de Identidad', field: 'ci_persona', headerClass: 'text-center whitespace-nowrap', cellClass: 'whitespace-nowrap' },
-    { label: 'Observación', field: 'observacion_persona', headerClass: 'text-center', cellClass: '' },
+    { label: 'C.I.', field: 'ci_persona', headerClass: 'text-center whitespace-nowrap', cellClass: 'whitespace-nowrap' },
+    { label: 'Observación', field: 'observacion_persona', headerClass: 'text-center hidden sm:block', cellClass: '' },
     { label: 'Estado', field: 'estado_actual', headerClass: 'text-center', cellClass: '' },
-    { label: 'Carnet Dis.', field: 'carnet', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
+    { label: 'Carnet Discapacidad', field: 'carnet', headerClass: '', cellClass: 'whitespace-nowrap' },
     { label: 'Tutor', field: 'tutor', headerClass: 'text-center', cellClass: 'whitespace-nowrap' },
     { label: 'Acciones', field: 'acciones', headerClass: 'text-center', cellClass: '' }
 ];
@@ -419,8 +645,8 @@ const tableColumns = [
 // CONFIGURACIÓN DE IMPORTACIÓN
 // ============================================================================
 const configPlanillaGeneral = {
-    titulo: 'Importar base de datos de beneficiarios',
-    subtitulo: 'Carga el excel con la información de los beneficiarios con el formato establecido.',
+    titulo: 'Importar datos de beneficiarios',
+    subtitulo: 'Carga archivo excel con el formato establecido.',
     icono: 'upload',
     columnasTabla: [
         { nombre: 'Nombre', obligatorio: true },
@@ -429,7 +655,7 @@ const configPlanillaGeneral = {
         { nombre: 'CI', obligatorio: true },
         { nombre: 'Observaciones', obligatorio: false }
     ],
-    nombrePlantilla: 'plantillaBaseDeDatos.xlsx',
+    nombrePlantilla: '(Ejemplo) PLANILLAS GENERAL BONO DSICAPACIDAD.xlsx',
     urlPlantilla: '/plantilla/PlantillaImportacion.xlsx',
     textoBotonImportar: 'Importar Excel'
 };
@@ -445,25 +671,22 @@ const configPlanillaGeneral = {
  */
 const separarNombre = (nombreCompleto) => {
     if (!nombreCompleto) return { nombre: '', apellido: '' };
+    if (nombreCompleto.trim().toLowerCase() === 'propio') return { nombre: '', apellido: '' };
 
     const partes = nombreCompleto.trim().split(' ');
     const total = partes.length;
 
-    // Si solo hay una palabra
     if (total <= 1) {
         return { nombre: nombreCompleto, apellido: '' };
     }
 
-    // Si hay exactamente 2 palabras
     if (total === 2) {
         return { nombre: partes[1], apellido: partes[0] };
     }
 
-    // Si hay 3 palabras
     if (total === 3) {
         const ultimaPalabra = partes[2];
 
-        // Si la última palabra es corta (<=3), probablemente sea sufijo (Jr, III, etc)
         if (ultimaPalabra.length <= 3) {
             return {
                 nombre: partes[1] + ' ' + partes[2],
@@ -471,29 +694,34 @@ const separarNombre = (nombreCompleto) => {
             };
         }
 
-        // Caso normal: 1 nombre, 2 apellidos
         return {
             nombre: partes[2],
             apellido: partes.slice(0, 2).join(' ')
         };
     }
 
-    // Si hay 4 o más palabras
     const ultimaPalabra = partes[partes.length - 1];
 
-    // Si la última palabra es corta (<=3), probablemente sea sufijo
     if (ultimaPalabra.length <= 3) {
         return {
-            nombre: partes.slice(-2).join(' '), // últimas 2 palabras
-            apellido: partes.slice(0, -2).join(' ').slice(0, 2) // máximo 2 apellidos
+            nombre: partes.slice(-2).join(' '),
+            apellido: partes.slice(0, -2).join(' ').slice(0, 2)
         };
     }
 
-    // Caso normal: tomar las últimas 2 palabras como nombre y las primeras 2 como apellido
     return {
-        nombre: partes.slice(-2).join(' '), // últimas 2 palabras como nombre
-        apellido: partes.slice(0, 2).join(' ') // primeras 2 palabras como apellido
+        nombre: partes.slice(-2).join(' '),
+        apellido: partes.slice(0, 2).join(' ')
     };
+};
+
+/**
+ * Determina si un carnet es de tipo indefinido (sin fecha de emisión)
+ * @param {Object} carnet - Objeto carnet del beneficiario
+ * @returns {boolean}
+ */
+const esCarnetIndefinido = (carnet) => {
+    return carnet?.fecha_emision === null;
 };
 
 // ============================================================================
@@ -527,6 +755,10 @@ const sinDatos = () => {
     mostrarMensaje('error', 'Error de validación', 'Por favor, complete todos los campos obligatorios antes de enviar el formulario.');
 };
 
+const carnetInvalido = () => {
+    mostrarMensaje('error', 'Carnet Discapacidad', 'El numero de carnet es invalido.');
+};
+
 const mensajeExisteDisca = () => {
     mostrarMensaje('info', 'Registro existente', 'La discapacidad ingresada ya está registrado.');
 };
@@ -549,6 +781,10 @@ const openMissingDataModal = () => {
 
 const fechaInvalida = () => {
     mostrarMensaje('advertencia', 'Fecha incorrecta', 'La fecha ingresada no puede ser anterior al último estado registrado');
+};
+
+const sinEstadoPrimero = () => {
+    mostrarMensaje('advertencia', 'Estado requerido', 'Debe agregar el estado del beneficiario primero.');
 };
 
 // ============================================================================
@@ -594,7 +830,7 @@ const hideTooltip = () => {
  * @param {number|string} id - ID a codificar y pasar como parámetro
  */
 const getUrl = (ruta, id) => {
-    const url = route(ruta, id); // ✅ UUID directo
+    const url = route(ruta, id);
     router.visit(url);
 };
 
@@ -650,6 +886,134 @@ const handleCambioEstado = () => {
     mostrarMensaje('correcto', 'Registro exitoso', 'Los datos se registraron correctamente.');
     router.reload({ only: ['personas', 'persona'] });
     formCreateEstado.value = false;
+    formEditEstado.value = false; // ← faltaba esto
+    formInsertarIntermedio.value = false;
+};
+
+/**
+ * Abre el formulario para insertar un estado en medio de un segmento
+ * existente de la línea de tiempo del beneficiario
+ */
+const abrirInsertarIntermedio = ({ base, siguiente }) => {
+    estadoIntermedioData.value = {
+        id_estado_base: base.id,
+        id_persona: selectedItem.value.id_persona,
+        meses_pagados: selectedItem.value.meses_pagados ?? [],
+        estado_base: {
+            estado: base.estado,
+            fecha_inicio: base.fecha_inicio,
+            fecha_fin: base.fecha_fin,
+        },
+        // Para marcar visualmente el mes en que arranca el siguiente
+        // estado (el borde del hueco) como ya ocupado/bloqueado.
+        estado_siguiente: siguiente ? { estado: siguiente.estado, fecha_inicio: siguiente.fecha_inicio } : null,
+    };
+    showModalEstado.value = false;
+    formInsertarIntermedio.value = true;
+};
+
+/**
+ * Cancela el formulario de insertar estado intermedio y vuelve al modal
+ */
+const cancelarInsertarIntermedio = () => {
+    formInsertarIntermedio.value = false;
+    showModalEstado.value = true;
+};
+
+/**
+ * Abre el formulario para agregar el estado del mes siguiente al último
+ * registrado en el sistema. Un no-superusuario no elige el mes: va fijo.
+ */
+const abrirAgregarMesExtra = (mesExtra) => {
+    const fechaForzada = `${mesExtra.gestion}-${String(mesExtra.mes).padStart(2, '0')}-01`;
+
+    selectedEstadoData.value = {
+        id_persona: selectedItem.value.id_persona,
+        estado_actual: selectedItem.value.estado_actual,
+        mes_extra: mesExtra,
+        // El picker de mes necesita esto para bloquear/colorear los meses
+        // que ya tienen estado o pago (solo aplica cuando es superusuario:
+        // el no-superusuario va con el mes fijo, sin picker interactivo).
+        historial_completo: selectedItem.value.historial_completo,
+        meses_pagados: selectedItem.value.meses_pagados ?? [],
+        ...(hasRole('superUsuario') ? {} : { fecha_inicio_forzada: fechaForzada }),
+    };
+    estadoDesdeModal.value = true;
+    showModalEstado.value = false;
+    formCreateEstado.value = true;
+};
+
+/**
+ * Maneja la edicion del estado del beneficiario
+ */
+const editarEstado = (registro) => {
+    selectedEstadoData.value = {
+        id_persona: selectedItem.value.id_persona,
+        nombre_persona: selectedItem.value.nombre_persona,
+        apellido_persona: selectedItem.value.apellido_persona,
+        ci_persona: selectedItem.value.ci_persona,
+        complemento: selectedItem.value.complemento,
+        distrito: selectedItem.value.distrito,
+        // El estado a excluir del dropdown es el del mes anterior (el
+        // vigente antes de este registro), no el propio valor actual. Si no
+        // hay anterior (es el primer estado), no se excluye nada.
+        estado_actual: registro.estado_anterior ? { estado: registro.estado_anterior } : null,
+        estado: registro.estado,
+        id_estado: registro.id,
+        fecha_inicio: registro.fecha_inicio,
+        motivo: registro.motivo,
+        observaciones: registro.observacion,
+        meses_pagados: selectedItem.value.meses_pagados ?? [],
+        // El picker de mes (cuando es superusuario editando un estado que
+        // no es el primero) necesita esto para bloquear/colorear los meses
+        // que ya tienen otro estado.
+        historial_completo: selectedItem.value.historial_completo,
+        es_primer_estado: registro.es_primer_estado,
+    };
+    selectedId.value = registro.id;
+    estadoDesdeModal.value = true;
+    showModalEstado.value = false;
+    formEditEstado.value = true;
+};
+
+/**
+ * Abre el modal reducido para editar solo la observación de un estado
+ * histórico (no gestionable): no permite tocar estado, fecha ni motivo.
+ */
+const abrirEditarObservacion = (registro) => {
+    registroObservacion.value = registro;
+    showModalEstado.value = false;
+    showModalEditarObservacion.value = true;
+};
+
+/**
+ * Cierra el modal de observación y vuelve al modal de estados
+ */
+const cerrarEditarObservacion = () => {
+    showModalEditarObservacion.value = false;
+    registroObservacion.value = null;
+    showModalEstado.value = true;
+};
+
+/**
+ * Guarda la observación editada de un estado histórico
+ */
+const guardarObservacion = (observaciones) => {
+    procesandoObservacion.value = true;
+    router.put(route('persona.estado.observacion', registroObservacion.value.id), { observaciones }, {
+        onSuccess: () => {
+            procesandoObservacion.value = false;
+            showModalEditarObservacion.value = false;
+            registroObservacion.value = null;
+            mostrarMensaje('correcto', 'Registro exitoso', 'La observación se actualizó correctamente.');
+            router.reload({ only: ['personas', 'persona'] });
+        },
+        onError: (errors) => {
+            procesandoObservacion.value = false;
+            console.error('Error al editar observación:', errors);
+            mostrarMensaje('error', 'Error', 'No se pudo actualizar la observación.');
+        }
+    });
 };
 
 /**
@@ -728,8 +1092,10 @@ const openEditPersona = (item, idPersona) => {
         apellido_persona: nombreSeparado.apellido,
         distrito: item.distrito,
         fecha_nacimiento: item.fecha_nacimiento,
+        fecha_registro: item.fecha_registro,
         observacion_persona: item.observacion_persona,
         documento_respaldo: item.documento_respaldo,
+        historial_completo: item.historial_completo || [],
     };
 
     selectedId.value = idPersona;
@@ -751,12 +1117,19 @@ const handleEdit = () => {
  * @param {number|string} idCarnet - ID del carnet
  * @param {string} nombrePersona - Nombre de la persona
  */
-const openEditCarnet = (item, idCarnet, nombrePersona) => {
-
+const openEditCarnet = (item, idCarnet, nombrePersona, apellidoPersona, ciPersona) => {
+    indefinidoCarnet.value = item.carnet?.fecha_emision === null;
+    selectedItem.value = {
+        ...item,
+        carnet: {
+            ...item.carnet,
+            indefinido: item.carnet?.fecha_emision === null ? 1 : 0
+        }
+    };
     selectedId.value = idCarnet;
-    selectedItem.value = { ...item };
     selectedNombre.value = nombrePersona;
-
+    selectedApellido.value = apellidoPersona;
+    selectedCi.value = ciPersona;
     showModalCarnet.value = false;
     showModalCarnetEdit.value = true;
 };
@@ -770,9 +1143,18 @@ const handleEditCarnet = () => {
 };
 
 /**
+ * Cancela la creación del beneficiario y elimina la sesión del tutor almacenada en el controlador
+ */
+const handleCancelCreate = () => {
+    axios.delete(route('persona.clearTutorSession'));
+    formCreate.value = false;
+};
+
+/**
  * Cancela la edición del carnet y vuelve al modal de visualización
  */
 const handleEditCancel = () => {
+    indefinidoCarnet.value = false;
     showModalCarnetEdit.value = false;
     showModalCarnet.value = true;
 };
@@ -786,7 +1168,17 @@ const handleEditCancel = () => {
  * @param {Object} datos - Datos del tutor
  */
 const ModalTutorDatos = (datos) => {
-    selectedItem.value = { ...datos };
+    selectedItem.value = {
+        id_persona: datos.id_persona,
+        nombre_persona: datos.nombre_persona,
+        apellido_persona: datos.apellido_persona,
+        ci_persona: datos.ci_persona,
+        tutor: datos.tutor,
+        total_tutorados: datos.tutor?.total_tutorados ?? 0,
+        tutorados_activos: datos.tutor?.tutorados_activos ?? 0,
+        tutor_anterior: datos.tutor_anterior ?? null,
+        es_propio: datos.tutor_nombre === 'propio',
+    };
     showModal.value = true;
 };
 
@@ -795,7 +1187,27 @@ const ModalTutorDatos = (datos) => {
  * @param {Object} datos - Datos del beneficiario
  */
 const openModalEstado = (datos) => {
-    selectedItem.value = { ...datos };
+    selectedItem.value = {
+        id_persona: datos.id_persona,
+        nombre_persona: datos.nombre_persona,
+        apellido_persona: datos.apellido_persona,
+        nombre_completo: datos.nombre_completo,
+        ci_persona: datos.ci_persona,
+        complemento: datos.complemento,
+        distrito: datos.distrito,
+        fecha_registro: datos.fecha_registro,
+
+        // Estado actual
+        id_estado: datos.id_estado,
+        estado: datos.estado_actual?.estado ?? null,
+        estado_actual: datos.estado_actual
+            ? { estado: datos.estado_actual.estado }
+            : null,
+
+        // Historial (lo que necesita el modal)
+        historial_completo: datos.historial_completo ?? [],
+        meses_pagados: datos.meses_pagados ?? [],
+    };
     showModalEstado.value = true;
 };
 
@@ -805,9 +1217,11 @@ const openModalEstado = (datos) => {
  * @param {string} nombrePersona - Nombre de la persona
  * @param {string} fecha - Fecha de nacimiento
  */
-const openCreateCarnet = (idPersona, nombrePersona, fecha) => {
+const openCreateCarnet = (idPersona, nombrePersona, apellidoPersona, ciPersona, fecha) => {
     selectedId.value = idPersona;
     selectedNombre.value = nombrePersona;
+    selectedApellido.value = apellidoPersona;
+    selectedCi.value = ciPersona;
     fechaNacimiento.value = fecha;
     formCreateCarnet.value = true;
 };
@@ -833,7 +1247,6 @@ const openTutor = () => {
  * @param {number|string} idPersona - ID de la persona
  */
 const openAsignateTutor = (idPersona) => {
-
     const registro = persona.value.data.find(p => p.id_persona === idPersona);
 
     if (!registro) {
@@ -843,10 +1256,13 @@ const openAsignateTutor = (idPersona) => {
 
     const tutorSeparado = separarNombre(registro.tutor_nombre);
 
+    esPropioTutor.value = false; // resetear al abrir
+
     selectedItem.value = {
         nombre_tutor: tutorSeparado.nombre,
         apellido_tutor: tutorSeparado.apellido,
-        tiene_tutor: !!registro.tutor_nombre
+        tiene_tutor: !!registro.tutor_nombre,
+        ya_es_propio: registro.tutor_nombre === 'propio',
     };
 
     selectedId.value = idPersona;
@@ -854,12 +1270,11 @@ const openAsignateTutor = (idPersona) => {
 };
 
 /**
- * Abre el modal de estados
- * @param {string} tipo - Tipo de estado
+ * Cambia el tutor del beneficiario seleccionado cerrando el modal actual
  */
-const openModalE = (tipo) => {
-    tipoEstado.value = tipo;
-    ModalE.value = true;
+const handleChangeTutor = () => {
+    showModal.value = false;
+    openAsignateTutor(selectedItem.value.id_persona);
 };
 
 /**
@@ -873,10 +1288,18 @@ const closeModal = () => {
  * Abre el formulario de creación de estado
  * @param {Object} data - Datos del estado
  */
-const openFormEstado = (data) => {
-    selectedEstadoData.value = data;
-    showModalEstado.value = false;
-    formCreateEstado.value = true;
+const openFormEstado = (data, tipo) => {
+    if (tipo === 'add') {
+        selectedEstadoData.value = null;
+        selectedId.value = data;
+        estadoDesdeModal.value = false;
+        formCreateEstado.value = true;
+    } else {
+        selectedEstadoData.value = data;
+        estadoDesdeModal.value = true;
+        showModalEstado.value = false;
+        formCreateEstado.value = true;
+    }
 };
 
 /**
@@ -884,62 +1307,65 @@ const openFormEstado = (data) => {
  */
 const abrirEstado = () => {
     formCreateEstado.value = false;
-    showModalEstado.value = true;
+    formEditEstado.value = false;
+    if (estadoDesdeModal.value) {
+        showModalEstado.value = true;
+    }
 };
 
-const registroAEliminar = ref(null);
-
-// Modificar la función eliminarRegistro
+/**
+ * Abre el modal de confirmación para eliminar un estado del beneficiario
+ */
 const eliminarRegistro = (id) => {
     if (!id) {
         mostrarMensaje('error', 'Error', 'No se puede eliminar este registro');
         return;
     }
 
-    // Guardar el ID y mostrar el modal de confirmación
     registroAEliminar.value = id;
+    showModalEstado.value = false;
     mostrarModalConfirmacion.value = true;
 }
 
-// Nueva función para confirmar eliminación
+/**
+ * Confirma y ejecuta la eliminación del estado seleccionado
+ */
 const confirmarEliminacion = () => {
+    procesandoPago.value = true;
     router.delete(route('persona.estado.eliminar', registroAEliminar.value), {
         onSuccess: () => {
+            procesandoPago.value = false;
             mostrarModalConfirmacion.value = false;
             showModalEstado.value = false;
             registroAEliminar.value = null;
-            mostrarMensaje('correcto', 'Eliminación exitosa', 'El registro se eliminó correctamente.');
+            mostrarMensaje('correcto', 'Eliminación exitosa', 'El estado se eliminó correctamente.');
             router.reload({ only: ['personas', 'persona'] });
         },
         onError: (errors) => {
+            procesandoPago.value = false;
             console.error('Error al eliminar:', errors);
             mostrarModalConfirmacion.value = false;
             registroAEliminar.value = null;
-            mostrarMensaje('error', 'Error', 'No se pudo eliminar el registro');
+            mostrarMensaje('error', 'Error', 'No se pudo eliminar el estado');
         }
     });
 }
 
-// Nueva función para cancelar
-const cancelarEliminacion = () => {
-    mostrarModalConfirmacion.value = false;
-    registroAEliminar.value = null;
-}
+// ============================================================================
+// REFS Y FUNCIONES - MENÚ MÓVIL
+// ============================================================================
 
-/**
- * Cierra todos los formularios y modales
- */
-const closeForm = () => {
-    showModalCarnetEdit.value = false;
-    formCreateOption.value = false;
-    formCreateOptionDis.value = false;
-    formCreateCarnet.value = false;
-    showModalCarnet.value = false;
-    formCreateTutor.value = false;
-    createTutor.value = false;
-    formCreate.value = false;
-    formEdit.value = false;
-};
+const showMobileMenu = ref(false)
+
+const closeMobileMenu = () => { showMobileMenu.value = false }
+
+onMounted(() => {
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.relative.sm\\:hidden')) {
+            showMobileMenu.value = false
+        }
+    })
+})
 
 // ============================================================================
 // FUNCIONES - IMPORTACIÓN
@@ -995,10 +1421,11 @@ const handleDescargarPlantilla = (nombrePlantilla) => {
 };
 
 /**
- * Maneja cuando se encuentra un beneficiario en la búsqueda
+ * Maneja cuando se detecta un beneficiario duplicado durante la creación
  * @param {string|number} ciPersona - CI de la persona encontrada
  */
 const encotrado = (ciPersona) => {
+    axios.delete(route('persona.clearTutorSession'));
     const personaExistente = usePage().props.flash.persona_existente;
     const tipoRegistro = personaExistente?.tipo_registro;
 
@@ -1014,56 +1441,99 @@ const encotrado = (ciPersona) => {
 </script>
 
 <template>
-    <!-- ============================================================================ -->
-    <!-- HEAD Y CONTENEDOR PRINCIPAL -->
-    <!-- ============================================================================ -->
+    <AppLayout :mensajes="mensajes" @cerrarMensaje="cerrarMensaje">
 
-    <Head title="UMADIS" />
+        <!-- ============================================================================ -->
+        <!-- ENCABEZADO DE PÁGINA -->
+        <!-- ============================================================================ -->
+        <div class="px-1 py-1 sm:py-3 sm:px-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+            <h1 class="font-semibold text-xl sm:text-2xl">Beneficiarios</h1>
+            <Rutas label1="Inicio" label3="Beneficiarios" class="sm:text-xs" />
+        </div>
 
-    <div class="flex h-screen bg-gray-200 font-roboto">
-        <!-- Sidebar de navegación -->
-        <Sidebar />
+        <!-- ============================================================================ -->
+        <!-- BARRA DE HERRAMIENTAS -->
+        <!-- ============================================================================ -->
+        <div class="flex justify-between p-2 sm:p-4 sm:pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
+            <!-- Buscador -->
+            <Busqueda :initial-value="beneficiarioEncontrado || filters.buscador" name="beneficiario" only="persona"
+                :data="persona" ruta-busqueda="persona.index" />
 
-        <!-- Contenedor principal -->
-        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Botones de acción -->
+            <div class="flex gap-1.5 sm:gap-2">
 
-            <!-- ============================================================================ -->
-            <!-- SISTEMA DE MENSAJES -->
-            <!-- ============================================================================ -->
-            <Mensajes v-for="m in mensajes" :key="m.id" :id="m.id" :tipo="m.tipo" :contenido="m.contenido"
-                @close="cerrarMensaje" />
+                <!-- MÓVIL: Botón "+" con dropdown -->
+                <div class="relative sm:hidden">
+                    <Button @click.prevent="showMobileMenu = !showMobileMenu"
+                        :style="'px-2 py-2 pb-0.5 rounded-full border-none'"
+                        class="shrink-0 mr-2 self-center bg-gray-200 relative overflow-hidden group">
+                        <span
+                            class="absolute inset-0 bg-[rgb(var(--brand-500))] rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                        <span class="relative z-10">
+                            <Icon :icon-button="true" name="circlePlus"
+                                class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
+                                :size="32" :height="31" />
+                        </span>
+                    </Button>
 
-            <!-- Header -->
-            <Header class="mb-0" />
+                    <!-- Dropdown -->
+                    <Transition enter-active-class="transition-all duration-300 ease-out"
+                        enter-from-class="opacity-0 -translate-y-3 scale-95"
+                        enter-to-class="opacity-100 translate-y-0 scale-100"
+                        leave-active-class="transition-all duration-200 ease-in"
+                        leave-from-class="opacity-100 translate-y-0 scale-100"
+                        leave-to-class="opacity-0 -translate-y-3 scale-95">
+                        <div v-if="showMobileMenu"
+                            class="absolute right-0 top-full mt-2 flex flex-col gap-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-2 z-50">
 
-            <!-- ============================================================================ -->
-            <!-- ENCABEZADO DE PÁGINA -->
-            <!-- ============================================================================ -->
-            <div class="px-5 py-3 flex justify-between">
-                <h1 class="font-semibold text-2xl">Beneficiarios</h1>
-                <Rutas label1="Inicio" label3="Beneficiarios" />
-            </div>
+                            <Button v-if="can('agregar-beneficiario')" @click.prevent="openTutor(); closeMobileMenu()"
+                                :style="'px-2 py-2 pb-1 rounded-full border-none'"
+                                class="shrink-0 self-center bg-gray-200 relative overflow-hidden group">
+                                <span
+                                    class="absolute inset-0 bg-[rgb(var(--brand-500))] rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                <span class="relative z-10">
+                                    <Icon :icon-button="true" name="userAdd"
+                                        class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
+                                        :size="32" :height="32" />
+                                </span>
+                            </Button>
 
-            <!-- ============================================================================ -->
-            <!-- BARRA DE HERRAMIENTAS -->
-            <!-- ============================================================================ -->
-            <div class="flex justify-between p-4 pb-3 bg-gray-50 border-x-2 border-t-2 rounded-t-lg mr-1">
-                <!-- Buscador -->
-                <Busqueda :initial-value="beneficiarioEncontrado || filters.buscador" name="beneficiario" only="persona"
-                    :data="persona" ruta-busqueda="persona.index" />
+                            <Button v-if="can('importar-beneficiario')"
+                                @click.prevent="openModalImportar(); closeMobileMenu()"
+                                :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                                class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                                <span
+                                    class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                <span class="relative z-10">
+                                    <Icon :icon-button="true" name="fileImport"
+                                        class-name="text-gray-700 group-hover:text-white transition-colors duration-500" />
+                                </span>
+                            </Button>
 
-                <!-- Botones de acción -->
-                <div class="flex gap-2">
-                    <!-- Botón: Agregar -->
+                            <Button v-if="can('reporte-beneficiario')"
+                                @click.prevent="generearInforme(); closeMobileMenu()"
+                                :style="'px-3 py-3 pb-2 rounded-full border-none'"
+                                class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
+                                <span
+                                    class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
+                                <span class="relative z-10">
+                                    <Icon :icon-button="true" name="clipboard" fill="currentColor"
+                                        class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
+                                </span>
+                            </Button>
+
+                        </div>
+                    </Transition>
+                </div>
+
+                <!-- DESKTOP sm+: Botones normales -->
+                <template class="hidden sm:contents">
                     <Button v-if="can('agregar-beneficiario')" id="btn-agregar" @click.prevent="openTutor()"
                         @mouseenter="showTooltip('Agregar', 'btn-agregar')" @mouseleave="hideTooltip"
                         :style="'px-2 py-2 pb-1 rounded-full border-none'"
                         class="shrink-0 self-center bg-gray-200 relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
                         <span
-                            class="absolute inset-0 bg-blue-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
-
-                        <!-- Icono -->
+                            class="absolute inset-0 bg-[rgb(var(--brand-500))] rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
                         <span class="relative z-10">
                             <Icon :icon-button="true" name="userAdd"
                                 class-name="text-gray-600 group-hover:text-white transition-colors duration-500"
@@ -1071,235 +1541,280 @@ const encotrado = (ciPersona) => {
                         </span>
                     </Button>
 
-                    <!-- Botón: Importar -->
                     <Button v-if="can('importar-beneficiario')" id="btn-importar" @click.prevent="openModalImportar()"
                         @mouseenter="showTooltip('Importar', 'btn-importar')" @mouseleave="hideTooltip"
                         :style="'px-3 py-3 pb-2 rounded-full border-none'"
                         class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
                         <span
                             class="absolute inset-0 bg-gray-600 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
-
-                        <!-- Icono -->
                         <span class="relative z-10">
                             <Icon :icon-button="true" name="fileImport"
                                 class-name="text-gray-700 group-hover:text-white transition-colors duration-500" />
                         </span>
                     </Button>
 
-                    <!-- Botón: Generar PDF -->
                     <Button v-if="can('reporte-beneficiario')" id="btn-reporte" @click.prevent="generearInforme()"
-                        @mouseenter="showTooltip('Generar PDF', 'btn-reporte')" @mouseleave="hideTooltip"
+                        @mouseenter="showTooltip('Reporte', 'btn-reporte')" @mouseleave="hideTooltip"
                         :style="'px-3 py-3 pb-2 rounded-full border-none'"
                         class="bg-gray-200 shrink-0 self-center relative overflow-hidden group">
-                        <!-- Efecto de fondo desde el centro -->
                         <span
                             class="absolute inset-0 bg-red-500 rounded-full scale-0 group-hover:scale-100 transition-transform duration-500 ease-out"></span>
-
-                        <!-- Icono -->
                         <span class="relative z-10">
-                            <Icon :icon-button="true" name="filePDF" fill="currentColor"
+                            <Icon :icon-button="true" name="clipboard" fill="currentColor"
                                 class-name="text-gray-600 group-hover:text-white transition-colors duration-500" />
                         </span>
                     </Button>
-                </div>
-
-                <!-- Tooltip -->
-                <div v-if="showTooltipFlag" ref="tooltipRef"
-                    class="fixed z-50 px-3 py-1.5 text-xs text-white bg-gray-800 rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
-                    :style="tooltipStyle">
-                    {{ tooltipText }}
-                </div>
+                </template>
             </div>
 
-            <!-- ============================================================================ -->
-            <!-- TABLA DE DATOS -->
-            <!-- ============================================================================ -->
-            <DataTable :data="persona.data" :columns="tableColumns" row-key="id_persona"
-                empty-message="No se encontraron datos. ¡Agregue beneficiarios para continuar!">
-                <!-- Slot personalizado para cada fila -->
-                <template #row="{ item }">
+            <!-- Tooltip -->
+            <div v-if="showTooltipFlag" ref="tooltipRef"
+                class="fixed z-50 px-3 py-1.5 text-xs text-white bg-gray-800 rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
+                :style="tooltipStyle">
+                {{ tooltipText }}
+            </div>
+        </div>
 
-                    <!-- Columna: Nombre Completo -->
-                    <td class="px-3 py-1 whitespace-nowrap">
-                        <div class="font-medium text-gray-900 dark:text-gray-100 uppercase">
-                            {{ item.nombre_completo }}
-                        </div>
-                    </td>
+        <!-- ============================================================================ -->
+        <!-- TABLA DE DATOS -->
+        <!-- ============================================================================ -->
+        <DataTable :data="persona.data" :columns="tableColumns" row-key="id_persona"
+            empty-message="No se encontraron datos. ¡Agregue beneficiarios para continuar!">
+            <!-- Slot personalizado para cada fila -->
+            <template #row="{ item }">
 
-                    <!-- Columna: Distrito -->
-                    <td class="px-3 py-1 whitespace-nowrap">
+                <!-- Columna: Nombre Completo -->
+                <td class="pl-2 py-1 whitespace-nowrap">
+                    <div class="font-medium text-gray-900 dark:text-gray-100 uppercase">
+                        <p v-if="item.nombre_persona">{{ item.apellido_persona }} {{ item.nombre_persona }}</p>
+                        <p v-else> {{ item.nombre_completo }}</p>
+                    </div>
+                </td>
+
+                <!-- Columna: Distrito -->
+                <td class="px-0 py-1 whitespace-nowrap">
+                    <div class="text-gray-700 dark:text-gray-300">
+                        <span v-if="item.distrito">{{ item.distrito }}</span>
+                        <span v-else class="block text-red-500 italic text-xs">Sin datos</span>
+                    </div>
+                </td>
+
+                <!-- <td class="px-1 py-1 whitespace-nowrap">
                         <div class="text-gray-700 dark:text-gray-300">
-                            <span v-if="item.distrito">{{ item.distrito }}</span>
-                            <span v-else class="block text-red-500 italic text-xs">Sin datos</span>
+                            <span>{{ item.fecha_registro }}</span>
                         </div>
-                    </td>
+                    </td> -->
 
-                    <!-- Columna: CI (Cédula de Identidad) -->
-                    <td class="px-3 py-1 whitespace-nowrap">
-                        <div class="font-medium text-gray-900 dark:text-gray-100">
-                            {{ item.ci_persona }}
-                            <span v-if="item.complemento !== null">- {{ item.complemento }}</span>
+                <!-- Columna: CI (Cédula de Identidad) -->
+                <td class="px-1 py-1 whitespace-nowrap">
+                    <div class="font-medium text-gray-900 dark:text-gray-100">
+                        {{ item.ci_persona }}
+                        <span v-if="item.complemento !== null">- {{ item.complemento }}</span>
+                    </div>
+                </td>
+
+                <!-- Columna: Observación -->
+                <td class="px-0 py-1 hidden sm:table-cell">
+                    <div class="text-gray-700 dark:text-gray-300">
+                        <span v-if="!item.observacion_persona" class="block text-center italic text-red-500 text-xs">
+                            ninguna
+                        </span>
+                        <span v-else class="text-xs line-clamp-1 cursor-help" :title="item.observacion_persona">
+                            {{ item.observacion_persona }}
+                        </span>
+                    </div>
+                </td>
+                <!-- Columna: Estado -->
+                <td class="px-0 py-1">
+                    <div v-if="item.estado_actual?.estado" @click.prevent="openModalEstado(item)"
+                        class="cursor-pointer action-link flex items-center gap-0.5">
+                        <p class="relative rounded-lg block text-gray-700 dark:text-gray-200 dark:hover:text-white">
+                            <!-- Icono: Activo -->
+                            <Icon v-if="item.estado_actual?.estado === 'activo'" :icon-button="true" name="checkCircle"
+                                class-name="text-green-500 pt-1" :size="17" />
+                            <!-- Icono: Baja Temporal -->
+                            <Icon v-if="item.estado_actual?.estado === 'baja_temporal'" :icon-button="true"
+                                name="timeCircle" class-name="text-orange-500 pt-1" :size="17" />
+                            <!-- Icono: Baja Definitiva -->
+                            <Icon v-if="item.estado_actual?.estado === 'baja_definitiva'" :icon-button="true"
+                                name="circleMinus" class-name="text-red-600 pt-1" :size="17" />
+                            <!-- Icono: Depurado -->
+                            <Icon v-if="item.estado_actual?.estado === 'depurado'" :icon-button="true" name="depurado"
+                                class-name="text-gray-500 pt-1" :size="17" />
+                            <!-- Icono: Pagos Suspendidos -->
+                            <Icon v-if="item.estado_actual?.estado === 'pagos_suspendidos'" :icon-button="true"
+                                name="cash" class-name="text-purple-500 pt-1" :size="17" />
+                            <!-- Icono: Sin Estado -->
+                            <Icon v-if="!item.estado_actual?.estado" :icon-button="true" name="exclamationCircle"
+                                class-name="text-red-500 pt-1" :size="17" />
+                        </p>
+                        <span class="text-gray-400">|</span>
+                        <div class="font-medium whitespace-nowrap" :class="item.estado_actual?.estado === 'activo' ? 'text-green-600' :
+                            item.estado_actual?.estado === 'baja_temporal' ? 'text-amber-600' :
+                                item.estado_actual?.estado === 'baja_definitiva' ? 'text-red-600' :
+                                    item.estado_actual?.estado === 'depurado' ? 'text-gray-600' :
+                                        item.estado_actual?.estado === 'pagos_suspendidos' ? 'text-purple-600' :
+                                            'text-orange-600'
+                            ">
+                            {{
+                                item.estado_actual?.estado === 'activo' ? 'Activo' :
+                                    item.estado_actual?.estado === 'baja_temporal' ? 'Baja Temporal' :
+                                        item.estado_actual?.estado === 'baja_definitiva' ? 'Baja Definitiva' :
+                                            item.estado_actual?.estado === 'depurado' ? 'Depurado' :
+                                                item.estado_actual?.estado === 'pagos_suspendidos' ? 'Pagos Suspendidos' :
+                                                    'Sin estado'
+                            }}
                         </div>
-                    </td>
-
-                    <!-- Columna: Observación -->
-                    <td class="px-0 py-1">
-                        <div class="text-gray-700 dark:text-gray-300">
-                            <span v-if="!item.observacion_persona"
-                                class="block text-center italic text-gray-500 text-xs">
-                                ninguna
-                            </span>
-                            <span v-else class="text-xs line-clamp-1 cursor-help" :title="item.observacion_persona">
-                                {{ item.observacion_persona }}
-                            </span>
+                    </div>
+                    <div v-else @click="openFormEstado(item.id_persona, 'add')"
+                        class="cursor-pointer action-link flex items-center">
+                        <p class="relative block px-0 py-1 mt-1 text-gray-700 dark:text-gray-200 dark:hover:text-white">
+                            <Icon :icon-button="true" name="exclamationCircle" class-name="text-red-500" :ripple="true"
+                                ripple-color="bg-red-700" :ripple-size="25" :ripple-small="true" :size="17" />
+                        </p>
+                        <span class="text-gray-400">|</span>
+                        <div class="font-medium whitespace-nowrap text-red-500">
+                            Sin estado
                         </div>
-                    </td>
+                    </div>
+                </td>
 
-                    <!-- Columna: Estado -->
-                    <td class="px-0 py-1">
-                        <div v-if="item.estado_actual?.estado" @click.prevent="openModalEstado(item)"
-                            class="cursor-pointer action-link flex items-center gap-1">
-                            <p
-                                class="relative inline-blockrounded-lg block px-0 py-2 text-gray-700 dark:text-gray-200 dark:hover:text-white">
-                                <!-- Icono: Activo -->
-                                <Icon v-if="item.estado_actual?.estado === 'activo'" :icon-button="true"
-                                    name="checkCircle" class-name="text-green-500 pt-1" :size="17" />
-                                <!-- Icono: Baja Temporal -->
-                                <Icon v-if="item.estado_actual?.estado === 'baja_temporal'" :icon-button="true"
-                                    name="timeCircle" class-name="text-orange-500 pt-1" :size="17" />
-                                <!-- Icono: Baja Definitiva -->
-                                <Icon v-if="item.estado_actual?.estado === 'baja_definitiva'" :icon-button="true"
-                                    name="circleMinus" class-name="text-red-600 pt-1" :size="17" />
-                                <!-- Icono: Sin Estado -->
-                                <Icon v-if="!item.estado_actual?.estado" :icon-button="true" name="exclamationCircle"
-                                    class-name="text-red-500 pt-1" :size="17" />
-                            </p>
-                            <span class="text-gray-400">|</span>
-                            <div class="font-medium whitespace-nowrap"
-                                :class="item.estado_actual?.estado === 'activo' ? 'text-green-600' : item.estado_actual?.estado === 'baja_definitiva' ? 'text-red-600' : 'text-orange-600'">
-                                {{
-                                    item.estado_actual?.estado === 'activo' ? 'Activo' :
-                                        item.estado_actual?.estado === 'baja_temporal' ? 'Baja Temporal' :
-                                            'Baja Definitiva'
-                                }}
+                <!-- Columna: Carnet -->
+                <td class="px-0 py-1 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <div @click.prevent="item.estado_actual?.estado
+                            ? (item.carnet?.id_carnet ? getCarnetUrl(item) : (can('carnet') ? (!item.fecha_nacimiento ? openMissingDataModal() : openCreateCarnet(item.id_persona, item.nombre_persona, item.apellido_persona, item.ci_persona, item.fecha_nacimiento)) : null))
+                            : sinEstadoPrimero()" :class="[
+                                'flex items-center gap-1',
+                                item.carnet?.id_carnet ? 'cursor-pointer action-link' : (can('carnet') ? 'cursor-pointer action-link' : 'cursor-not-allowed'),
+                                !item.carnet?.id_carnet ? 'text-red-600 hover:text-red-800'
+                                    : esCarnetIndefinido(item.carnet) ? 'text-blue-500 hover:text-blue-700'
+                                        : item.carnet_vigente === false ? 'text-yellow-400 hover:text-yellow-700'
+                                            : 'text-gray-600 hover:text-gray-800'
+                            ]">
+                            <Icon :icon-button="true" name="profileCard" :size="19" :class-name="!item.carnet?.id_carnet ? 'text-red-500'
+                                : esCarnetIndefinido(item.carnet) ? 'text-blue-500'
+                                    : item.carnet_vigente === false ? 'text-yellow-500'
+                                        : 'text-gray-600'"
+                                :ripple="!!item.carnet?.id_carnet && !esCarnetIndefinido(item.carnet) && item.carnet_vigente === false"
+                                ripple-color="bg-orange-600" :ripple-size="12" />
+                            <span>|</span>
+                            <div class="font-medium">
+                                <span v-if="!item.carnet?.id_carnet" class="italic">Sin Carnet</span>
+                                <span v-else-if="!esCarnetIndefinido(item.carnet) && item.carnet_vigente === false"
+                                    class="text-yellow-600 font-semibold">Vencido</span>
+                                <span v-else>{{ item.carnet?.doc }}</span>
                             </div>
                         </div>
-                    </td>
+                    </div>
+                </td>
 
-                    <!-- Columna: Carnet -->
-                    <td class="px-3 py-1 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div @click.prevent="item.carnet?.id_carnet ? getCarnetUrl(item) : (can('carnet') ? (!item.fecha_nacimiento ? openMissingDataModal() : openCreateCarnet(item.id_persona, `${item.nombre_persona} ${item.apellido_persona}`, `${item.fecha_nacimiento}`)) : null)"
-                                :class="[
-                                    'flex items-center gap-1',
-                                    item.carnet?.id_carnet ? 'cursor-pointer action-link' : (can('carnet') ? 'cursor-pointer action-link' : 'cursor-not-allowed'),
-                                    !item.carnet?.id_carnet ? 'text-red-600 hover:text-red-800' : item.carnet_vigente === false ? 'text-yellow-400 hover:text-yellow-700' : 'text-gray-600 hover:text-gray-800'
-                                ]">
-                                <Icon :icon-button="true" name="profileCard" :size="19"
-                                    :class-name="!item.carnet?.id_carnet ? 'text-red-500' : item.carnet_vigente === false ? 'text-yellow-500' : 'text-gray-600'" />
-                                <span>|</span>
-                                <div class="font-medium">
-                                    <span v-if="item.carnet?.id_carnet">{{ item.carnet?.doc }}</span>
-                                    <span v-else class="italic">Sin Carnet</span>
-                                </div>
+                <!-- Columna: Tutor -->
+                <td class="px-0 py-1 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <div @click.prevent="item.estado_actual?.estado
+                            ? (item.tutor?.id_tutor || item.tutor_nombre === 'propio'
+                                ? ModalTutorDatos(item)
+                                : (can('asignar-tutor') ? openAsignateTutor(item.id_persona) : null))
+                            : sinEstadoPrimero()" :class="[
+                                'flex items-center gap-1 cursor-pointer action-link',
+                                item.tutor_nombre === 'propio'
+                                    ? 'text-blue-500'
+                                    : item.tutor?.id_tutor
+                                        ? 'text-gray-600 hover:text-gray-800'
+                                        : (can('asignar-tutor') ? 'text-red-500 hover:text-red-800' : 'cursor-not-allowed text-red-500')
+                            ]">
+                            <Icon :icon-button="true" name="users" :size="19" :class-name="item.tutor_nombre === 'propio'
+                                ? 'text-blue-500'
+                                : item.tutor?.id_tutor ? 'text-gray-600' : 'text-red-500'" />
+                            <span>|</span>
+                            <div class="font-medium capitalize italic">
+                                <span v-if="item.tutor_nombre === 'propio'">Tutor Propio</span>
+                                <span v-else-if="item.tutor?.id_tutor">{{ item.tutor?.nombre_tutor?.toLowerCase()
+                                    }}</span>
+                                <span v-else>no asignado</span>
                             </div>
                         </div>
-                    </td>
+                    </div>
+                </td>
 
-                    <!-- Columna: Tutor -->
-                    <td class="px-1 py-1 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div @click.prevent="item.tutor?.id_tutor ? ModalTutorDatos(item) : (can('asignar-tutor') ? openAsignateTutor(item.id_persona) : null)"
-                                :class="[
-                                    'flex items-center gap-1',
-                                    item.tutor?.id_tutor ? 'cursor-pointer action-link' : (can('asignar-tutor') ? 'cursor-pointer action-link' : 'cursor-not-allowed'),
-                                    item.id_tutor ? 'text-gray-600 hover:text-gray-800' : 'text-red-500 hover:text-red-800'
-                                ]">
-                                <Icon :icon-button="true" name="users" :size="19"
-                                    :class-name="item.id_tutor ? 'text-gray-600 hover:text-gray-800' : 'text-red-500 hover:text-red-800'" />
-                                <span>|</span>
-                                <div class="font-medium capitalize">
-                                    <span v-if="item.tutor?.id_tutor">{{ item.tutor?.nombre_tutor }}</span>
-                                    <span class="capitalize" v-else>no asignado</span>
-                                </div>
-                            </div>
+                <!-- Columna: Acciones -->
+                <td class="px-0 py-1">
+                    <div class="flex justify-center items-center gap-2">
+                        <!-- Acción: Editar -->
+                        <div v-if="can('editar-beneficiario')">
+                            <Icon v-if="item.tipo_registro === 'pendiente' &&
+                                item.estado_actual?.estado !== 'baja_definitiva' &&
+                                item.estado_actual?.estado !== 'baja_temporal' &&
+                                item.estado_actual?.estado !== 'depurado'" @click.prevent="item.estado_actual?.estado
+                                    ? openEditPersona(item, item.id_persona)
+                                    : sinEstadoPrimero()" name="userSettings" class-name="text-orange-600"
+                                :ripple="true" ripple-color="bg-orange-600" :ripple-size="12"
+                                title="Registro pendiente" />
+                            <Icon v-else @click.prevent="item.estado_actual?.estado
+                                ? openEditPersona(item, item.id_persona)
+                                : sinEstadoPrimero()" name="userEdit" title="Editar" />
                         </div>
-                    </td>
 
-                    <!-- Columna: Acciones -->
-                    <td class="px-3 py-2">
-                        <div class="flex justify-center items-center gap-1">
-                            <!-- Acción: Editar -->
-                            <div v-if="can('editar-beneficiario')">
-                                <Icon v-if="item.tipo_registro === 'pendiente' &&
-                                    item.estado_actual?.estado !== 'baja_definitiva' &&
-                                    item.estado_actual?.estado !== 'baja_temporal'"
-                                    @click.prevent="openEditPersona(item, item.id_persona)" name="userSettings"
-                                    class-name="text-orange-600" :ripple="true" ripple-color="bg-orange-500"
-                                    title="Registro pendiente" />
-                                <Icon v-else @click.prevent="openEditPersona(item, item.id_persona)" name="userEdit"
-                                    title="Editar" />
-                            </div>
-
-                            <!-- Acción: Baja Definitiva o Habilitar Meses -->
-                            <div v-if="can('habilitar')">
-                                <a v-if="item.estado_actual?.estado === 'baja_definitiva'"
+                        <!-- Acción: Baja Definitiva o Habilitar Meses -->
+                        <div v-if="can('habilitar')">
+                            <!--                                 <a v-if="item.estado_actual?.estado === 'baja_definitiva'"
                                     @click.prevent="openModalE(item.estado_actual?.estado)"
                                     class="cursor-pointer action-link">
                                     <Icon name="circleMinus" class-name="text-red-700" title="Baja definitiva" />
-                                </a>
-                                <a v-else
-                                    @click.prevent="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? getUrl('persona.show', item.id_persona) : null">
-                                    <Icon name="calendarMont" fill="none" stroke="currentColor" stroke-width="2"
-                                        :class-name="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
-                                        :title="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'Habilitar meses' : 'Datos faltantes'" />
-                                </a>
-                            </div>
-
-
-                            <!-- Acción: Ver Meses Disponibles -->
-                            <a v-if="can('pago')"
-                                @click.prevent="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? getUrl('persona.showHabilitado', item.carnet?.id_persona) : null">
-                                <Icon name="clipboardList"
-                                    :class-name="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
-                                    :title="(item.carnet?.id_carnet && item.tutor?.id_tutor) ? 'Meses disponibles' : 'Datos faltantes'" />
+                                </a> -->
+                            <a @click.prevent="getUrl('persona.show', item.id_persona)">
+                                <Icon name="calendarMont" fill="none" stroke="currentColor" stroke-width="2"
+                                    class-name="text-gray-800 cursor-pointer action-link" title="Habilitar meses" />
                             </a>
-
-                        </div>
-                    </td>
-                </template>
-
-                <!-- Slot: Estado vacío -->
-                <template #empty>
-                    <div class="flex flex-col items-center justify-center py-12 px-4">
-                        <!-- Icono -->
-                        <div class="mb-6">
-                            <Icon :icon-button="true" name="user" class-name="text-gray-400 dark:text-gray-500"
-                                :size="64" :height="64" />
+                            <!-- <a v-else
+                                    @click.prevent="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? getUrl('persona.show', item.id_persona) : null">
+                                    <Icon name="calendarMont" fill="none" stroke="currentColor" stroke-width="2"
+                                        :class-name="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
+                                        :title="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'Habilitar meses' : 'Datos faltantes'" />
+                                </a> -->
                         </div>
 
-                        <!-- Textos -->
-                        <div class="text-center space-y-2 max-w-md">
-                            <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-200">
-                                No se encontraron datos
-                            </h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">
-                                Agregue beneficiarios para continuar y visualizar la información aquí.
-                            </p>
-                        </div>
+                        <!-- Acción: Ver Meses Disponibles -->
+                        <a v-if="can('pago')"
+                            @click.prevent="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? getUrl('persona.showHabilitado', item.carnet?.id_persona) : null">
+                            <Icon name="clipboardList"
+                                :class-name="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'text-gray-800 cursor-pointer action-link' : 'text-red-800 cursor-not-allowed'"
+                                :title="(item.carnet?.id_carnet && (item.tutor?.id_tutor || item.tutor_nombre === 'propio')) ? 'Meses disponibles' : 'Datos faltantes'" />
+                        </a>
                     </div>
-                </template>
-            </DataTable>
+                </td>
+            </template>
 
-            <!-- ============================================================================ -->
-            <!-- FOOTER Y PAGINACIÓN -->
-            <!-- ============================================================================ -->
-            <div :class="persona.data.length <= 15 ? 'mt-0.5' : 'mt-0'">
-                <Paginacion v-if="persona?.last_page > 1" :links="persona.links" :from="persona.from" :to="persona.to"
-                    :total="persona.total" />
-                <Footer />
-            </div>
+            <!-- Slot: Estado vacío -->
+            <template #empty>
+                <div class="flex flex-col items-center justify-center py-12 px-4">
+                    <!-- Icono -->
+                    <div class="mb-6">
+                        <Icon :icon-button="true" name="user" class-name="text-gray-400 dark:text-gray-500" :size="64"
+                            :height="64" />
+                    </div>
+
+                    <!-- Textos -->
+                    <div class="text-center space-y-2 max-w-md">
+                        <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-200">
+                            No se encontraron datos
+                        </h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            Agregue beneficiarios para continuar y visualizar la información aquí.
+                        </p>
+                    </div>
+                </div>
+            </template>
+        </DataTable>
+
+        <!-- ============================================================================ -->
+        <!-- FOOTER Y PAGINACIÓN -->
+        <!-- ============================================================================ -->
+        <div :class="persona.data.length <= 15 ? 'mt-0.5' : 'mt-0'">
+            <Paginacion v-if="persona?.last_page > 1" :links="persona.links" :from="persona.from" :to="persona.to"
+                :total="persona.total" />
+            <Footer />
         </div>
 
         <!-- ============================================================================ -->
@@ -1310,7 +1825,7 @@ const encotrado = (ciPersona) => {
         <Transition name="fade">
             <Form v-if="formCreate" :fields="personaFields" :distritos="distrito" :nombreFor="String(selectedTutorName)"
                 submit-route="persona.store" @add="handleAddBene" @openFormOption="showModalWaringDistrito = true"
-                @sinDatos="sinDatos" @cancel="formCreate = false" @close="encotrado">
+                @sinDatos="sinDatos" @cancel="handleCancelCreate" @close="encotrado">
                 <template #icon>
                     <Icon :icon-button="true" name="userAdd" class-name="text-white" />
                 </template>
@@ -1388,9 +1903,11 @@ const encotrado = (ciPersona) => {
         <!-- Formulario: Crear Carnet -->
         <Transition name="fade">
             <Form v-if="formCreateCarnet" :fields="carnetFields" :discapacidad="discapacidad" :idFor="selectedId"
-                :nombreFor="selectedNombre" :fechaNacimiento="fechaNacimiento" clave-foranea="id_persona"
-                submit-route="carnet.store" @add="addCarnet" @openFormOption="showModalWaringDiscapacidad = true"
-                @sinDatos="sinDatos" @cancel="formCreateCarnet = false">
+                :nombreFor="selectedNombre" :apellidoFor="selectedApellido" :ciFor="selectedCi"
+                :fechaNacimiento="fechaNacimiento" clave-foranea="id_persona" submit-route="carnet.store"
+                @add="addCarnet" @openFormOption="showModalWaringDiscapacidad = true"
+                @indefinidoChange="indefinidoCarnet = $event" @sinDatos="sinDatos" @carnetInvalido="carnetInvalido"
+                @cancel="formCreateCarnet = false; indefinidoCarnet = false">
                 <template #icon>
                     <Icon :icon-button="true" name="profileCard" class-name="text-white" />
                 </template>
@@ -1407,9 +1924,10 @@ const encotrado = (ciPersona) => {
         <Transition name="fade">
             <Form v-if="showModalCarnetEdit" :fields="carnetFieldsEdit" boton-name="Guardar"
                 :discapacidad="discapacidad" :existing-data="selectedItem || {}" :nombreFor="selectedNombre"
-                :idFor="selectedId" :edit-mode="true" submit-route="carnet.update" @add="handleEditCarnet"
-                @openFormOption="showModalWaringDiscapacidad = true" @sinDatos="sinDatos" @cancel="handleEditCancel"
-                @close="handleEditCancel">
+                :apellidoFor="selectedApellido" :ciFor="selectedCi" :idFor="selectedId" :edit-mode="true"
+                submit-route="carnet.update" @add="handleEditCarnet"
+                @openFormOption="showModalWaringDiscapacidad = true" @indefinidoChange="indefinidoCarnet = $event"
+                @sinDatos="sinDatos" @cancel="handleEditCancel" @close="handleEditCancel">
                 <template #icon>
                     <Icon :icon-button="true" name="userEdit" class-name="text-white" />
                 </template>
@@ -1428,9 +1946,9 @@ const encotrado = (ciPersona) => {
 
         <!-- Formulario: Agregar Estado -->
         <Transition name="fade">
-            <Form v-if="formCreateEstado" :fields="estadoFields" :data="selectedEstadoData"
-                submit-route="persona.estado" @add="handleCambioEstado" @fechaInvalida="fechaInvalida"
-                @sinDatos="sinDatos" @cancel="abrirEstado">
+            <Form v-if="formCreateEstado" :fields="estadoFields" :disable-until-valid="true"
+                :data="selectedEstadoData || { id_persona: selectedId }" submit-route="persona.estado"
+                @add="handleCambioEstado" @fechaInvalida="fechaInvalida" @sinDatos="sinDatos" @cancel="abrirEstado">
                 <template #icon>
                     <Icon :icon-button="true" name="badgeCheck" class-name="text-white" />
                 </template>
@@ -1439,6 +1957,42 @@ const encotrado = (ciPersona) => {
                 </template>
                 <template #label2>
                     Registre un nuevo estado del beneficiario
+                </template>
+            </Form>
+        </Transition>
+
+        <!-- Formulario: Editar Estado -->
+        <Transition name="fade">
+            <Form v-if="formEditEstado" :fields="estadoFields" boton-name="Guardar" :data="selectedEstadoData"
+                :idFor="selectedId" :existing-data="selectedEstadoData || {}" :edit-mode="true"
+                :disable-until-valid="true" submit-route="persona.estado.update" @add="handleCambioEstado"
+                @fechaInvalida="fechaInvalida" @sinDatos="sinDatos" @cancel="abrirEstado">
+                <template #icon>
+                    <Icon :icon-button="true" name="badgeCheck" class-name="text-white" />
+                </template>
+                <template #label1>
+                    Editar estado
+                </template>
+                <template #label2>
+                    Modifica el estado del beneficiario
+                </template>
+            </Form>
+        </Transition>
+
+        <!-- Formulario: Insertar Estado Intermedio -->
+        <Transition name="fade">
+            <Form v-if="formInsertarIntermedio" :fields="estadoIntermedioFields" boton-name="Insertar"
+                :data="estadoIntermedioData || {}" :disable-until-valid="true" submit-route="persona.estado.intermedio"
+                @add="handleCambioEstado" @fechaInvalida="fechaInvalida" @sinDatos="sinDatos"
+                @cancel="cancelarInsertarIntermedio">
+                <template #icon>
+                    <Icon :icon-button="true" name="badgeCheck" class-name="text-white" />
+                </template>
+                <template #label1>
+                    Insertar estado intermedio
+                </template>
+                <template #label2>
+                    Divide el segmento seleccionado para corregir un mes en medio de la línea de tiempo
                 </template>
             </Form>
         </Transition>
@@ -1492,38 +2046,38 @@ const encotrado = (ciPersona) => {
                 <div class="p-4 px-3 text-center">
                     <!-- Icono -->
                     <div
-                        class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/40 shadow-inner mb-4">
-                        <svg class="w-12 h-12 text-yellow-500 dark:text-yellow-400" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                        </svg>
+                        class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-red-100 dark:bg-yellow-900/40 shadow-inner mb-4">
+                        <Icon :icon-button="true" name="warning" class-name="text-red-500" fill="none"
+                            stroke="currentColor" stroke-width="2" :size="50" :height="50" />
                     </div>
-
                     <!-- Título -->
                     <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">
                         Agregar Distrito
                     </h2>
-
                     <!-- Texto -->
                     <p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                         Esta acción cerrará el formulario de registro y perderá los datos ingresados.
                     </p>
                 </div>
 
-                <!-- Footer centrado para modal pequeño -->
-                <div class="px-1 border-t border-gray-100 dark:border-gray-700/50 py-5">
-                    <div class="flex justify-center gap-3">
-                        <Button @click="showModalWaringDistrito = false" :style="'px-12 py-2.5 rounded-xl'"
-                            class="text-slate-700 bg-white hover:bg-slate-100">
-                            Cancelar
-                        </Button>
-                        <Button @click="formCreateOption = true; showModalWaringDistrito = false"
-                            :style="'px-12 py-2.5 rounded-xl'" class="text-white bg-blue-600 hover:bg-blue-500">
-                            Continuar
-                        </Button>
+                <!-- Footer -->
+                <template #footer>
+                    <div class="px-1 border-t border-gray-100 dark:border-gray-700/50 py-5">
+                        <div class="flex justify-center gap-3">
+                            <Button @click="showModalWaringDistrito = false"
+                                :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border border-gray-200'"
+                                class="text-slate-700 bg-slate-100 hover:bg-slate-200">
+                                Cancelar
+                            </Button>
+                            <Button
+                                @click="formCreateOption = true; showModalWaringDistrito = false; formCreate = false;"
+                                :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border'"
+                                class="text-white bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))]">
+                                Continuar
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                </template>
             </Modal>
         </Transition>
 
@@ -1534,12 +2088,9 @@ const encotrado = (ciPersona) => {
                 <div class="p-4 px-3 text-center">
                     <!-- Icono -->
                     <div
-                        class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/40 shadow-inner mb-4">
-                        <svg class="w-12 h-12 text-yellow-500 dark:text-yellow-400" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                        </svg>
+                        class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-red-100 dark:bg-yellow-900/40 shadow-inner mb-4">
+                        <Icon :icon-button="true" name="warning" class-name="text-red-500" fill="none"
+                            stroke="currentColor" stroke-width="2" :size="50" :height="50" />
                     </div>
 
                     <!-- Título -->
@@ -1553,22 +2104,84 @@ const encotrado = (ciPersona) => {
                     </p>
                 </div>
 
-                <!-- Footer centrado para modal pequeño -->
-                <div class="px-1 border-t border-gray-100 dark:border-gray-700/50 py-5">
-                    <div class="flex justify-center gap-3">
-                        <Button @click="showModalWaringDiscapacidad = false" :style="'px-12 py-2.5 rounded-xl'"
-                            class="text-slate-700 bg-white hover:bg-slate-100">
-                            Cancelar
-                        </Button>
-                        <Button @click="formCreateOptionDis = true; showModalWaringDiscapacidad = false"
-                            :style="'px-12 py-2.5 rounded-xl'" class="text-white bg-blue-600 hover:bg-blue-500">
-                            Continuar
-                        </Button>
+                <!-- Footer -->
+                <template #footer>
+                    <div class="px-1 border-t border-gray-100 dark:border-gray-700/50 py-5">
+                        <div class="flex justify-center gap-3">
+                            <Button @click="showModalWaringDiscapacidad = false"
+                                :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border border-gray-500'"
+                                class="text-slate-700 bg-white hover:bg-slate-100">
+                                Cancelar
+                            </Button>
+                            <Button
+                                @click="formCreateOptionDis = true; showModalWaringDiscapacidad = false; formCreate = false"
+                                :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border border-gray-500'"
+                                class="text-white bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))]">
+                                Continuar
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                </template>
             </Modal>
         </Transition>
 
+        <!-- Modal: Confirmacion de Eliminacion de Estado -->
+        <Transition name="fade">
+            <Modal v-if="mostrarModalConfirmacion" :showHeader="false" :showFooter="false" maxWidth="max-w-md"
+                @close="mostrarModalConfirmacion = false; showModalEstado = true;">
+                <div class="py-4 text-center">
+                    <!-- Icono -->
+                    <div
+                        class="w-20 h-20 mx-auto flex items-center justify-center rounded-full bg-red-100 dark:bg-yellow-900/40 shadow-inner mb-4">
+                        <Icon :icon-button="true" name="warning" class-name="text-red-500" fill="none"
+                            stroke="currentColor" stroke-width="2" :size="50" :height="50" />
+                    </div>
+                    <!-- Título -->
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                        ¿Eliminar registro?
+                    </h2>
+
+                    <!-- Mensaje principal -->
+                    <p class="text-sm text-gray-600 dark:text-gray-300">
+                        El registro será eliminado permanentemente del historial de estados.
+                    </p>
+
+                    <!-- Advertencia -->
+                    <p class="text-xs mt-2 text-red-500 dark:text-red-400">
+                        Esta acción no se puede deshacer.
+                    </p>
+                </div>
+
+                <!-- Footer -->
+                <template #footer>
+                    <div class="px-1 border-t border-gray-100 dark:border-gray-700/50 py-5">
+                        <div class="flex justify-center gap-3">
+                            <Button @click="mostrarModalConfirmacion = false; showModalEstado = true;"
+                                :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border border-gray-200'"
+                                class="text-slate-700 bg-slate-100 hover:bg-slate-200">
+                                Cancelar
+                            </Button>
+                            <Button @click="confirmarEliminacion" :disabled="procesandoPago"
+                                :style="'items-center py-3 px-5 sm:px-12 sm:py-2.5 rounded-xl border relative w-36'"
+                                :class="procesandoPago ? 'opacity-60 cursor-not-allowed bg-[rgb(var(--brand-400))]' : 'bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))]'"
+                                class="text-white">
+                                <span v-if="procesandoPago"
+                                    class="absolute inset-0 flex items-center justify-center gap-2">
+                                    <svg class="animate-spin w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg"
+                                        fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4" />
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                    </svg>
+                                    Procesando...
+                                </span>
+                                <span v-else class="flex items-center justify-center">Confirmar</span>
+                            </Button>
+                        </div>
+                    </div>
+                </template>
+            </Modal>
+        </Transition>
 
         <!-- Modal: Visualizar Carnet -->
         <Transition name="fade">
@@ -1583,19 +2196,24 @@ const encotrado = (ciPersona) => {
 
         <!-- Modal: Información del Tutor -->
         <Transition name="fade">
-            <ModalTutor v-if="showModal" :data="selectedItem" :tutor="tutor" @close="showModal = false" />
+            <ModalTutor v-if="showModal" :data="selectedItem" :tutor="tutor" @close="showModal = false"
+                @changeTutor="handleChangeTutor" />
         </Transition>
 
         <!-- Modal: Estados del Beneficiario -->
         <Transition name="fade">
-            <ModalEstadoBene v-if="showModalEstado" :data="selectedItem" @add="handleCambioEstado"
-                @addEstado="openFormEstado" @close="showModalEstado = false" @delete="eliminarRegistro" />
+            <ModalEstadoBene v-if="showModalEstado" :data="selectedItem" :meses-disponibles="mesesDisponibles"
+                @add="handleCambioEstado" @addEstado="openFormEstado" @editEstado="editarEstado"
+                @editObservacion="abrirEditarObservacion"
+                @close="showModalEstado = false" @delete="eliminarRegistro"
+                @insertarIntermedio="abrirInsertarIntermedio" @agregarMesExtra="abrirAgregarMesExtra" />
         </Transition>
 
-        <!-- Modal: Confirmar Eliminacion de Estado -->
+        <!-- Modal: Editar solo la observación de un estado histórico -->
         <Transition name="fade">
-            <ModalConfirmacion v-if="mostrarModalConfirmacion" tipo="eliminar" @confirmar="confirmarEliminacion"
-                @close="cancelarEliminacion" />
+            <ModalEditarObservacion v-if="showModalEditarObservacion" :registro="registroObservacion"
+                :procesando="procesandoObservacion" @guardar="guardarObservacion"
+                @close="cerrarEditarObservacion" />
         </Transition>
 
         <!-- Modal: Importación de Datos -->
@@ -1604,6 +2222,5 @@ const encotrado = (ciPersona) => {
                 @importar="handleImportar" @close="showModalImportar = false"
                 @descargar-plantilla="handleDescargarPlantilla" />
         </Transition>
-
-    </div>
+    </AppLayout>
 </template>

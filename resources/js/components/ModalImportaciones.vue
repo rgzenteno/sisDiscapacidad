@@ -3,6 +3,8 @@ import { onUnmounted, onMounted, ref, watch } from 'vue';
 import Button from './Button.vue';
 import FileValidation from './FileValidation.vue';
 import { useExcelValidation } from '../composables/useExcelValidation';
+import Modal from './Modal.vue';
+import Icon from './Icon.vue';
 
 const props = defineProps({
     // Configuración del encabezado
@@ -187,146 +189,119 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
 </script>
 
 <template>
-    <div class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4 z-40">
-        <div
-            class="bg-white rounded-3xl max-w-2xl w-full shadow-2xl animate-[slideUp_0.3s_ease-out] transform transition-all duration-300">
-            <!-- Header -->
+
+    <Modal :showHeader="true" :showFooter="false" maxWidth="max-w-2xl" @close="$emit('close')">
+        <template #icon>
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center">
+                <Icon :icon-button="true" name="upload" class-name="text-white" :size="20" />
+            </div>
+        </template>
+        <template #label1>{{ titulo }}</template>
+        <template #label2>{{ subtitulo }}</template>
+
+        <!-- Body -->
+        <div class="space-y-2.5">
+
+            <!-- Info columnas obligatorias -->
             <div
-                class="grid grid-cols-[1fr_auto] gap-6 px-6 py-3 border-b border-gray-100 bg-gray-50 dark:bg-gray-700/50 rounded-t-3xl">
-                <div class="min-w-0">
-                    <div class="grid grid-cols-[auto_1fr] gap-4 items-center">
-                        <!-- Avatar con ícono dinámico -->
-                        <div
-                            class="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-cyan-400 shadow-md ring-1 ring-indigo-100 flex-shrink-0">
-                            <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                                v-html="iconos[icono]">
-                            </svg>
-                        </div>
+                class="bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-200 dark:border-gray-600/40 px-4 py-3">
 
-                        <!-- Título y subtítulo dinámicos -->
-                        <div class="min-w-0">
-                            <h2 class="text-2xl font-semibold text-slate-800 dark:text-gray-100 truncate">
-                                {{ titulo }}
-                            </h2>
-                            <p class="text-sm text-slate-500 truncate">
-                                {{ subtitulo }}
-                            </p>
-                        </div>
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2 px-1">
+                        <span
+                            class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                            Columnas requeridas
+                        </span>
+                        <div class="flex-1 h-px bg-gray-200 dark:bg-gray-700 w-4"></div>
                     </div>
-                </div>
 
-                <!-- Botón cerrar -->
-                <div class="flex items-start gap-3 flex-shrink-0">
-                    <button type="button" @click="$emit('close')"
-                        class="absolute top-3 right-3 p-2 rounded-full bg-white shadow hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 transition">
-                        <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 6l12 12M6 18L18 6" />
+                    <button v-if="mostrarDescargaPlantilla" @click="descargarPlantilla"
+                        title="Descarga nuestra plantilla para asegurar que tu archivo tenga el formato correcto."
+                        class="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700/40 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                                clip-rule="evenodd" />
                         </svg>
+                        Descargar plantilla
                     </button>
                 </div>
-            </div>
 
-            <!-- Body -->
-            <div class="p-6 space-y-4">
-                <!-- Tabla de columnas obligatorias -->
-                <div class="text-sm text-blue-800 border border-blue-500 rounded-lg p-4 bg-blue-50 shadow-md">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-start gap-2">
-                            <svg class="w-4 h-4 text-green-600 mt-0.5" aria-hidden="true"
-                                xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor"
-                                viewBox="0 0 24 24">
-                                <path fill-rule="evenodd"
-                                    d="M9 2.221V7H4.221a2 2 0 0 1 .365-.5L8.5 2.586A2 2 0 0 1 9 2.22ZM11 2v5a2 2 0 0 1-2 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2 2h12a2 2 0 0 0 2-2 2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2V4a2 2 0 0 0-2-2h-7Zm1.018 8.828a2.34 2.34 0 0 0-2.373 2.13v.008a2.32 2.32 0 0 0 2.06 2.497l.535.059a.993.993 0 0 0 .136.006.272.272 0 0 1 .263.367l-.008.02a.377.377 0 0 1-.018.044.49.49 0 0 1-.078.02 1.689 1.689 0 0 1-.297.021h-1.13a1 1 0 1 0 0 2h1.13c.417 0 .892-.05 1.324-.279.47-.248.78-.648.953-1.134a2.272 2.272 0 0 0-2.115-3.06l-.478-.052a.32.32 0 0 1-.285-.341.34.34 0 0 1 .344-.306l.94.02a1 1 0 1 0 .043-2l-.943-.02h-.003Zm7.933 1.482a1 1 0 1 0-1.902-.62l-.57 1.747-.522-1.726a1 1 0 0 0-1.914.578l1.443 4.773a1 1 0 0 0 1.908.021l1.557-4.773Zm-13.762.88a.647.647 0 0 1 .458-.19h1.018a1 1 0 1 0 0-2H6.647A2.647 2.647 0 0 0 4 13.647v1.706A2.647 2.647 0 0 0 6.647 18h1.018a1 1 0 1 0 0-2H6.647A.647.647 0 0 1 6 15.353v-1.706c0-.172.068-.336.19-.457Z"
-                                    clip-rule="evenodd" />
-                            </svg>
-
-                            <span class="font-semibold">Columnas obligatorias:</span>
-                        </div>
-                        <button v-if="mostrarDescargaPlantilla" @click="descargarPlantilla"
-                            title="Descarga nuestra plantilla para asegurar que tu archivo tenga el formato correcto."
-                            class="text-xs px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-md transition flex items-center gap-1.5 shadow-sm">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z"></path>
-                                <path fill-rule="evenodd"
-                                    d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"
-                                    clip-rule="evenodd"></path>
-                            </svg>
-                            <span>Descargar plantilla Excel</span>
-                            <svg class="w-4 h-4 opacity-75" fill="currentColor" viewBox="0 0 20 20">
-                                <path
-                                    d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z">
-                                </path>
-                                <path
-                                    d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z">
-                                </path>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto border border-blue-400 rounded-md bg-white shadow-sm">
-                        <div
-                            :class="`grid grid-cols-${columnasTabla.length} text-xs font-medium text-center whitespace-nowrap`">
-                            <!-- Headers -->
-                            <div v-for="(columna, index) in columnasTabla" :key="`header-${index}`"
-                                class="whitespace-nowrap p-2 bg-blue-600 text-white border border-blue-500">
-                                {{ columna.nombre }}
-                            </div>
-
-                            <!-- Obligatorio/Opcional -->
-                            <div v-for="(columna, index) in columnasTabla" :key="`status-${index}`" :class="[
-                                'p-2 border border-blue-300',
-                                columna.obligatorio ? 'bg-blue-100' : 'bg-blue-100 text-gray-600'
-                            ]">
-                                {{ columna.obligatorio ? 'Obligatorio' : 'Opcional' }}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-
-                <!-- Zona de Drop / Preview del archivo -->
-                <div>
-                    <!-- Dropzone (solo se muestra si NO hay archivo) -->
-                    <div v-if="!archivoImportar" @dragover.prevent="dragging = true"
-                        @dragleave.prevent="dragging = false" @drop.prevent="handleDrop" @click="fileInput.click()"
-                        :class="[
-                            'border-2 border-dashed rounded-lg p-8 text-center transition cursor-pointer',
-                            dragging ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                        ]">
-                        <input ref="fileInput" type="file" @change="handleFileChange" :accept="formatosAceptados"
-                            class="hidden" />
-
-                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <p class="mt-2 text-sm text-gray-600">
-                            Arrastra tu archivo aquí o
-                            <span class="text-green-600 hover:text-green-700 font-medium">
-                                selecciónalo
-                            </span>
-                        </p>
-                        <p class="text-xs text-gray-500 mt-1">
-                            {{ formatosTexto }} (Máx. {{ tamanoMaximo }}MB)
-                        </p>
-                    </div>
-
-                    <!-- Preview del archivo (solo se muestra si HAY archivo) -->
-                    <FileValidation v-else :file-name="archivoImportar.name" :file="archivoImportar"
-                        :validation="fileValidation" @remove="limpiarArchivo" />
+                <!-- Tabla -->
+                <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-600/40">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="bg-gray-100 dark:bg-gray-700">
+                                <th v-for="(columna, index) in columnasTabla" :key="`header-${index}`"
+                                    class="px-4 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap border-r border-gray-200 dark:border-gray-600 last:border-r-0">
+                                    {{ columna.nombre }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="bg-white dark:bg-gray-800">
+                                <td v-for="(columna, index) in columnasTabla" :key="`status-${index}`"
+                                    class="text-center px-4 py-2 border-r border-gray-100 dark:border-gray-700 last:border-r-0">
+                                    <span :class="[
+                                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                                        columna.obligatorio
+                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-700/40'
+                                            : 'bg-gray-100 text-slate-500 border-gray-200 dark:bg-gray-700/40 dark:text-slate-400 dark:border-gray-600/40'
+                                    ]">
+                                        <span
+                                            :class="['w-1.5 h-1.5 rounded-full', columna.obligatorio ? 'bg-indigo-500' : 'bg-slate-400']"></span>
+                                        {{ columna.obligatorio ? 'Obligatorio' : 'Opcional' }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <!-- Footer -->
-            <div class="flex justify-end gap-3 px-6 py-4 border-t rounded-b-3xl bg-gray-50">
-                <Button @click="$emit('close')" class="text-slate-700 bg-white hover:bg-slate-100">
-                    {{ textoBotonCancelar }}
-                </Button>
-                <Button @click="importarArchivo" :disabled="!archivoImportar || importando || !fileValidation.isValid"
-                    class="text-white bg-blue-600 hover:bg-blue-500 disabled:bg-gray-300">
-                    <div class="flex items-center gap-2">
+            <!-- Dropzone -->
+            <div v-if="!archivoImportar" @dragover.prevent="dragging = true" @dragleave.prevent="dragging = false"
+                @drop.prevent="handleDrop" @click="fileInput.click()" :class="[
+                    'rounded-xl border-2 border-dashed px-4 py-8 text-center transition-all duration-200 cursor-pointer',
+                    dragging
+                        ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/10'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/20'
+                ]">
+                <input ref="fileInput" type="file" @change="handleFileChange" :accept="formatosAceptados"
+                    class="hidden" />
+                <svg class="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600 mb-3" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p class="text-sm text-slate-500 dark:text-slate-400">
+                    Arrastra tu archivo aquí o
+                    <span class="text-emerald-600 dark:text-emerald-400 font-semibold">selecciónalo</span>
+                </p>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    {{ formatosTexto }} · Máx. {{ tamanoMaximo }}MB
+                </p>
+            </div>
+
+            <!-- Preview archivo -->
+            <FileValidation v-else :file-name="archivoImportar.name" :file="archivoImportar"
+                :validation="fileValidation" @remove="limpiarArchivo" />
+
+        </div>
+
+        <!-- Footer -->
+        <template #footer>
+            <div class="sm:px-5 border-t border-gray-100 dark:border-gray-700/50 py-5">
+                <div class="flex justify-center sm:justify-end gap-2">
+                    <Button @click="$emit('close')"
+                        :style="'py-3 px-10 sm:px-12 sm:py-2.5 rounded-xl border border-gray-200'"
+                        class="text-slate-700 bg-slate-100 hover:bg-slate-200">
+                        {{ textoBotonCancelar }}
+                    </Button>
+                    <Button @click="importarArchivo"
+                        :disabled="!archivoImportar || importando || !fileValidation.isValid"
+                        :style="'py-3 px-4 sm:px-6 sm:py-2.5 rounded-xl'"
+                        class="text-white bg-[rgb(var(--brand-600))] hover:bg-[rgb(var(--brand-500))]">
                         <svg v-if="importando" class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
                             </circle>
@@ -335,9 +310,9 @@ onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
                             </path>
                         </svg>
                         <span>{{ importando ? 'Importando...' : textoBotonImportar }}</span>
-                    </div>
-                </Button>
+                    </Button>
+                </div>
             </div>
-        </div>
-    </div>
+        </template>
+    </Modal>
 </template>

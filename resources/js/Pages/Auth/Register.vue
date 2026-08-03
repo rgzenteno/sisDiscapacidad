@@ -15,6 +15,7 @@ import {
     useForm
 } from '@inertiajs/vue3';
 import { onMounted, onUnmounted, ref } from 'vue';
+import { useColorSistema } from '@/composables/useColorSistema';
 
 // AGREGAR PROPS
 const props = defineProps({
@@ -28,6 +29,8 @@ const props = defineProps({
 onMounted(() => {
     initFlowbite()
 })
+
+const { estiloBrand } = useColorSistema();
 
 const form = useForm({
     nombre: '',
@@ -60,11 +63,11 @@ const submit = () => {
 <style scoped>
 /* Estados de hover y focus mejorados */
 input:focus {
-    box-shadow: 0 0 0 3px rgba(40, 95, 198, 0.1);
+    box-shadow: 0 0 0 3px rgba(var(--brand-rgb), 0.1);
 }
 
 button:hover:not(:disabled) {
-    box-shadow: 0 10px 25px rgba(40, 95, 198, 0.2);
+    box-shadow: 0 10px 25px rgba(var(--brand-rgb), 0.2);
 }
 
 /* Animación suave para elementos */
@@ -100,25 +103,26 @@ button:hover:not(:disabled) {
 </style>
 <template>
     <main
-        class="flex-1 overflow-hidden mt-0 ml-0 min-h-screen bg-[#0F2956] flex items-center justify-center p-4 relative">
+        class="flex-1 overflow-hidden mt-0 ml-0 min-h-screen bg-[rgb(var(--brand-dark-rgb))] flex items-center justify-center p-4 relative"
+        :style="estiloBrand">
         <!-- Formas orgánicas de fondo con la paleta oficial -->
         <!-- Área superior izquierda -->
         <div
-            class="absolute top-0 left-0 w-96 h-96 bg-[#285FC6]/20 rounded-full transform -translate-x-32 -translate-y-32 opacity-60 blur-sm">
+            class="absolute top-0 left-0 w-96 h-96 bg-[rgba(var(--brand-rgb),0.2)] rounded-full transform -translate-x-32 -translate-y-32 opacity-60 blur-sm">
         </div>
         <div
             class="absolute top-16 left-20 w-72 h-72 bg-[#7D838E]/15 rounded-full transform -translate-x-24 -translate-y-16 opacity-50 blur-sm">
         </div>
-        <div class="absolute top-32 -left-8 w-52 h-52 bg-[#285FC6]/25 rounded-full opacity-40 blur-sm"></div>
+        <div class="absolute top-32 -left-8 w-52 h-52 bg-[rgba(var(--brand-rgb),0.25)] rounded-full opacity-40 blur-sm"></div>
         <div class="absolute top-64 left-48 w-36 h-36 bg-[#AAAAAE]/20 rounded-full opacity-35 blur-sm"></div>
-        <div class="absolute top-96 left-12 w-28 h-28 bg-[#285FC6]/30 rounded-full opacity-30 blur-sm"></div>
+        <div class="absolute top-96 left-12 w-28 h-28 bg-[rgba(var(--brand-rgb),0.3)] rounded-full opacity-30 blur-sm"></div>
 
         <!-- Área inferior derecha -->
         <div
             class="absolute bottom-0 right-0 w-80 h-80 bg-[#7D838E]/25 rounded-full transform translate-x-24 translate-y-24 opacity-40 blur-sm">
         </div>
         <div
-            class="absolute bottom-20 right-32 w-64 h-64 bg-[#285FC6]/20 rounded-full transform translate-x-16 translate-y-12 opacity-55 blur-sm">
+            class="absolute bottom-20 right-32 w-64 h-64 bg-[rgba(var(--brand-rgb),0.2)] rounded-full transform translate-x-16 translate-y-12 opacity-55 blur-sm">
         </div>
         <div class="absolute bottom-8 -right-6 w-48 h-48 bg-[#AAAAAE]/30 rounded-full opacity-35 blur-sm"></div>
         <div class="absolute bottom-56 right-16 w-32 h-32 bg-[#B9B8BD]/25 rounded-full opacity-45 blur-sm"></div>
@@ -131,7 +135,7 @@ button:hover:not(:disabled) {
 
         <!-- Contenedor principal del formulario -->
         <div
-            class="backdrop-blur-xl bg-white/10 z-20 rounded-3xl shadow-2xl border border-[#285FC6]/20 w-full max-w-2xl">
+            class="backdrop-blur-xl bg-white/10 z-20 rounded-3xl shadow-2xl border border-[rgba(var(--brand-rgb),0.2)] w-full max-w-2xl">
             <div class="p-8">
                 <!-- Título del formulario -->
                 <div class="text-center mb-8">
@@ -148,7 +152,7 @@ button:hover:not(:disabled) {
                                 Nombre <span class="text-red-400">*</span>
                             </label>
                             <input type="text" v-model="form.nombre" required autofocus
-                                class="capitalize placeholder:normal-case w-full px-4 py-2 bg-[#0F2956]/60 border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[#285FC6] focus:border-[#285FC6] transition duration-200"
+                                class="capitalize placeholder:normal-case w-full px-4 py-2 bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] transition duration-200"
                                 placeholder="Ingrese el nombre" />
                             <p v-if="form.errors.nombre" class="mt-1 text-sm text-red-400">{{ form.errors.nombre }}</p>
                         </div>
@@ -159,7 +163,7 @@ button:hover:not(:disabled) {
                                 Apellido <span class="text-red-400">*</span>
                             </label>
                             <input type="text" v-model="form.apellido" required
-                                class="capitalize placeholder:normal-case w-full px-4 py-2 bg-[#0F2956]/60 border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[#285FC6] focus:border-[#285FC6] transition duration-200"
+                                class="capitalize placeholder:normal-case w-full px-4 py-2 bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] transition duration-200"
                                 placeholder="Ingrese el apellido" />
                             <p v-if="form.errors.apellido" class="mt-1 text-sm text-red-400">{{ form.errors.apellido }}
                             </p>
@@ -174,7 +178,7 @@ button:hover:not(:disabled) {
                             <Dropdown align="left" width="60">
                                 <template #trigger>
                                     <button type="button"
-                                        class="inline-flex items-center justify-between w-full gap-3 px-4 py-2 text-sm font-medium rounded-lg transition-all focus:ring-2 focus:outline-none bg-[#0F2956]/60 border border-[#7D838E]/50 text-white placeholder-[#7D838E] focus:ring-[#285FC6] focus:border-[#285FC6] cursor-pointer">
+                                        class="inline-flex items-center justify-between w-full gap-3 px-4 py-2 text-sm font-medium rounded-lg transition-all focus:ring-2 focus:outline-none bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 text-white placeholder-[#7D838E] focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] cursor-pointer">
                                         <span class="truncate">
                                             {{roles.find(r => r.id === form.rol)?.name || 'Seleccione un rol'}}
                                         </span>
@@ -188,7 +192,7 @@ button:hover:not(:disabled) {
 
                                 <template #content>
                                     <div
-                                        class="w-full max-w-sm bg-[#0F2956]/95 backdrop-blur-sm rounded-lg border border-[#285FC6]/30 shadow-2xl">
+                                        class="w-full max-w-sm bg-[rgba(var(--brand-dark-rgb),0.95)] backdrop-blur-sm rounded-lg border border-[rgba(var(--brand-rgb),0.3)] shadow-2xl">
                                         <!-- Lista scrolleable con altura limitada -->
                                         <div class="max-h-48 overflow-y-auto">
                                             <ul class="py-1">
@@ -210,8 +214,8 @@ button:hover:not(:disabled) {
                                                     <button type="button" @click="form.rol = rol.id"
                                                         class="flex items-center justify-between w-full px-4 py-2 text-sm text-left transition-colors duration-150"
                                                         :class="form.rol === rol.id
-                                                            ? 'bg-[#285FC6]/50 text-white font-medium'
-                                                            : 'text-white/90 hover:bg-[#285FC6]/30'">
+                                                            ? 'bg-[rgba(var(--brand-rgb),0.5)] text-white font-medium'
+                                                            : 'text-white/90 hover:bg-[rgba(var(--brand-rgb),0.3)]'">
                                                         <span>{{ rol.name }}</span>
                                                         <svg v-if="form.rol === rol.id" class="w-4 h-4 text-white"
                                                             fill="currentColor" viewBox="0 0 20 20">
@@ -236,7 +240,7 @@ button:hover:not(:disabled) {
                                 Cargo <span class="text-red-400">*</span>
                             </label>
                             <input type="text" v-model="form.cargo" required
-                                class="uppercase placeholder:normal-case w-full px-4 py-2 bg-[#0F2956]/60 border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[#285FC6] focus:border-[#285FC6] transition duration-200"
+                                class="uppercase placeholder:normal-case w-full px-4 py-2 bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] transition duration-200"
                                 placeholder="Ingrese el cargo" />
                             <p v-if="form.errors.cargo" class="mt-1 text-sm text-red-400">{{ form.errors.cargo }}</p>
                         </div>
@@ -247,7 +251,7 @@ button:hover:not(:disabled) {
                                 Usuario <span class="text-red-400">*</span>
                             </label>
                             <input type="text" v-model="form.email" required
-                                class="w-full px-4 py-2 bg-[#0F2956]/60 border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[#285FC6] focus:border-[#285FC6] transition duration-200"
+                                class="w-full px-4 py-2 bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] transition duration-200"
                                 placeholder="Ingrese el nombre de usuario" />
                             <p v-if="form.errors.email" class="mt-1 text-sm text-red-400">{{ form.errors.email }}</p>
                         </div>
@@ -258,7 +262,7 @@ button:hover:not(:disabled) {
                                 Contraseña <span class="text-red-400">*</span>
                             </label>
                             <input type="password" v-model="form.password" required
-                                class="w-full px-4 py-2 bg-[#0F2956]/60 border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[#285FC6] focus:border-[#285FC6] transition duration-200"
+                                class="w-full px-4 py-2 bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] transition duration-200"
                                 placeholder="••••••••" />
                             <p v-if="form.errors.password" class="mt-1 text-sm text-red-400">{{ form.errors.password }}
                             </p>
@@ -270,7 +274,7 @@ button:hover:not(:disabled) {
                                 Confirmar contraseña <span class="text-red-400">*</span>
                             </label>
                             <input type="password" v-model="form.password_confirmation" required
-                                class="w-full px-4 py-2 bg-[#0F2956]/60 border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[#285FC6] focus:border-[#285FC6] transition duration-200"
+                                class="w-full px-4 py-2 bg-[rgba(var(--brand-dark-rgb),0.6)] border border-[#7D838E]/50 rounded-lg text-white placeholder-[#7D838E] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--brand-rgb))] focus:border-[rgb(var(--brand-rgb))] transition duration-200"
                                 placeholder="••••••••" />
                             <p v-if="form.errors.password_confirmation" class="mt-1 text-sm text-red-400">{{
                                 form.errors.password_confirmation
@@ -287,7 +291,7 @@ button:hover:not(:disabled) {
                             </button>
                         </Link>
                         <button type="submit" :disabled="form.processing"
-                            class="px-6 py-2 bg-gradient-to-r from-[#285FC6] to-[#285FC6]/80 hover:from-[#285FC6]/90 hover:to-[#285FC6] text-white font-semibold rounded-lg transition duration-300 transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-[#285FC6]/50">
+                            class="px-6 py-2 bg-gradient-to-r from-[rgb(var(--brand-rgb))] to-[rgba(var(--brand-rgb),0.8)] hover:from-[rgba(var(--brand-rgb),0.9)] hover:to-[rgb(var(--brand-rgb))] text-white font-semibold rounded-lg transition duration-300 transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none border border-[rgba(var(--brand-rgb),0.5)]">
                             <span v-if="!form.processing">Registrar</span>
                             <span v-else class="flex items-center justify-center">
                                 <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"

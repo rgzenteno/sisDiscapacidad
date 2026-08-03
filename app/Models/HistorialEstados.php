@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Carbon\Carbon;
 
-class HistorialEstados extends Model
+class HistorialEstados extends BaseModel
 {
     use HasFactory;
 
@@ -17,6 +17,7 @@ class HistorialEstados extends Model
     protected $fillable = [
         'id_persona',
         'estado',
+        'motivo',
         'fecha_inicio',
         'fecha_fin',
         'fecha_registro',
@@ -25,8 +26,7 @@ class HistorialEstados extends Model
     ];
 
     protected $casts = [
-        'fecha_inicio' => 'date',
-        'fecha_fin' => 'date',
+        'fecha_registro' => 'date:Y-m-d H:i:s',
     ];
 
     /**
@@ -40,7 +40,7 @@ class HistorialEstados extends Model
     /**
      * Scope para obtener estados activos (fecha_fin es NULL)
      */
-    public function scopeActivos($query)
+    public function scopeActivos(Builder $query)
     {
         return $query->whereNull('fecha_fin');
     }
@@ -48,7 +48,7 @@ class HistorialEstados extends Model
     /**
      * Scope para obtener estados vigentes en una fecha específica
      */
-    public function scopeVigentesEn($query, $fecha)
+    public function scopeVigentesEn(Builder $query, Carbon $fecha): Builder
     {
         return $query->where('fecha_inicio', '<=', $fecha)
             ->where(function ($q) use ($fecha) {
@@ -60,7 +60,7 @@ class HistorialEstados extends Model
     /**
      * Scope para obtener historial de una persona específica
      */
-    public function scopePorPersona($query, $idPersona)
+    public function scopePorPersona(Builder $query, int $idPersona): Builder
     {
         return $query->where('id_persona', $idPersona);
     }
@@ -68,7 +68,7 @@ class HistorialEstados extends Model
     /**
      * Scope para filtrar por estado
      */
-    public function scopePorEstado($query, $estado)
+    public function scopePorEstado(Builder $query, string $estado): Builder
     {
         return $query->where('estado', $estado);
     }
@@ -76,7 +76,7 @@ class HistorialEstados extends Model
     /**
      * Scope para obtener registros ordenados por fecha
      */
-    public function scopeOrdenadoPorFecha($query, $direccion = 'desc')
+    public function scopeOrdenadoPorFecha(Builder $query, $direccion = 'desc')
     {
         return $query->orderBy('fecha_inicio', $direccion);
     }
@@ -111,7 +111,7 @@ class HistorialEstados extends Model
     /**
      * Obtener el estado actual de una persona
      */
-    public static function estadoActualPorPersona($idPersona)
+    public static function estadoActualPorPersona(int $idPersona)
     {
         return static::where('id_persona', $idPersona)
             ->activos()
@@ -122,7 +122,7 @@ class HistorialEstados extends Model
     /**
      * Obtener historial completo de una persona ordenado por fecha
      */
-    public static function historialPorPersona($idPersona)
+    public static function historialPorPersona(int $idPersona)
     {
         return static::where('id_persona', $idPersona)
             ->ordenadoPorFecha('desc')
@@ -132,7 +132,7 @@ class HistorialEstados extends Model
     /**
      * Mutator para limpiar el estado (solo trim, mantener el formato original)
      */
-    public function setEstadoAttribute($value)
+    public function setEstadoAttribute(?string $value)
     {
         $this->attributes['estado'] = trim($value);
     }

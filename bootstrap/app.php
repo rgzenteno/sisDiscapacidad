@@ -15,18 +15,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            \App\Http\Middleware\LogSessionExpiry::class, // ← movido aquí
         ]);
 
         $middleware->alias([
-            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+            'role'                    => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission'              => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission'      => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'check.super.permissions' => \App\Http\Middleware\CheckSuperUserPermissions::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        // ✅ Redirige al dashboard si no tiene permisos (en vez de mostrar 403)
-        $exceptions->render(function (\Illuminate\Auth\Access\AuthorizationException $e, \Illuminate\Http\Request $request) {
+        $exceptions->render(function (
+            \Illuminate\Auth\Access\AuthorizationException $e,
+            \Illuminate\Http\Request $request
+        ) {
             return redirect()->route('dashboard');
         });
-    })->create();
+    })
+    ->create();

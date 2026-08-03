@@ -21,11 +21,10 @@ return new class extends Migration {
 
             // Fechas de vigencia del estado
             $table->date('fecha_inicio');
-            $table->date('fecha_fin')->nullable(); // NULL = estado actual
+            $table->date('fecha_fin')->nullable();
 
             // Campos de auditoría
             $table->timestamp('fecha_registro')->useCurrent();
-            $table->string('usuario_modificacion')->nullable();
 
             // Observaciones del cambio
             $table->text('observaciones')->nullable();

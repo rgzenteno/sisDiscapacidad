@@ -47,11 +47,18 @@ class NewPasswordController extends Controller
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user) use ($request) {
                 $user->forceFill([
-                    'password' => Hash::make($request->password),
+                    'password'       => Hash::make($request->password),
                     'remember_token' => Str::random(60),
                 ])->save();
 
                 event(new PasswordReset($user));
+
+                $nombre = ucwords(strtolower("{$user->nombre} {$user->apellido}"));
+
+                app(\App\Services\LogService::class)->logPasswordReset(
+                    $user,
+                    "Se restableció la contraseña del usuario {$nombre} mediante enlace de recuperación."
+                );
             }
         );
 

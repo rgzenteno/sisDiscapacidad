@@ -1,4 +1,5 @@
-/* <script setup>
+/*
+<script setup>
 import Mensajes from './Mensajes.vue';
 import { ref, watch } from 'vue';
 
@@ -61,9 +62,10 @@ const handleClose = () => {
 };
 
 // Watcher para detectar cambios en el prop message
+// ✅ Mostrar el mensaje real del error
 watch(() => props.message, (newValue, oldValue) => {
     if (newValue != null && newValue !== oldValue) {
-        contMensajes('error', 'datosincorrectos');
+        mostrarMensaje('error', 'Error', newValue); // Usa el mensaje real
     }
 }, { immediate: true });
 
@@ -77,11 +79,5 @@ defineExpose({
 
 <template>
     <!-- Solo renderizamos el componente Mensajes cuando hay mensajes -->
-    <Mensajes 
-        v-if="showMensaje"
-        :id="id"
-        :tipo="tipo" 
-        :contenido="contenido" 
-        @close="handleClose" 
-    />
+    <Mensajes v-if="showMensaje" :id="id" :tipo="tipo" :contenido="contenido" @close="handleClose" />
 </template> */
