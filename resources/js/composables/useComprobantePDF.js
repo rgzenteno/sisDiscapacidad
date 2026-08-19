@@ -485,26 +485,34 @@ Código: ${shortUuid}
             const datos = {
                 numeroBoleta: item.pago.numero_boleta,
                 gestion: item.gestion.gestion,
-                mes: getMesNombre(item.es_retroactivo ? item.mes_original : item.mes),
+                mes: getMesNombre(
+                    item.es_retroactivo ? item.mes_original : item.mes
+                ),
                 esRetroactivo: !!item.es_retroactivo,
                 monto: item.monto,
                 montoTexto: "Doscientos cincuenta 00/100 Bolivianos",
-                fechaPago: new Date().toLocaleString("es-BO", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                }),
+                fechaPago: new Date(item.pago.fecha_pago).toLocaleDateString(
+                    "es-BO",
+                    {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    }
+                ),
                 // Solo fecha — para mostrar en el comprobante
-                fechaPago: new Date().toLocaleDateString("es-BO", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                }),
+                fechaPago: new Date(item.pago.fecha_pago).toLocaleDateString(
+                    "es-BO",
+                    {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                    }
+                ),
 
                 // Fecha + hora en 24h — solo para el QR
-                fechaPagoCompleta: new Date().toLocaleString("es-BO", {
+                fechaPagoCompleta: new Date(item.pago.fecha_pago).toLocaleString("es-BO", {
                     day: "2-digit",
                     month: "2-digit",
                     year: "numeric",
@@ -527,8 +535,12 @@ Código: ${shortUuid}
                     /* nombre: datosRecibo.tutor?.nombre_tutor ?? '',
                     apellido: datosRecibo.tutor?.apellido_tutor ?? '',
                     ci: datosRecibo.tutor?.ci_tutor ?? '', */
-                    nombre: datosRecibo.tutor?.nombre_tutor ?? datosRecibo.nombre_persona,
-                    apellido: datosRecibo.tutor?.apellido_tutor ?? datosRecibo.apellido_persona,
+                    nombre:
+                        datosRecibo.tutor?.nombre_tutor ??
+                        datosRecibo.nombre_persona,
+                    apellido:
+                        datosRecibo.tutor?.apellido_tutor ??
+                        datosRecibo.apellido_persona,
                     ci: datosRecibo.tutor?.ci_tutor ?? datosRecibo.ci_persona,
                 },
             };
