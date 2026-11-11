@@ -95,7 +95,7 @@ export function usePdfValidation() {
                     }
 
                     const gestionMatch = firstPageText.match(
-                        /GESTIÓN[:\s]*(\d{1,2})\/(\d{4})/i,
+                        /GESTI[ÓO]N\s*[:\-]?\s*(\d{1,2})\s*[\/\-]\s*(\d{4})/i
                     );
                     if (!gestionMatch) {
                         return resolve({
